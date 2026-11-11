@@ -7,6 +7,8 @@ import type {
   RuntimeSettingsPayload
 } from "../console/models";
 import { ensureArray, ensureRecord, ensureString } from "../lib/responseGuards";
+import { readHubReply } from "./connectorWords";
+import { useSettingsFormWords } from "./settingsFormWords";
 
 function normalizeRuntimeSettingEntry(value: unknown): RuntimeSettingEntry | null {
   const raw = ensureRecord(value);
@@ -83,7 +85,13 @@ function normalizeRetentionPresetList(value: unknown): RetentionSettingsPayload[
     .filter((entry): entry is RetentionSettingsPayload["presets"][number] => entry !== null);
 }
 
+/** A settings reply as a record; a refusal throws the Hub's own reason (see settingsFormWords). */
+async function settingsReply<T extends { error?: string }>(response: Response): Promise<Partial<T> | null> {
+  return ensureRecord(await readHubReply<T>(response)) as Partial<T> | null;
+}
+
 export function useSettingsForm() {
+  const words = useSettingsFormWords();
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettingEntry[]>([]);
   const [runtimeDraftValues, setRuntimeDraftValues] = useState<Record<string, string>>({});
   const [runtimeSettingsLoading, setRuntimeSettingsLoading] = useState(false);
@@ -102,29 +110,21 @@ export function useSettingsForm() {
     setRuntimeSettingsLoading(true);
     setRuntimeSettingsError(null);
     try {
-      const response = await fetch("/api/settings/runtime", { cache: "no-store" });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RuntimeSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `runtime settings fetch failed: ${response.status}`);
-      }
+      const payload = await settingsReply<RuntimeSettingsPayload>(await fetch("/api/settings/runtime", { cache: "no-store" }));
       const settings = normalizeRuntimeSettingList(payload?.settings);
       setRuntimeSettings(settings);
       setRuntimeDraftValues(Object.fromEntries(settings.map((entry) => [entry.key, entry.effective_value])));
     } catch (err) {
-      setRuntimeSettingsError(err instanceof Error ? err.message : "runtime settings unavailable");
+      setRuntimeSettingsError(words.runtimeLoadFailed(err));
     } finally {
       setRuntimeSettingsLoading(false);
     }
-  }, []);
+  }, [words]);
 
   const loadRetentionSettings = useCallback(async () => {
     setRetentionLoading(true);
     try {
-      const response = await fetch("/api/settings/retention", { cache: "no-store" });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RetentionSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `retention settings fetch failed: ${response.status}`);
-      }
+      const payload = await settingsReply<RetentionSettingsPayload>(await fetch("/api/settings/retention", { cache: "no-store" }));
       const settings = normalizeRetentionSettings(payload?.settings);
       setRetentionSettings(settings);
       setRetentionPresets(normalizeRetentionPresetList(payload?.presets));
@@ -139,11 +139,11 @@ export function useSettingsForm() {
         });
       }
     } catch (err) {
-      setRetentionMessage(err instanceof Error ? err.message : "retention settings unavailable");
+      setRetentionMessage(words.retentionLoadFailed(err));
     } finally {
       setRetentionLoading(false);
     }
-  }, []);
+  }, [words]);
 
   useEffect(() => {
     void loadRuntimeSettings();
@@ -163,7 +163,7 @@ export function useSettingsForm() {
       }
     }
     if (Object.keys(values).length === 0) {
-      setRuntimeSettingsMessage("No runtime settings changes to save.");
+      setRuntimeSettingsMessage(words.runtimeNoChanges());
       return;
     }
 
@@ -171,73 +171,62 @@ export function useSettingsForm() {
     setRuntimeSettingsMessage(null);
     setRuntimeSettingsError(null);
     try {
-      const response = await fetch("/api/settings/runtime", {
+      const payload = await settingsReply<RuntimeSettingsPayload>(await fetch("/api/settings/runtime", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ values })
-      });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RuntimeSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `runtime settings update failed: ${response.status}`);
-      }
+      }));
       const settings = normalizeRuntimeSettingList(payload?.settings);
       setRuntimeSettings(settings);
       setRuntimeDraftValues(
         Object.fromEntries(settings.map((entry) => [entry.key, entry.effective_value]))
       );
-      setRuntimeSettingsMessage("Runtime settings saved.");
+      setRuntimeSettingsMessage(words.runtimeSaved());
     } catch (err) {
-      setRuntimeSettingsError(err instanceof Error ? err.message : "failed to save runtime settings");
+      setRuntimeSettingsError(words.runtimeSaveFailed(err));
     } finally {
       setRuntimeSettingsSaving(false);
     }
-  }, [runtimeDraftValues, runtimeSettings]);
+  }, [runtimeDraftValues, runtimeSettings, words]);
 
   const resetRuntimeSetting = useCallback(async (key: string) => {
     setRuntimeSettingsSaving(true);
     setRuntimeSettingsMessage(null);
     setRuntimeSettingsError(null);
     try {
-      const response = await fetch("/api/settings/runtime/reset", {
+      const payload = await settingsReply<RuntimeSettingsPayload>(await fetch("/api/settings/runtime/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keys: [key] })
-      });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RuntimeSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `runtime setting reset failed: ${response.status}`);
-      }
+      }));
       const settings = normalizeRuntimeSettingList(payload?.settings);
       setRuntimeSettings(settings);
       setRuntimeDraftValues(
         Object.fromEntries(settings.map((entry) => [entry.key, entry.effective_value]))
       );
-      setRuntimeSettingsMessage("Runtime setting reset to Docker/default baseline.");
+      setRuntimeSettingsMessage(words.runtimeReset(settings.find((entry) => entry.key === key)));
     } catch (err) {
-      setRuntimeSettingsError(err instanceof Error ? err.message : "failed to reset runtime setting");
+      setRuntimeSettingsError(words.runtimeResetFailed(err));
     } finally {
       setRuntimeSettingsSaving(false);
     }
-  }, []);
+  }, [words]);
 
   const applyRetentionPreset = useCallback(async (presetID: string) => {
     setRetentionSaving(true);
     setRetentionMessage(null);
     try {
-      const response = await fetch("/api/settings/retention", {
+      const payload = await settingsReply<RetentionSettingsPayload>(await fetch("/api/settings/retention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preset: presetID })
-      });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RetentionSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `retention preset apply failed: ${response.status}`);
-      }
+      }));
       const settings = normalizeRetentionSettings(payload?.settings);
       setRetentionSettings(settings);
       setRetentionPresets(normalizeRetentionPresetList(payload?.presets));
       if (!settings) {
-        throw new Error("retention preset response missing settings");
+        setRetentionMessage(words.retentionNoSettings());
+        return;
       }
       setRetentionDraftValues({
         logs_window: settings.logs_window,
@@ -247,13 +236,13 @@ export function useSettingsForm() {
         action_runs_window: settings.action_runs_window,
         update_runs_window: settings.update_runs_window
       });
-      setRetentionMessage(`Retention preset applied: ${presetID}`);
+      setRetentionMessage(words.presetApplied(presetID));
     } catch (err) {
-      setRetentionMessage(err instanceof Error ? err.message : "failed to apply retention preset");
+      setRetentionMessage(words.presetFailed(err));
     } finally {
       setRetentionSaving(false);
     }
-  }, []);
+  }, [words]);
 
   const saveRetentionSettings = useCallback(async () => {
     if (!retentionSettings) {
@@ -262,20 +251,17 @@ export function useSettingsForm() {
     setRetentionSaving(true);
     setRetentionMessage(null);
     try {
-      const response = await fetch("/api/settings/retention", {
+      const payload = await settingsReply<RetentionSettingsPayload>(await fetch("/api/settings/retention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(retentionDraftValues)
-      });
-      const payload = ensureRecord(await response.json().catch(() => null)) as Partial<RetentionSettingsPayload> | null;
-      if (!response.ok) {
-        throw new Error(ensureString(payload?.error) || `retention settings update failed: ${response.status}`);
-      }
+      }));
       const settings = normalizeRetentionSettings(payload?.settings);
       setRetentionSettings(settings);
       setRetentionPresets(normalizeRetentionPresetList(payload?.presets));
       if (!settings) {
-        throw new Error("retention settings response missing settings");
+        setRetentionMessage(words.retentionNoSettings());
+        return;
       }
       setRetentionDraftValues({
         logs_window: settings.logs_window,
@@ -285,13 +271,13 @@ export function useSettingsForm() {
         action_runs_window: settings.action_runs_window,
         update_runs_window: settings.update_runs_window
       });
-      setRetentionMessage("Retention settings saved.");
+      setRetentionMessage(words.retentionSaved());
     } catch (err) {
-      setRetentionMessage(err instanceof Error ? err.message : "failed to save retention settings");
+      setRetentionMessage(words.retentionSaveFailed(err));
     } finally {
       setRetentionSaving(false);
     }
-  }, [retentionDraftValues, retentionSettings]);
+  }, [retentionDraftValues, retentionSettings, words]);
 
   const runtimeSettingsByScope = useMemo(() => {
     const grouped = new Map<string, RuntimeSettingEntry[]>();

@@ -327,6 +327,14 @@
       "compact": "Shortest windows: least disk use.",
       "balanced": "The default windows.",
       "extended": "Longest windows: most history."
+    },
+    "lines": {
+      "loadFailed": "Could not load the retention settings. Reload the page to try again.",
+      "saved": "Retention settings saved.",
+      "saveFailed": "Could not save the retention settings. Try again.",
+      "presetApplied": "Preset applied: {name}.",
+      "presetFailed": "Could not apply the preset. Try again.",
+      "noSettings": "The Hub's answer had no retention settings. Reload the page."
     }
   },
   "advanced": {
@@ -514,6 +522,15 @@
           "description": "The busiest processes kept for each device."
         }
       }
+    },
+    "lines": {
+      "saved": "Settings saved.",
+      "noChanges": "No changes to save.",
+      "resetDefault": "Reset to the default.",
+      "resetEnv": "Reset to the value from the Hub's environment.",
+      "loadFailed": "Could not load the settings. Reload the page to try again.",
+      "saveFailed": "Could not save the settings. Try again.",
+      "resetFailed": "Could not reset the setting. Try again."
     }
   },
   "database": {

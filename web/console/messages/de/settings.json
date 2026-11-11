@@ -327,6 +327,14 @@
       "compact": "Kürzeste Zeiträume: am wenigsten Speicher.",
       "balanced": "Die Standardzeiträume.",
       "extended": "Längste Zeiträume: der meiste Verlauf."
+    },
+    "lines": {
+      "loadFailed": "Die Aufbewahrungseinstellungen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
+      "saved": "Aufbewahrungseinstellungen gespeichert.",
+      "saveFailed": "Die Aufbewahrungseinstellungen konnten nicht gespeichert werden. Erneut versuchen.",
+      "presetApplied": "Vorgabe angewendet: {name}.",
+      "presetFailed": "Die Vorgabe konnte nicht angewendet werden. Erneut versuchen.",
+      "noSettings": "Die Antwort des Hubs enthielt keine Aufbewahrungseinstellungen. Laden Sie die Seite neu."
     }
   },
   "advanced": {
@@ -514,6 +522,15 @@
           "description": "Die aktivsten Prozesse, die für jedes Gerät gespeichert werden."
         }
       }
+    },
+    "lines": {
+      "saved": "Einstellungen gespeichert.",
+      "noChanges": "Keine Änderungen zum Speichern.",
+      "resetDefault": "Auf den Standardwert zurückgesetzt.",
+      "resetEnv": "Auf den Wert aus der Umgebung des Hubs zurückgesetzt.",
+      "loadFailed": "Die Einstellungen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
+      "saveFailed": "Die Einstellungen konnten nicht gespeichert werden. Erneut versuchen.",
+      "resetFailed": "Die Einstellung konnte nicht zurückgesetzt werden. Erneut versuchen."
     }
   },
   "database": {

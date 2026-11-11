@@ -327,6 +327,14 @@
       "compact": "Durées les plus courtes : moins de disque.",
       "balanced": "Les durées par défaut.",
       "extended": "Durées les plus longues : plus d'historique."
+    },
+    "lines": {
+      "loadFailed": "Impossible de charger les paramètres de rétention. Rechargez la page pour réessayer.",
+      "saved": "Paramètres de rétention enregistrés.",
+      "saveFailed": "Impossible d'enregistrer les paramètres de rétention. Réessayez.",
+      "presetApplied": "Préréglage appliqué\u00a0: {name}.",
+      "presetFailed": "Impossible d'appliquer le préréglage. Réessayez.",
+      "noSettings": "La réponse du hub ne contenait aucun paramètre de rétention. Rechargez la page."
     }
   },
   "advanced": {
@@ -514,6 +522,15 @@
           "description": "Les processus les plus actifs conservés pour chaque appareil."
         }
       }
+    },
+    "lines": {
+      "saved": "Paramètres enregistrés.",
+      "noChanges": "Aucune modification à enregistrer.",
+      "resetDefault": "Valeur par défaut rétablie.",
+      "resetEnv": "Valeur de l'environnement du hub rétablie.",
+      "loadFailed": "Impossible de charger les paramètres. Rechargez la page pour réessayer.",
+      "saveFailed": "Impossible d'enregistrer les paramètres. Réessayez.",
+      "resetFailed": "Impossible de réinitialiser le paramètre. Réessayez."
     }
   },
   "database": {

@@ -416,7 +416,7 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await setDiscoveryDefault(page, keyPortScan, false);
   await setDiscoveryDefault(page, keyLANScan, true);
   await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Settings saved\.$/ }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -428,7 +428,7 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await page.goto("/settings?tab=advanced");
   await setDiscoveryDefault(page, keyDocker, true);
   await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Settings saved\.$/ }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -440,7 +440,7 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await page.goto("/settings?tab=advanced");
   await setDiscoveryDefault(page, keyProxy, true);
   await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Settings saved\.$/ }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -452,7 +452,7 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await page.goto("/settings?tab=advanced");
   await setDiscoveryDefault(page, keyPortScan, true);
   await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Settings saved\.$/ }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();

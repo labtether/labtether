@@ -327,6 +327,14 @@
       "compact": "Periodos más cortos: menos disco.",
       "balanced": "Los periodos predeterminados.",
       "extended": "Periodos más largos: más historial."
+    },
+    "lines": {
+      "loadFailed": "No se pudo cargar la configuración de retención. Recarga la página para intentarlo de nuevo.",
+      "saved": "Configuración de retención guardada.",
+      "saveFailed": "No se pudo guardar la configuración de retención. Inténtalo de nuevo.",
+      "presetApplied": "Ajuste predefinido aplicado: {name}.",
+      "presetFailed": "No se pudo aplicar el ajuste predefinido. Inténtalo de nuevo.",
+      "noSettings": "La respuesta del hub no incluía la configuración de retención. Recarga la página."
     }
   },
   "advanced": {
@@ -514,6 +522,15 @@
           "description": "Los procesos más activos que se guardan por dispositivo."
         }
       }
+    },
+    "lines": {
+      "saved": "Configuración guardada.",
+      "noChanges": "No hay cambios que guardar.",
+      "resetDefault": "Restablecido al valor predeterminado.",
+      "resetEnv": "Restablecido al valor del entorno del hub.",
+      "loadFailed": "No se pudo cargar la configuración. Recarga la página para intentarlo de nuevo.",
+      "saveFailed": "No se pudo guardar la configuración. Inténtalo de nuevo.",
+      "resetFailed": "No se pudo restablecer el ajuste. Inténtalo de nuevo."
     }
   },
   "database": {
