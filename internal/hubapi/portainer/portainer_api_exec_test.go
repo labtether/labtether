@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	portainerconnector "github.com/labtether/labtether/internal/connectors/portainer"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
@@ -37,7 +38,7 @@ func TestDialPortainerExecSocketUsesBearerAuthorization(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/websocket/exec?endpointId=1&id=abc"
-	conn, err := dialPortainerExecSocket(wsURL, token, false)
+	conn, err := dialPortainerExecSocket(wsURL, bearerAuth(token), false)
 	if err != nil {
 		t.Fatalf("dialPortainerExecSocket: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestPortainerExecJWTIsRedactedFromURLDialErrorAndLogs(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/websocket/exec?endpointId=1&id=abc"
-	_, err := dialPortainerExecSocket(wsURL, token, false)
+	_, err := dialPortainerExecSocket(wsURL, bearerAuth(token), false)
 	if err == nil {
 		t.Fatal("expected rejected websocket handshake")
 	}
@@ -89,7 +90,7 @@ func TestDialPortainerExecSocketRejectsCredentialBearingURLs(t *testing.T) {
 		"ws://127.0.0.1/" + url.PathEscape(token) + "/api/websocket/exec",
 		"ws://127.0.0.1/api/websocket/exec#" + url.QueryEscape(token),
 	} {
-		_, err := dialPortainerExecSocket(wsURL, token, false)
+		_, err := dialPortainerExecSocket(wsURL, bearerAuth(token), false)
 		if err == nil || strings.Contains(err.Error(), token) {
 			t.Fatalf("credential-bearing URL was not safely rejected: url=%q err=%v", wsURL, err)
 		}
@@ -149,4 +150,39 @@ func TestBridgePortainerExecDoesNotForwardUpstreamCloseSecret(t *testing.T) {
 	if strings.Contains(err.Error(), token) {
 		t.Fatalf("upstream close secret reached browser close text: %v", err)
 	}
+}
+
+func bearerAuth(jwt string) portainerconnector.ExecAuth {
+	return portainerconnector.ExecAuth{Header: "Authorization", Secret: jwt}
+}
+
+// An API-key connection could not open a container shell: the Hub refused
+// before dialing. Portainer takes the key in X-API-Key on the exec socket.
+func TestDialPortainerExecSocketUsesAPIKeyHeader(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOWLIST_MODE", "false")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
+	const key = "ptr_exec_api_key"
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != key || r.Header.Get("Authorization") != "" {
+			http.Error(w, "missing api key", http.StatusUnauthorized)
+			return
+		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/websocket/exec?endpointId=1&id=abc"
+	conn, err := dialPortainerExecSocket(wsURL, portainerconnector.ExecAuth{Header: "X-API-Key", Secret: key}, false)
+	if err != nil {
+		t.Fatalf("dialPortainerExecSocket: %v", err)
+	}
+	_ = conn.Close()
 }

@@ -28,12 +28,12 @@ func TestExecWebSocketURLUsesCurrentAndLegacyExecIdentifiersWithoutLeakingJWT(t 
 	defer server.Close()
 
 	client := NewClient(Config{BaseURL: server.URL, Username: "admin", Password: "secret"})
-	wsURL, token, err := client.ExecWebSocketURL(context.Background(), 7, execID)
+	wsURL, auth, err := client.ExecWebSocketURL(context.Background(), 7, execID)
 	if err != nil {
 		t.Fatalf("ExecWebSocketURL: %v", err)
 	}
-	if token != jwt {
-		t.Fatalf("token = %q, want JWT returned by auth", token)
+	if auth.Secret != jwt || auth.HeaderValue() != "Bearer "+jwt {
+		t.Fatalf("auth = %+v, want JWT returned by auth", auth)
 	}
 	parsed, err := url.Parse(wsURL)
 	if err != nil {
@@ -502,4 +502,18 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+// API-key connections were refused a container shell ("requires JWT auth").
+func TestExecWebSocketURLUsesAPIKeyForAPIKeyConnections(t *testing.T) {
+	allowInsecureTransportForPortainerTests(t)
+	execID := strings.Repeat("b", portainerExecIDLength)
+	client := NewClient(Config{BaseURL: "http://192.0.2.10:9000", APIKey: "ptr_key"})
+	wsURL, auth, err := client.ExecWebSocketURL(context.Background(), 1, execID)
+	if err != nil {
+		t.Fatalf("ExecWebSocketURL: %v", err)
+	}
+	if auth.Header != "X-API-Key" || auth.HeaderValue() != "ptr_key" || strings.Contains(wsURL, "ptr_key") {
+		t.Fatalf("auth = %+v url = %q", auth, wsURL)
+	}
 }
