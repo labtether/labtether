@@ -77,6 +77,9 @@ export const config = {
     // truncating large uploads.
     "/api/((?!files(?:/|$)).*)",
     "/api",
-    "/((?!_next|api/files(?:/|$)|mcp$|ws|desktop/sessions|terminal/sessions|.*\\..*).*)"
+    // WebSocket upgrades that next.config.ts rewrites to the runtime proxy must
+    // skip locale routing: a redirect to /en/... leaves the upgrade hanging, so a
+    // Portainer container Shell never connected.
+    "/((?!_next|api/files(?:/|$)|mcp$|ws|desktop/sessions|terminal/sessions|portainer/assets/.+/containers/.+/exec$|.*\\..*).*)"
   ]
 };
