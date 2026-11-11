@@ -482,6 +482,10 @@ v1.7.1.
   each trusted and removed host key. A device with no agent and no SSH login
   says so in words instead of "no agent connected and no SSH credentials
   configured".
+- Settings › Security › Upload certificate… says that an agent which
+  connects to an address the certificate covers stops connecting until it
+  also trusts the certificate's issuer, and that Remove uploaded certificate
+  brings it back.
 - API keys and agent tokens work behind an HTTPS reverse proxy with
   `LABTETHER_TLS_MODE=disabled`. The Hub accepts the proxy's
   `X-Forwarded-Proto: https` when the proxy's address is in
