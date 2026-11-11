@@ -141,10 +141,7 @@ func (d *Deps) executePBSCollectorWithClient(
 	// Fetch server version for root asset enrichment (best-effort).
 	var pbsVersion string
 	if ver, verErr := client.GetVersion(collectorCtx); verErr == nil {
-		pbsVersion = strings.TrimSpace(ver.Version)
-		if release := strings.TrimSpace(ver.Release); release != "" && pbsVersion == "" {
-			pbsVersion = release
-		}
+		pbsVersion = ver.Display()
 	}
 	if collectorContextCanceled(collectorCtx) {
 		return

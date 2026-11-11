@@ -48,7 +48,7 @@ func (d *Deps) HandlePBSSnapshotVerify(ctx context.Context, w http.ResponseWrite
 }
 
 // handlePBSSnapshotForget deletes a single snapshot.
-// DELETE /pbs/assets/{assetID}/snapshots/forget?store={store}&backup-type={type}&backup-id={id}&backup-time={time}
+// DELETE /pbs/assets/{assetID}/snapshots/forget?store={store}&ns={ns}&backup-type={type}&backup-id={id}&backup-time={time}
 func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string) {
 	if r.Method != http.MethodDelete {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -83,7 +83,11 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 	if !d.enforceMutation(w, runtime, store) {
 		return
 	}
-	if forgetErr := runtime.Client.ForgetSnapshot(ctx, store, backupType, backupID, backupTime); forgetErr != nil {
+	ns, ok := forgetNamespace(ctx, w, r, runtime.Client, store, backupType, backupID)
+	if !ok {
+		return
+	}
+	if forgetErr := runtime.Client.ForgetSnapshot(ctx, store, ns, backupType, backupID, backupTime); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget snapshot", forgetErr)
 		return
 	}
@@ -92,7 +96,7 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 }
 
 // handlePBSGroupForget deletes all snapshots in a backup group.
-// DELETE /pbs/assets/{assetID}/groups/forget?store={store}&backup-type={type}&backup-id={id}
+// DELETE /pbs/assets/{assetID}/groups/forget?store={store}&ns={ns}&backup-type={type}&backup-id={id}
 func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string) {
 	if r.Method != http.MethodDelete {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -120,7 +124,11 @@ func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, 
 	if !d.enforceMutation(w, runtime, store) {
 		return
 	}
-	if forgetErr := runtime.Client.ForgetGroup(ctx, store, backupType, backupID); forgetErr != nil {
+	ns, ok := forgetNamespace(ctx, w, r, runtime.Client, store, backupType, backupID)
+	if !ok {
+		return
+	}
+	if forgetErr := runtime.Client.ForgetGroup(ctx, store, ns, backupType, backupID); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget group", forgetErr)
 		return
 	}
