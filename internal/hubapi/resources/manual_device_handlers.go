@@ -53,6 +53,10 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 		servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if err := assets.ValidateName(req.Name); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if req.Host == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "host is required")
 		return
