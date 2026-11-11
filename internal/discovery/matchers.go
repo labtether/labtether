@@ -22,7 +22,8 @@ type Matcher interface {
 
 // ParentHintMatcher resolves parent hints (node, agent_id, endpoint_id,
 // collector_id) by finding an asset whose name or ID matches the hint value.
-// Produces "edge" candidates with EdgeType "contains" or "runs_on".
+// Produces "edge" candidates: "contains" from parent to child, or "runs_on"
+// from child to host.
 type ParentHintMatcher struct {
 	// AllAssets provides name/ID lookup across the full asset set.
 	// Keys are lowercased asset names and IDs mapping to asset IDs.
@@ -49,13 +50,16 @@ func (m *ParentHintMatcher) Match(signals []AssetSignals) []MatchCandidate {
 			if parentID == sig.AssetID {
 				continue
 			}
-			edgeType := "contains"
+			// "contains" points from the parent to the child; "runs_on" points
+			// from the child to the host it runs on, like every other runs_on
+			// link (Proxmox guests, Docker hosts, the console's mapping editor).
+			edgeType, source, target := "contains", parentID, sig.AssetID
 			if hintKey == "agent_id" || hintKey == "endpoint_id" {
-				edgeType = "runs_on"
+				edgeType, source, target = "runs_on", sig.AssetID, parentID
 			}
 			candidates = append(candidates, MatchCandidate{
-				SourceAssetID: parentID,
-				TargetAssetID: sig.AssetID,
+				SourceAssetID: source,
+				TargetAssetID: target,
 				Type:          "edge",
 				EdgeType:      edgeType,
 				Confidence:    0.95,
