@@ -362,6 +362,9 @@ v1.7.1.
 - Remote View and Files open, and Copy buttons copy, when the console is
   opened over plain HTTP on a LAN address such as `http://<hub-host>:3000`.
   Remote View showed an error page there, and Copy did nothing.
+- Remote View: a session that never started (for example when the device's
+  VNC server failed) no longer leaves a "completed" recording of 0 bytes. The
+  empty recording and its file are removed, and older ones are not listed.
 - Add device and a device's Proxmox settings say in your language whether a
   connection test, save or sync worked. They showed the Hub's English text,
   such as "pbs API reachable". A failed test keeps the Hub's reason after a
