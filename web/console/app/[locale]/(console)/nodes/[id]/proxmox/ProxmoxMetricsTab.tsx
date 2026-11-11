@@ -13,6 +13,8 @@ type MetricPoint = {
   time?: number;
   cpu?: number;
   mem?: number;
+  /** Proxmox's RRD name for memory in use; the Hub passes it through. */
+  memused?: number;
   maxmem?: number;
   disk?: number;
   maxdisk?: number;
@@ -23,9 +25,18 @@ type MetricPoint = {
 };
 
 type MetricsResponse = {
+  /** The Hub answers with points; data is kept for an older Hub. */
+  points?: MetricPoint[];
   data?: MetricPoint[];
   timeframe?: string;
 };
+
+/** The samples in a metrics answer. The tab read only `data`, so it always said "No samples". */
+export function metricPoints(response: MetricsResponse | MetricPoint[] | null | undefined): MetricPoint[] {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  return response.points ?? response.data ?? [];
+}
 
 const WINDOWS = ["hour", "day", "week", "month"] as const;
 type Window = (typeof WINDOWS)[number];
@@ -53,7 +64,7 @@ export function ProxmoxMetricsTab({ assetId, proxmoxCollectorID }: Props) {
   const [range, setRange] = useState<Window>("hour");
   const path = withCollector(`/api/proxmox/assets/${encodeURIComponent(assetId)}/metrics?timeframe=${range}`, proxmoxCollectorID);
   const { data, loading, error, refresh } = useProxmoxFetch<MetricsResponse>(path);
-  const points: MetricPoint[] = data?.data ?? (Array.isArray(data) ? (data as MetricPoint[]) : []);
+  const points = metricPoints(data);
   const shown = points.slice(-50).reverse();
 
   return (
@@ -87,7 +98,7 @@ export function ProxmoxMetricsTab({ assetId, proxmoxCollectorID }: Props) {
           <DiRow key={point.time ?? index}>
             <DiTime className="di-left">{whenText(point.time, locale)}</DiTime>
             <DiNum value={point.cpu != null ? (point.cpu * 100).toFixed(1) : undefined} unit="%" hot={point.cpu != null && point.cpu >= 0.85} />
-            <Size bytes={point.mem} />
+            <Size bytes={point.memused ?? point.mem} />
             <Rate bytes={point.netin} className="di-s" />
             <Rate bytes={point.netout} className="di-s" />
             <Rate bytes={point.diskread} className="di-m" />
