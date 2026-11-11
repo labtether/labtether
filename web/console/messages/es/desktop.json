@@ -159,6 +159,8 @@
   "signIn": {
     "title": "Usuario y contraseña",
     "vncTitle": "Contraseña de VNC",
+    "macTitle": "Iniciar sesión en {name}",
+    "macAccount": "Usa una cuenta de este Mac.",
     "username": "Usuario",
     "password": "Contraseña",
     "cancel": "Cancelar",
