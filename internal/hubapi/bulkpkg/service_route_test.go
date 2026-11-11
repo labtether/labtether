@@ -33,7 +33,7 @@ func TestBulkServiceRestartUsesAgentServiceManager(t *testing.T) {
 	body := `{"action":"restart","service":"nginx","targets":["srv1","srv2"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*", "services:write"})
 	req = req.WithContext(apiv2.ContextWithAllowedAssets(ctx, nil))
 	rec := httptest.NewRecorder()
 	d.HandleV2BulkServiceAction(rec, req)
@@ -67,5 +67,43 @@ func TestBulkServiceRestartUsesAgentServiceManager(t *testing.T) {
 	}
 	if got := response.Data.Results["srv2"]; got.Status != "failed" || got.Message != "Unit nginx.service not found." {
 		t.Fatalf("srv2 = %#v, want failed with the agent's words", got)
+	}
+}
+
+// bulk:* alone used to be enough: a key without services:write could start,
+// stop, enable or disable services on every device it can see. Each action
+// needs the scope one device's Services route needs.
+func TestBulkServiceActionNeedsTheServiceScope(t *testing.T) {
+	cases := []struct {
+		action string
+		scopes []string
+		want   int
+	}{
+		{"restart", []string{"bulk:*"}, http.StatusForbidden},
+		{"disable", []string{"bulk:*", "services:read"}, http.StatusForbidden},
+		{"restart", []string{"bulk:*", "services:write"}, http.StatusOK},
+		{"status", []string{"bulk:*"}, http.StatusForbidden},
+		{"status", []string{"bulk:*", "services:read"}, http.StatusOK},
+	}
+	for _, tc := range cases {
+		d := newTestDeps()
+		agentCalls := 0
+		d.RunServiceAction = func(_ *http.Request, assetID, _, _ string) ExecResult {
+			agentCalls++
+			return ExecResult{AssetID: assetID, Status: "succeeded"}
+		}
+		body := `{"action":"` + tc.action + `","service":"nginx","targets":["srv1"]}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		ctx := apiv2.ContextWithScopes(req.Context(), tc.scopes)
+		req = req.WithContext(apiv2.ContextWithAllowedAssets(ctx, nil))
+		rec := httptest.NewRecorder()
+		d.HandleV2BulkServiceAction(rec, req)
+		if rec.Code != tc.want {
+			t.Fatalf("%s with %v = %d, want %d; body=%s", tc.action, tc.scopes, rec.Code, tc.want, rec.Body.String())
+		}
+		if tc.want == http.StatusForbidden && agentCalls != 0 {
+			t.Fatalf("%s with %v reached the agent %d times", tc.action, tc.scopes, agentCalls)
+		}
 	}
 }

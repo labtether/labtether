@@ -74,6 +74,15 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: must be start, stop, restart, enable, disable, or status")
 		return
 	}
+	// A bulk action needs the same service scope as one device's action, on
+	// top of bulk:*. Every action but status goes to the agent's service
+	// manager without the structured command policy, exactly as the device
+	// Services route (/api/v2/assets/{id}/services) does, so services:write
+	// is what guards it. status runs as a command and keeps the policy.
+	if scope := serviceActionScope(req.Action); !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
+		return
+	}
 
 	// Validate service name — alphanumeric, dots, dashes, underscores, @ only.
 	for _, c := range req.Service {
@@ -181,4 +190,13 @@ func (d *Deps) runBulkServiceAction(r *http.Request, assetID, service, action st
 		return d.ExecOnAsset(r, assetID, "systemctl status "+service, 30)
 	}
 	return d.RunServiceAction(r, assetID, service, action)
+}
+
+// serviceActionScope is the scope one device's service route requires for
+// the action: services:read to read status, services:write to change it.
+func serviceActionScope(action string) string {
+	if action == "status" {
+		return "services:read"
+	}
+	return "services:write"
 }
