@@ -107,6 +107,11 @@ func (d *Deps) DeleteAsset(ctx context.Context, assetEntry assets.Asset) error {
 	if err := d.deleteAttachedInfraAssets(assetEntry); err != nil {
 		return fmt.Errorf("delete attached infrastructure assets: %w", err)
 	}
+	// A connection's own device takes every device it found with it.
+	ownedConnections := d.collectorsOwnedByAsset(assetID)
+	if err := d.deleteConnectionDevices(ownedConnections, assetID); err != nil {
+		return fmt.Errorf("delete the connection's devices: %w", err)
+	}
 
 	// Always attempt docker-child cleanup for the deleted asset ID.
 	// This covers non-agent parent assets (for example connector-discovered hosts)
@@ -129,6 +134,8 @@ func (d *Deps) DeleteAsset(ctx context.Context, assetEntry assets.Asset) error {
 	if d.AgentMgr != nil {
 		d.AgentMgr.Unregister(assetID)
 	}
+	// Only after the device (and with it the connection) is gone.
+	d.deleteUnusedConnectionLogins(ownedConnections)
 	// Only after the device is gone: a refused or failed delete keeps its
 	// saved terminal sessions.
 	if d.RemoveSavedTerminalSessions != nil {
