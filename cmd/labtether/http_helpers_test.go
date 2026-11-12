@@ -229,6 +229,8 @@ func TestHTTPHelperDefaultStepForWindow(t *testing.T) {
 		{"6 hour window → 30s step", 6 * time.Hour, 30 * time.Second},
 		{"12 hour window → 1m step", 12 * time.Hour, time.Minute},
 		{"24 hour window → 1m step", 24 * time.Hour, time.Minute},
+		{"7 day window → 10m step", 7 * 24 * time.Hour, 10 * time.Minute},
+		{"30 day window → 30m step", 30 * 24 * time.Hour, 30 * time.Minute},
 		{"1 minute window → 15s step", time.Minute, 15 * time.Second},
 	}
 

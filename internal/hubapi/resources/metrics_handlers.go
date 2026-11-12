@@ -12,6 +12,15 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+const (
+	// maxAssetMetricsWindow is the longest history one device chart can ask
+	// for. It matches the longest metrics retention preset (30 days).
+	maxAssetMetricsWindow = 30 * 24 * time.Hour
+	// maxAssetMetricsLongWindowPoints bounds each series of a window longer
+	// than a day.
+	maxAssetMetricsLongWindowPoints = 2000
+)
+
 func (d *Deps) HandleMetricsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/metrics/overview" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
@@ -197,8 +206,14 @@ func (d *Deps) HandleAssetMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	window := parseDurationParam(r.URL.Query().Get("window"), time.Hour, 5*time.Minute, 24*time.Hour)
+	window := parseDurationParam(r.URL.Query().Get("window"), time.Hour, 5*time.Minute, maxAssetMetricsWindow)
 	step := parseDurationParam(r.URL.Query().Get("step"), shared.DefaultStepForWindow(window), 10*time.Second, 30*time.Minute)
+	if window > 24*time.Hour {
+		// Past a day a fine step would return tens of thousands of points.
+		if minStep := shared.MinStepForWindow(window, maxAssetMetricsLongWindowPoints); step < minStep {
+			step = minStep
+		}
+	}
 	now := time.Now().UTC()
 	start := now.Add(-window)
 

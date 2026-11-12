@@ -8,48 +8,55 @@ import (
 	"time"
 )
 
+// Series returns the canonical device-level series for one asset, averaged
+// into step-sized buckets. The averaging runs in Postgres, so a 30-day window
+// returns a few thousand rows instead of every raw sample. The bucket
+// timestamps match telemetry.BucketAveragePoints: whole seconds, floored to a
+// multiple of the step.
 func (s *PostgresStore) Series(assetID string, start, end time.Time, step time.Duration) ([]telemetry.Series, error) {
 	definitions := telemetry.CanonicalMetrics()
 
-	// Build a slice of metric names for the ANY($2) bind parameter so we issue
-	// a single query instead of one query per metric (was 6 round-trips).
 	metricNames := make([]string, len(definitions))
 	for i, d := range definitions {
 		metricNames[i] = d.Metric
 	}
+	stepSeconds := int64(step / time.Second)
+	if stepSeconds < 1 {
+		stepSeconds = 1
+	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`SELECT metric, collected_at, value
+		`SELECT metric,
+		        (floor(extract(epoch FROM collected_at))::bigint / $5::bigint) * $5::bigint AS bucket,
+		        avg(value)
 		 FROM metric_samples
 		 WHERE asset_id = $1
 		   AND metric = ANY($2::text[])
 		   AND collected_at >= $3
 		   AND collected_at <= $4
 		   AND `+deviceLevelSampleFilter+`
-		 ORDER BY metric, collected_at ASC`,
+		 GROUP BY metric, bucket
+		 ORDER BY metric, bucket ASC`,
 		assetID,
 		metricNames,
 		start.UTC(),
 		end.UTC(),
+		stepSeconds,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	// Accumulate raw points per metric name.
-	rawPoints := make(map[string][]telemetry.Point, len(definitions))
+	bucketed := make(map[string][]telemetry.Point, len(definitions))
 	for rows.Next() {
 		var metric string
-		var collectedAt time.Time
+		var bucket int64
 		var value float64
-		if err := rows.Scan(&metric, &collectedAt, &value); err != nil {
+		if err := rows.Scan(&metric, &bucket, &value); err != nil {
 			return nil, err
 		}
-		rawPoints[metric] = append(rawPoints[metric], telemetry.Point{
-			TS:    collectedAt.Unix(),
-			Value: value,
-		})
+		bucketed[metric] = append(bucketed[metric], telemetry.Point{TS: bucket, Value: value})
 	}
 	if rows.Err() != nil {
 		return nil, rows.Err()
@@ -58,7 +65,7 @@ func (s *PostgresStore) Series(assetID string, start, end time.Time, step time.D
 	// Build the output in canonical order, preserving unit metadata.
 	out := make([]telemetry.Series, 0, len(definitions))
 	for _, def := range definitions {
-		points := telemetry.BucketAveragePoints(rawPoints[def.Metric], step)
+		points := bucketed[def.Metric]
 		out = append(out, telemetry.Series{
 			Metric:  def.Metric,
 			Unit:    def.Unit,

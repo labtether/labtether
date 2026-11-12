@@ -148,9 +148,29 @@ func DefaultStepForWindow(window time.Duration) time.Duration {
 		return 15 * time.Second
 	case window <= 6*time.Hour:
 		return 30 * time.Second
-	default:
+	case window <= 24*time.Hour:
 		return time.Minute
+	case window <= 7*24*time.Hour:
+		return 10 * time.Minute
+	default:
+		return 30 * time.Minute
 	}
+}
+
+// MinStepForWindow is the smallest step that keeps a series of the given
+// window at or under maxPoints points, rounded up to a whole second.
+func MinStepForWindow(window time.Duration, maxPoints int) time.Duration {
+	if window <= 0 || maxPoints <= 0 {
+		return time.Second
+	}
+	step := (window + time.Duration(maxPoints) - 1) / time.Duration(maxPoints)
+	if rem := step % time.Second; rem != 0 {
+		step += time.Second - rem
+	}
+	if step < time.Second {
+		return time.Second
+	}
+	return step
 }
 
 func RequestClientKey(r *http.Request) string {
