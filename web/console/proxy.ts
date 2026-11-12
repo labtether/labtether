@@ -54,9 +54,9 @@ export function proxy(request: NextRequest) {
     cookieHeader: request.headers.get("cookie"),
   });
   if (demoEntry) {
-    // A relative Location keeps the visitor on the address they came in on,
-    // whatever host name the console sees behind its proxies.
-    return new NextResponse(null, { status: 307, headers: { Location: demoEntry } });
+    // Resolved against the request, like the locale redirects, so the visitor
+    // stays on the address they came in on.
+    return NextResponse.redirect(new URL(demoEntry, request.url), 307);
   }
 
   // In standalone/proxied runs, next-intl's default-locale "as-needed"

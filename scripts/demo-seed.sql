@@ -424,7 +424,7 @@ SELECT p.asset_id,
            - p.growth::double precision * (t.age / 2592000.0)
            + COALESCE((
                SELECT sum(s.amount::double precision
-                          * exp(-8.0 * power((s.center_seconds::double precision - t.age) / s.width_seconds::double precision, 2.0)))
+                          * exp(GREATEST(-60.0, -8.0 * power((s.center_seconds::double precision - t.age) / s.width_seconds::double precision, 2.0))))
                FROM spike s
                WHERE s.asset_id = p.asset_id AND s.metric = p.metric
              ), 0.0)
