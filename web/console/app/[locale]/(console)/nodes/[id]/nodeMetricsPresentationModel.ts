@@ -54,6 +54,30 @@ export function formatDurationSeconds(seconds: number): string {
   return `${Math.round(seconds / 86400)}d`;
 }
 
+const DURATION_UNIT_SECONDS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+
+/**
+ * Seconds in a duration as the Hub prints it. The Hub writes Go durations: "15s", "10m0s", "1h30m0s". Plain
+ * "10m" and "1d" read too. 0 when the text is not a duration.
+ */
+export function parseDurationSeconds(value: string): number {
+  const text = value.trim().toLowerCase();
+  if (!/^(?:\d+(?:\.\d+)?[smhd])+$/.test(text)) return 0;
+  let total = 0;
+  for (const [, count, unit] of text.matchAll(/(\d+(?:\.\d+)?)([smhd])/g)) {
+    total += Number(count) * DURATION_UNIT_SECONDS[unit];
+  }
+  return total;
+}
+
+/** The time between samples for a readout: "10m0s" from the Hub reads "10m", "1m30s" reads "1m 30s". */
+export function formatStep(step: string): string {
+  const seconds = Math.round(parseDurationSeconds(step));
+  if (seconds <= 0) return step.trim();
+  const parts: Array<[number, string]> = [[Math.floor(seconds / 3600), "h"], [Math.floor((seconds % 3600) / 60), "m"], [seconds % 60, "s"]];
+  return parts.filter(([count]) => count > 0).map(([count, unit]) => `${count}${unit}`).join(" ");
+}
+
 /** "10:00–11:00" on one day, "1 Nov 10:00 – 2 Nov 10:00" across days; empty when the range is unknown. */
 export function formatRange(fromISO: string, toISO: string): string {
   const from = new Date(fromISO);

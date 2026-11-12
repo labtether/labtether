@@ -12,6 +12,7 @@ import { MetricPanel } from "./NodeMetricsPanels";
 import {
   analyzeTelemetryDetails,
   formatRange,
+  formatStep,
 } from "./nodeMetricsModel";
 import { useMetricWords } from "./metricsViewWords";
 
@@ -112,7 +113,7 @@ export function NodeMetricsTab({
         </div>
         {telemetryDetails ? (
           <span className="dv-hint">
-            {[span, telemetryDetails.step ? t("every", { step: telemetryDetails.step }) : ""].filter(Boolean).join(" · ")}
+            {[span, telemetryDetails.step ? t("every", { step: formatStep(telemetryDetails.step) }) : ""].filter(Boolean).join(" · ")}
             {problemCount > 0 ? <span className="dmt-warn"> · {t("withProblems", { count: problemCount })}</span> : null}
           </span>
         ) : null}

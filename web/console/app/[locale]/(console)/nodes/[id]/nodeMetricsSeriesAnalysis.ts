@@ -5,7 +5,7 @@ import type {
 } from "../../../../console/models";
 import type { ChartPoint } from "./nodeMetricsChartGeometry";
 import { valueToChartY } from "./nodeMetricsChartGeometry";
-import { formatDurationSeconds } from "./nodeMetricsPresentationModel";
+import { formatDurationSeconds, parseDurationSeconds } from "./nodeMetricsPresentationModel";
 import type { QualityTone } from "./nodeMetricsPresentationModel";
 
 export type QualityFlagKind = "sparse" | "stale" | "flatline" | "noisy" | "outlier" | "gaps";
@@ -350,19 +350,6 @@ function thresholdLinesForUnit(unit: string): number[] {
   if (unit === "percent") return [70, 90];
   if (unit === "celsius") return [70, 80];
   return [];
-}
-
-function parseDurationSeconds(value: string): number {
-  const trimmed = value.trim().toLowerCase();
-  const match = trimmed.match(/^(\d+)([smhd])$/);
-  if (!match) return 0;
-  const count = Number.parseInt(match[1], 10);
-  const unit = match[2];
-  if (!Number.isFinite(count)) return 0;
-  if (unit === "s") return count;
-  if (unit === "m") return count * 60;
-  if (unit === "h") return count * 3600;
-  return count * 86400;
 }
 
 function downSample<T>(items: T[], maxCount: number): T[] {
