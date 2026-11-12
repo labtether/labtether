@@ -84,6 +84,8 @@
     },
     "silenced": "Stumm bis {time}",
     "endSilence": "Stummschaltung beenden",
+    "silenceDevice": "{device} stummschalten",
+    "endSilenceDevice": "Stummschaltung für {device} beenden",
     "silenceEnded": "Stummschaltung beendet",
     "more": "Weitere Aktionen",
     "openRule": "Regel öffnen",

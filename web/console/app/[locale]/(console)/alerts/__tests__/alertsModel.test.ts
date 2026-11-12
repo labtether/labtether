@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AlertInstance, AlertSilence, Incident } from "../../../../console/models";
-import { alertTimeline, groupAlerts, pickAlert, silenceFor, silencesFor } from "../alertsModel";
+import { alertTimeline, deviceSilences, groupAlerts, pickAlert, silenceFor, silenceMatchers, silencesFor } from "../alertsModel";
 import { DEFAULT_FILTER, type DeliveryRecord } from "../alertsPageTypes";
 import { candidateIssues } from "../useAlertIssue";
 
@@ -72,6 +72,27 @@ describe("silenceFor with rule and device silences", () => {
     const nas01 = silence({ rule_id: "r-y", asset_id: "nas01" }, 10, -10);
     expect(silenceFor(two, [nas01], NOW)).toBeNull();
     expect(silencesFor(two, [nas01, { ...silence({ rule_id: "r-y", asset_id: "nas02" }, 10, -10), id: "s2" }], NOW)).toHaveLength(2);
+  });
+});
+
+// Risk: Silence on one device of an alert that fired for several must ask the Hub for that device alone (the others
+// keep alerting), and End silence on a device must end only the silences that name it, not a neighbour's or the rule's.
+describe("one device of a multi-device alert", () => {
+  const two = alert("z", { rule_id: "r-z", labels: {}, firing_scope: { version: 1, asset_ids: ["nas01", "nas02"] } });
+  it("asks for the named device only, and for every device when none is named", () => {
+    expect(silenceMatchers(two, "nas02")).toEqual([{ rule_id: "r-z", asset_id: "nas02" }]);
+    expect(silenceMatchers(two)).toEqual([{ rule_id: "r-z", asset_id: "nas01" }, { rule_id: "r-z", asset_id: "nas02" }]);
+    expect(silenceMatchers(alert("bare", { rule_id: "r-bare" }))).toEqual([{ rule_id: "r-bare" }]);
+  });
+  it("finds only the running silences that name that device", () => {
+    const list = [
+      { ...silence({ rule_id: "r-z", asset_id: "nas01" }, 10, -10), id: "one" },
+      { ...silence({ rule_id: "r-z", asset_id: "nas02" }, 10, -10), id: "two" },
+      { ...silence({ rule_id: "r-z" }, 10, -10), id: "rule" },
+      { ...silence({ rule_id: "r-other", asset_id: "nas01" }, 10, -10), id: "other-rule" },
+      { ...silence({ rule_id: "r-z", asset_id: "nas01" }, 60, 30), id: "ended" },
+    ];
+    expect(deviceSilences(two, "nas01", list, NOW).map((s) => s.id)).toEqual(["one"]);
   });
 });
 

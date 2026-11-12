@@ -7,9 +7,9 @@ import type { AlertInstance, AlertRule, AlertSilence } from "../../../console/mo
 import { alertAssetIds } from "../../../console/models/alerts";
 import { deviceFreshnessLabel } from "../../../console/formatters";
 import { useFastStatus } from "../../../contexts/StatusContext";
-import { AlertDetailActions, type AlertActions } from "./AlertDetailActions";
+import { AlertDetailActions, AlertDeviceSilence, type AlertActions } from "./AlertDetailActions";
 import { SevLabel } from "./alertBits";
-import { alertTimeline, fullTime, shortTime } from "./alertsModel";
+import { alertTimeline, deviceSilences, fullTime, shortTime } from "./alertsModel";
 import type { DeliveryRecord } from "./alertsPageTypes";
 import { useAlertIssue } from "./useAlertIssue";
 
@@ -21,13 +21,15 @@ type Props = {
   title: string;
   rule: AlertRule | null;
   silence: AlertSilence | null;
+  /** Every silence the hub lists: a device of an alert that fired for several gets its own Silence. */
+  silences: AlertSilence[];
   deliveries: DeliveryRecord[];
   channelNames: Map<string, string>;
   actions: AlertActions;
 };
 
 /** The chosen alert: its title, severity and state, the actions, then its facts, labels and timeline. */
-export function AlertDetail({ ref, alert, title, rule, silence, deliveries, channelNames, actions }: Props) {
+export function AlertDetail({ ref, alert, title, rule, silence, silences, deliveries, channelNames, actions }: Props) {
   const t = useTranslations("alerts.detail");
   const locale = useLocale();
   const now = Date.now();
@@ -73,6 +75,9 @@ export function AlertDetail({ ref, alert, title, rule, silence, deliveries, chan
             <dd>
               <Link href={`/nodes/${encodeURIComponent(device.id)}`} className="al-lnk">{device.name}</Link>
               {device.state ? <span className={`al-st ${device.state}`}>{t(`deviceState.${device.freshness}`)}</span> : null}
+              {devices.length > 1 ? (
+                <AlertDeviceSilence alert={alert} device={device} silences={deviceSilences(alert, device.id, silences, now)} covered={silence !== null} actions={actions} />
+              ) : null}
             </dd>
           </div>
         ))}

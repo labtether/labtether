@@ -9,7 +9,6 @@ import { PageHeader } from "../../../components/PageHeader";
 import { PageError } from "../../../components/ui/PageError";
 import { Button } from "../../../components/ui/Button";
 import type { AlertInstance } from "../../../console/models";
-import { alertAssetIds } from "../../../console/models/alerts";
 import { useToast } from "../../../contexts/ToastContext";
 import { useAlerts } from "../../../hooks/useAlerts";
 import { AlertDeliveryLogTab } from "./AlertDeliveryLogTab";
@@ -19,7 +18,7 @@ import { AlertRulesTab, type RuleOpen } from "./AlertRulesTab";
 import { AlertSilencesTab } from "./AlertSilencesTab";
 import { AlertTabs } from "./AlertTabs";
 import type { AlertActions } from "./AlertDetail";
-import { shortTime, silencesFor } from "./alertsModel";
+import { deviceSilences, shortTime, silenceMatchers, silencesFor } from "./alertsModel";
 import { DEFAULT_FILTER, durationPresets, parseAlertTab, type DurationPreset, type InboxFilter } from "./alertsPageTypes";
 import { useCanWrite } from "../../../hooks/useCanWrite";
 
@@ -66,22 +65,19 @@ export default function AlertsPage() {
     busy,
     acknowledge: (alert) => run(alert, () => data.ackAlert(alert.id)),
     resolve: (alert) => run(alert, () => data.resolveAlert(alert.id)),
-    silence: (alert, preset: DurationPreset) => {
+    silence: (alert, preset: DurationPreset, device?: string) => {
       const hours = durationPresets.find((p) => p.id === preset)?.hours ?? 1;
       const start = new Date();
       const end = new Date(start.getTime() + hours * 3_600_000);
       const reason = alert.labels?.rule_name || data.rules.find((r) => r.id === alert.rule_id)?.name || undefined;
-      // This alert's rule on each device it fired for; the rule's other devices keep alerting.
-      const devices = alertAssetIds(alert);
-      const matchers = devices.length > 0 ? devices.map((id) => ({ rule_id: alert.rule_id, asset_id: id })) : [{ rule_id: alert.rule_id }];
       return run(alert, async () => {
-        for (const m of matchers) {
+        for (const m of silenceMatchers(alert, device)) {
           await data.createSilence({ matchers: m, starts_at: start.toISOString(), ends_at: end.toISOString(), reason });
         }
       }, t("detail.silenced", { time: shortTime(end.toISOString(), locale, Date.now()) }));
     },
-    endSilence: async (alert: AlertInstance) => {
-      const covering = silencesFor(alert, data.silences, Date.now());
+    endSilence: async (alert: AlertInstance, device?: string) => {
+      const covering = device ? deviceSilences(alert, device, data.silences, Date.now()) : silencesFor(alert, data.silences, Date.now());
       if (covering.length === 0) return;
       setBusy(covering[0].id);
       try {

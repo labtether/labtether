@@ -84,6 +84,8 @@
     },
     "silenced": "静默至 {time}",
     "endSilence": "结束静默",
+    "silenceDevice": "静默 {device}",
+    "endSilenceDevice": "结束 {device} 的静默",
     "silenceEnded": "静默已结束",
     "more": "更多操作",
     "openRule": "打开规则",

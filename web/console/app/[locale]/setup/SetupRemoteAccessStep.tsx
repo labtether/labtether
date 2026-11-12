@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../components/ui/Button";
 import type { useTailscaleServeStatus } from "../../hooks/useTailscaleServeStatus";
+import { defaultRemoteAccessWay, type RemoteAccessWay } from "./remoteAccessWay";
 
 type Status = ReturnType<typeof useTailscaleServeStatus>["status"];
 
@@ -20,8 +21,6 @@ export type SetupRemoteAccessStepProps = {
   runManagedTailscaleAction: (action: "apply" | "disable") => Promise<void>;
   continueToConsole: (mode: "serve" | "off") => Promise<void>;
 };
-
-type Way = "tailscale" | "own";
 
 /** What the host reports for Tailscale itself: its own state word, or ours. */
 function tailscaleWord(t: ReturnType<typeof useTranslations>, s: Status, loading: boolean) {
@@ -53,13 +52,15 @@ export function SetupRemoteAccessStep({
   continueToConsole,
 }: SetupRemoteAccessStepProps) {
   const t = useTranslations("auth");
-  const [way, setWay] = useState<Way>("tailscale");
+  // The person's pick, once made; until then the choice follows what the hub reports for Tailscale.
+  const [picked, setPicked] = useState<RemoteAccessWay | null>(null);
+  const way = picked ?? defaultRemoteAccessWay(s);
   const [finishing, setFinishing] = useState(false);
   const ready = way === "own" || Boolean(s?.serve_configured);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
-  const choice = (id: Way, name: string, sub: string) => (
-    <button type="button" role="radio" aria-checked={way === id} className={`si-way${way === id ? " on" : ""}`} onClick={() => setWay(id)}>
+  const choice = (id: RemoteAccessWay, name: string, sub: string) => (
+    <button type="button" role="radio" aria-checked={way === id} className={`si-way${way === id ? " on" : ""}`} onClick={() => setPicked(id)}>
       <span className="si-radio" aria-hidden="true" />
       <span className="si-wt">
         <span className="si-wn">{name}</span>
