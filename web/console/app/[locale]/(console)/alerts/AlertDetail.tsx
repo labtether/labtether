@@ -70,7 +70,7 @@ export function AlertDetail({ ref, alert, title, rule, silence, silences, delive
 
       <dl className="al-facts">
         {devices.map((device) => (
-          <div key={device.id} className="al-kv">
+          <div key={device.id} className={devices.length > 1 ? "al-kv al-kv-wrap" : "al-kv"}>
             <dt>{t("device")}</dt>
             <dd>
               <Link href={`/nodes/${encodeURIComponent(device.id)}`} className="al-lnk">{device.name}</Link>
