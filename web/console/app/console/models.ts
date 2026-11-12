@@ -501,6 +501,8 @@ export const groupTimelineWindows = ["1h", "6h", "24h"] as const;
 export type GroupTimelineWindow = (typeof groupTimelineWindows)[number];
 export const logLevels = ["all", "debug", "info", "warn", "error"] as const;
 export type LogLevel = (typeof logLevels)[number];
+export { metricWindows, metricWindowParam } from "./models/metricWindows";
+export type { MetricWindow } from "./models/metricWindows";
 export { sourceLabels, runtimeSettingKeys, retentionFieldDefs } from "./models/runtimeSettings";
 export type { RuntimeSettingEntry, RuntimeSettingsPayload, RetentionSettingsPayload } from "./models/runtimeSettings";
 

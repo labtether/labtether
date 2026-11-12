@@ -8,31 +8,12 @@ import {
   CHART_BOTTOM,
   CHART_TOP,
   formatAxisValue,
-  formatTs,
   isHot,
 } from "./nodeMetricsModel";
+import { timeTicks } from "./metricsTimeTicks";
 import { useMetricWords } from "./metricsViewWords";
 
 const MID = (CHART_TOP + CHART_BOTTOM) / 2;
-
-const STEPS = [5, 10, 15, 30, 60, 120, 180, 240, 360, 720, 1440].map((m) => m * 60);
-
-/** Up to four time labels at round local times (00:00, 06:00 …), placed where those times fall on the chart. */
-function timeTicks(series: AnalyzedSeries, most = 4): Array<{ x: number; label: string }> {
-  const { points } = series;
-  if (points.length < 2) return [];
-  const a = points[0];
-  const b = points[points.length - 1];
-  const span = b.ts - a.ts;
-  if (span <= 0) return [];
-  const step = STEPS.find((s) => span / s <= most) ?? STEPS[STEPS.length - 1];
-  const offset = new Date(a.ts * 1000).getTimezoneOffset() * 60;
-  const ticks: Array<{ x: number; label: string }> = [];
-  for (let t = Math.ceil((a.ts - offset) / step) * step + offset; t <= b.ts; t += step) {
-    ticks.push({ x: a.x + ((t - a.ts) / span) * (b.x - a.x), label: formatTs(t) });
-  }
-  return ticks;
-}
 
 /**
  * One metric over time: a smooth line in the chart hue with a flat fill when it moves, dashed gridlines with the
@@ -45,7 +26,7 @@ export function MetricChart({ series, second, small = false }: { series: Analyze
   }
   const hot = isHot(series.current, series.unit);
   const moves = series.max - series.min > 0;
-  const ticks = timeTicks(series);
+  const ticks = timeTicks(series.points);
   const pos = (y: number): CSSProperties => ({ top: `${y}%` });
 
   return (

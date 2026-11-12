@@ -72,3 +72,8 @@ export function formatRange(fromISO: string, toISO: string): string {
 export function formatTs(ts: number): string {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
+
+/** A date for a chart longer than a day: "7 Nov". */
+export function formatDay(ts: number): string {
+  return new Date(ts * 1000).toLocaleDateString([], { day: "numeric", month: "short" });
+}

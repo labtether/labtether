@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { TelemetryWindow } from "../../../../console/models";
+import type { MetricWindow } from "../../../../console/models";
 import type { AnalyzedSeries } from "./nodeMetricsModel";
 import { MetricPanel } from "./NodeMetricsPanels";
 
@@ -13,7 +13,7 @@ export function SystemPanelHistoricalContext({
 }: {
   series: AnalyzedSeries[];
   telemetryLoading: boolean;
-  telemetryWindow?: TelemetryWindow;
+  telemetryWindow?: MetricWindow;
 }) {
   const t = useTranslations("devices.hardware");
   if (telemetryLoading && series.length === 0) {

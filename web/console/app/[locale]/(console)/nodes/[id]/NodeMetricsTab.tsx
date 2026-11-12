@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { telemetryWindows } from "../../../../console/models";
+import { metricWindows } from "../../../../console/models";
 import type {
   AssetTelemetryDetails,
-  TelemetryWindow,
+  MetricWindow,
 } from "../../../../console/models";
 import { NodeMetricsControls } from "./NodeMetricsControls";
 import { MetricPanel } from "./NodeMetricsPanels";
@@ -18,8 +18,8 @@ import { useMetricWords } from "./metricsViewWords";
 type Props = {
   telemetryDetails: AssetTelemetryDetails | null;
   telemetryLoading: boolean;
-  telemetryWindow: TelemetryWindow;
-  onTelemetryWindowChange: (window: TelemetryWindow) => void;
+  telemetryWindow: MetricWindow;
+  onTelemetryWindowChange: (window: MetricWindow) => void;
   requestedFocusMetric?: string | null;
 };
 
@@ -99,7 +99,7 @@ export function NodeMetricsTab({
     <div className="dmt">
       <div className="dv-bar">
         <div className="dv-seg" role="group" aria-label={t("window")}>
-          {telemetryWindows.map((window) => (
+          {metricWindows.map((window) => (
             <button
               key={window}
               type="button"

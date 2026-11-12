@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { TelemetryWindow } from "../../../../console/models";
+import type { MetricWindow } from "../../../../console/models";
 import type { NetworkInterfaceInfo } from "../../../../hooks/useNetworkInterfaces";
 import { Button } from "../../../../components/ui/Button";
 import type { AnalyzedSeries } from "./nodeMetricsModel";
@@ -68,7 +68,7 @@ export function SystemPanelDrilldown({
   drilldown: SystemDrilldownView;
   historySeries: AnalyzedSeries[];
   telemetryLoading: boolean;
-  telemetryWindow?: TelemetryWindow;
+  telemetryWindow?: MetricWindow;
   onOpenDrilldown?: (view: SystemDrilldownView) => void;
   onCloseDrilldown?: () => void;
   onOpenPanel?: (panel: string) => void;

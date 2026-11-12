@@ -148,7 +148,9 @@
       "ranges": {
         "1h": "1 Std.",
         "6h": "6 Std.",
-        "24h": "24 Std."
+        "24h": "24 Std.",
+        "7d": "7 Tage",
+        "30d": "30 Tage"
       },
       "quiet": "Keine Daten",
       "quietSince": "Keine Daten seit {time}",

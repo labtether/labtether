@@ -4,7 +4,7 @@ import type {
   Asset,
   AssetTelemetryDetails,
   TelemetryOverviewAsset,
-  TelemetryWindow,
+  MetricWindow,
 } from "../../../../console/models";
 
 export type SystemDrilldownView = "cpu" | "memory" | "storage" | "network";
@@ -15,7 +15,7 @@ export type SystemPanelProps = {
   telemetry: TelemetryOverviewAsset | null;
   telemetryDetails?: AssetTelemetryDetails | null;
   telemetryLoading?: boolean;
-  telemetryWindow?: TelemetryWindow;
+  telemetryWindow?: MetricWindow;
   drilldown?: SystemDrilldownView | null;
   onOpenDrilldown?: (view: SystemDrilldownView) => void;
   onCloseDrilldown?: () => void;
