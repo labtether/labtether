@@ -12,27 +12,33 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/labtether/labtether/internal/schedules"
 )
 
 // metricHistoryDays is how much metric history the demo keeps. It matches the
 // longest window the console offers and the history the seed loads.
 const metricHistoryDays = 30
 
-// RunKeepalive trims the demo's metric history every five minutes. It blocks
-// until ctx is cancelled.
+// RunKeepalive trims the demo's metric history and moves its schedules on
+// every five minutes. It blocks until ctx is cancelled.
 func RunKeepalive(ctx context.Context, pool *pgxpool.Pool) {
 	log.Println("demo: keepalive started")
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	pruneMetrics(ctx, pool)
+	upkeep := func() {
+		pruneMetrics(ctx, pool)
+		rollSchedules(ctx, pool, time.Now())
+	}
+	upkeep()
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("demo: keepalive stopped")
 			return
 		case <-ticker.C:
-			pruneMetrics(ctx, pool)
+			upkeep()
 		}
 	}
 }
@@ -58,6 +64,47 @@ func pruneMetrics(ctx context.Context, pool *pgxpool.Pool) {
 	)
 	if err != nil {
 		log.Printf("demo: thin metrics: %v", err)
+	}
+}
+
+// rollSchedules keeps the Schedules page current. Demo mode does not run
+// schedules, so a seeded "next run" would soon be in the past. Each enabled
+// schedule whose time has come is moved to its next cron slot, and the slot
+// that passed becomes its last run.
+func rollSchedules(ctx context.Context, pool *pgxpool.Pool, now time.Time) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, cron_expr, next_run_at FROM scheduled_tasks
+		 WHERE enabled AND next_run_at IS NOT NULL AND next_run_at <= $1`, now)
+	if err != nil {
+		log.Printf("demo: roll schedules: %v", err)
+		return
+	}
+	type due struct {
+		id   string
+		expr string
+		at   time.Time
+	}
+	var passed []due
+	for rows.Next() {
+		var d due
+		if err := rows.Scan(&d.id, &d.expr, &d.at); err == nil {
+			passed = append(passed, d)
+		}
+	}
+	rows.Close()
+
+	for _, d := range passed {
+		// The hub's own cron rules, so the time matches what a real run would set.
+		next, err := schedules.NextRun(d.expr, now)
+		if err != nil {
+			continue
+		}
+		if _, err := pool.Exec(ctx,
+			`UPDATE scheduled_tasks SET last_run_at = $2, next_run_at = $3 WHERE id = $1`,
+			d.id, d.at, next,
+		); err != nil {
+			log.Printf("demo: roll schedule %s: %v", d.id, err)
+		}
 	}
 }
 

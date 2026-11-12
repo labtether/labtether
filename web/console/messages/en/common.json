@@ -43,7 +43,7 @@
     "tryAgain": "Try again"
   },
   "demoBanner": {
-    "message": "You're exploring a demo instance with sample data.",
+    "message": "Read-only demo with sample machines.",
     "install": "Install LabTether"
   },
   "operatorAccess": {

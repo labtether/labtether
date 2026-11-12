@@ -43,7 +43,7 @@
     "tryAgain": "Reintentar"
   },
   "demoBanner": {
-    "message": "Está explorando una instancia de demostración con datos de ejemplo.",
+    "message": "Demo de solo lectura con máquinas de ejemplo.",
     "install": "Instalar LabTether"
   },
   "operatorAccess": {
