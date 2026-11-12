@@ -30,6 +30,17 @@ describe("Dashboard Needs attention", () => {
     expect(items.map((i) => i.key)).toEqual(["alert:a2"]);
   });
 
+  // "Device offline" alone does not say which device: the row must name the devices the alert fired for.
+  it("names an alert's devices under its title", () => {
+    const scoped = (ids: string[]) => ({ ...alert("a3", "critical"), firing_scope: { version: 1, asset_ids: ids } });
+    const allAssets = [asset("nas", { name: "nas01" }), asset("pve", { name: "pve01" })];
+    const one = attentionItems({ ...base, allAssets, alerts: [scoped(["nas"])], cards: [] });
+    expect(one[0].sub).toEqual({ key: "onHost", values: { host: "nas01" } });
+    const many = attentionItems({ ...base, allAssets, alerts: [scoped(["nas", "pve", "x1", "x2"])], cards: [] });
+    expect(many[0].sub).toEqual({ key: "onHost", values: { host: "nas01, pve01 +2" } });
+    expect(attentionItems({ ...base, alerts: [alert("a4", "high")], cards: [] })[0].sub).toBeNull();
+  });
+
   it("puts critical alerts before lower ones and gives medium no dot", () => {
     const items = attentionItems({ ...base, alerts: [alert("m", "medium"), alert("c", "critical")], cards: [] });
     expect(items.map((i) => [i.key, i.tone])).toEqual([["alert:c", "bad"], ["alert:m", ""]]);

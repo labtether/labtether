@@ -24,8 +24,11 @@ OTHER_EDGES = [
     ("pbs01", "offsite-pbs", "depends_on", "high", "Nightly sync over WireGuard"),
 ]
 
-# Hosts on the home LAN reach everything else through the router.
-LAN_HOSTS = [host.id for host in HOSTS if host.ip.startswith("10.0.10.") and host.id != ROUTER]
+# Machines plugged into the home LAN reach everything else through the router.
+# A VM is drawn under its hypervisor, so it has no link of its own.
+GUESTS = {guest for guest, _host in RUNS_ON}
+LAN_HOSTS = [host.id for host in HOSTS
+             if host.ip.startswith("10.0.10.") and host.id != ROUTER and host.id not in GUESTS]
 
 
 def edges() -> list:

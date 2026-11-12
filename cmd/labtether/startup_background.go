@@ -48,7 +48,10 @@ func startRuntimeLoops(
 	servicehttp.SafeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.runLiveActivityRetryLoop(ctx) })
 	servicehttp.SafeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
 	servicehttp.SafeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
-	servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+	if !srv.demoMode {
+		// Demo mode delivers no webhooks.
+		servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+	}
 	if srv.failoverStore != nil && srv.groupStore != nil && srv.assetStore != nil {
 		servicehttp.SafeGo(ctx, wg, "failover-readiness", func(ctx context.Context) { srv.runFailoverReadinessChecker(ctx) })
 	}

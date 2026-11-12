@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/serviceregistry"
 )
 
 const bytesPerGB = 1 << 30
@@ -186,8 +187,8 @@ func (h Host) dockerStats(now time.Time) agentmgr.DockerStatsData {
 
 // webServices lists what the agent's web service discovery would report:
 // every container with a published port, then the host's own web interfaces.
-// Name, category and icon are left for the hub to fill from the image, the
-// same as for a real report.
+// A known image is reported under its product name, as the agent does;
+// category and icon are left for the hub to fill from the image.
 func (h Host) webServices() []agentmgr.DiscoveredWebService {
 	var services []agentmgr.DiscoveredWebService
 	if h.Docker != nil {
@@ -199,7 +200,7 @@ func (h Host) webServices() []agentmgr.DiscoveredWebService {
 				id := containerID(h.ID, c.Name)
 				services = append(services, agentmgr.DiscoveredWebService{
 					ID:          serviceID(h.ID, "docker", fmt.Sprintf("%s:%d", id, c.Port)),
-					Name:        c.Name,
+					Name:        serviceName(c),
 					URL:         fmt.Sprintf("http://%s:%d", h.IP, c.Port),
 					Source:      "docker",
 					Status:      "up",
@@ -228,4 +229,13 @@ func (h Host) webServices() []agentmgr.DiscoveredWebService {
 		})
 	}
 	return services
+}
+
+// serviceName is the product name of a known image ("Grafana"), or the
+// container name when the image is not in the service registry.
+func serviceName(c Container) string {
+	if known, ok := serviceregistry.LookupByDockerImage(c.Image); ok && known.Name != "" {
+		return known.Name
+	}
+	return c.Name
 }

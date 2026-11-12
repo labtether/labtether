@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/assetstatus"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/demo"
@@ -154,6 +155,8 @@ func runHub(ctx context.Context) error {
 		// The public demo sends nothing out: with no adapters there is no
 		// email, chat, push or webhook delivery, whatever the data says.
 		srv.notificationDispatcher.Adapters = nil
+		// Device status follows the pretend fleet, not agent sockets.
+		srv.assetStore = assetstatus.NewStore(pgStore, newDemoFleetConnectivity())
 	}
 	srv.consoleServiceValidator = auth.NewTokenValidator(consoleServiceToken(runtimeSecrets.APIToken))
 	// This process now owns the Hub runtime, so no transfer from a previous
