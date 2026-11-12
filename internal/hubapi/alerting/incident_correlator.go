@@ -118,7 +118,7 @@ func (d *Deps) correlateIncidentPage(ctx context.Context, inc incidents.Incident
 		}
 		if err := d.upsertCorrelationEvent(ctx, inc.ID, incidents.EventTypeAudit,
 			fmt.Sprintf("audit_events:%s", evt.ID),
-			auditWords(evt.Type, pf.names.actor),
+			auditWords(evt.Type, evt.Details, pf.names.actor),
 			"info",
 			evt.Timestamp,
 		); err != nil {
