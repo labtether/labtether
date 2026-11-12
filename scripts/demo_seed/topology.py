@@ -25,7 +25,7 @@ OTHER_EDGES = [
 ]
 
 # Machines plugged into the home LAN reach everything else through the router.
-# A VM is drawn under its hypervisor, so it has no link of its own.
+# A VM reaches the LAN through its hypervisor's bridge.
 GUESTS = {guest for guest, _host in RUNS_ON}
 LAN_HOSTS = [host.id for host in HOSTS
              if host.ip.startswith("10.0.10.") and host.id != ROUTER and host.id not in GUESTS]
@@ -36,6 +36,7 @@ def edges() -> list:
     result = [(guest, host, "runs_on", "high", f"VM on {host}") for guest, host in RUNS_ON]
     result += OTHER_EDGES
     result += [(host, ROUTER, "connected_to", "medium", "") for host in LAN_HOSTS]
+    result += [(guest, host, "connected_to", "medium", "") for guest, host in RUNS_ON]
     return result
 
 

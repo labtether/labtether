@@ -100,7 +100,7 @@ HOSTS = [
          34, 71, 52, 15, ["proxmox", "hypervisor"], added_days=320, uptime_days=41),
     Host("pve02", "linux", PVE, "grp-compute", "10.0.10.12", CORE_I7_11700, 8, 16, 64, 480,
          27, 58, 44, 8, ["proxmox", "hypervisor"], added_days=320, uptime_days=41),
-    Host("nas01", "linux", TRUENAS, "grp-storage", "10.0.10.20", CORE_I5_12400, 6, 12, 64, 120,
+    Host("nas01", "linux", TRUENAS, "grp-storage", "10.0.10.20", CORE_I5_12400, 6, 12, 64, 98304,
          22, 68, 91, 45, ["truenas", "zfs", "nfs"], added_days=310, uptime_days=63),
     Host("pbs01", "linux", PBS, "grp-storage", "10.0.10.21", CORE_I7_7700, 4, 8, 16, 4000,
          9, 42, 66, 5, ["backup", "pbs"], added_days=240, uptime_days=41),

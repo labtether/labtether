@@ -30,7 +30,7 @@ var fleet = []Host{
 	{
 		ID: "nas01", Platform: "linux", IP: "10.0.10.20",
 		OS:       OS{ID: "debian", Name: "Debian GNU/Linux", Version: "12 (bookworm)", Pretty: "TrueNAS SCALE 25.04", Kernel: "6.12.15-production+truenas"},
-		CPUModel: "12th Gen Intel(R) Core(TM) i5-12400", Arch: "amd64", Cores: 6, Threads: 12, MemoryGB: 64, DiskGB: 120,
+		CPUModel: "12th Gen Intel(R) Core(TM) i5-12400", Arch: "amd64", Cores: 6, Threads: 12, MemoryGB: 64, DiskGB: 98304, // pool tank, 96 TiB
 		CPUBase: 22, CPUSwing: 9, MemBase: 68, DiskBase: 91,
 		Services: []Service{{Name: "TrueNAS", URL: "https://10.0.10.20", Port: 443}},
 	},
