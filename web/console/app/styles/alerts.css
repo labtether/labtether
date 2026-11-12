@@ -90,6 +90,12 @@
 .al-kv dd { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text); }
 .al-kv dd > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .al-detail .al-kv { grid-template-columns: 96px minmax(0, 1fr); }
+/* A device row that has its own Silence: the silence state and its button drop below the name before the name is cut.
+   The button is 24px so a one-line row keeps the 32px height of the rows around it. */
+.al-kv-wrap { align-items: baseline; align-content: center; padding-block: 4px; }
+.al-kv-wrap dd { flex-wrap: wrap; row-gap: 0; }
+.al-kv-wrap .al-btn { height: 24px; padding: 0 8px; }
+.al-kv dd > .al-dev-sil { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 8px; overflow: visible; }
 .al-st { flex: none; color: var(--text-3); }
 .al-st.bad { color: var(--bad-text); }
 .al-st.warn { color: var(--warn-text); }

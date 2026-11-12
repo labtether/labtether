@@ -71,12 +71,12 @@ export function AlertDeviceSilence({ alert, device, silences, covered, actions }
   if (silences.length > 0) {
     const until = silences.reduce((latest, s) => (Date.parse(s.ends_at) > Date.parse(latest) ? s.ends_at : latest), silences[0].ends_at);
     return (
-      <>
+      <span className="al-dev-sil">
         <span className="al-st">{t("silencedUntil", { time: shortTime(until, locale, Date.now()) })}</span>
         <button type="button" className="al-btn quiet" aria-label={t("endSilenceDevice", { device: device.name })} disabled={busy} onClick={() => void actions.endSilence(alert, device.id)}>
           {t("endSilence")}
         </button>
-      </>
+      </span>
     );
   }
   if (covered) return null;
