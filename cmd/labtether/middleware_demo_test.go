@@ -95,3 +95,25 @@ func TestDemoMiddleware_BlocksPATCH(t *testing.T) {
 		t.Fatalf("PATCH should be blocked, got %d", rec.Code)
 	}
 }
+
+// The iPhone app asks for an event ticket before it opens the live stream, and
+// signs out with a POST. In demo mode both must pass, or the app shows
+// "Disconnected" and leaves the session open; neither changes shared data.
+func TestDemoMiddleware_AllowsAppSessionPOSTs(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	handler := demoReadOnlyMiddleware(next)
+	for _, path := range []string{"/ws/events/ticket", "/auth/logout", "/api/auth/logout"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("POST %s should be allowed in demo mode, got %d", path, rec.Code)
+		}
+	}
+	for _, path := range []string{"/ws/events/ticket/extra", "/auth/2fa/setup", "/api/v1/devices/register"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST %s should be refused in demo mode, got %d", path, rec.Code)
+		}
+	}
+}
