@@ -27,7 +27,8 @@ const (
 )
 
 func (s *apiServer) enqueueWebhookEvent(eventType string, data any, at time.Time) {
-	if s == nil || s.webhookEventCh == nil {
+	if s == nil || s.webhookEventCh == nil || s.demoMode {
+		// Demo mode delivers no webhooks, so nothing drains the queue.
 		return
 	}
 	eventType = strings.TrimSpace(eventType)

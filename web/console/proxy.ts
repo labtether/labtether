@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
+import { isDemoModeEnabled } from "./app/lib/demoMode";
+import { demoEntryRedirect } from "./lib/demoEntry";
 import { hasLabtetherSessionCookie, isMutationRequestOriginAllowed, isMutatingMethod, isProxyRequestAuthorized } from "./lib/proxyAuth";
 
 const locales = ["en", "de", "fr", "es", "zh"] as const;
@@ -42,6 +44,19 @@ export function proxy(request: NextRequest) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
     return NextResponse.next();
+  }
+
+  const demoEntry = demoEntryRedirect({
+    demoMode: isDemoModeEnabled(),
+    method: request.method,
+    pathname,
+    search: new URL(request.url).search,
+    cookieHeader: request.headers.get("cookie"),
+  });
+  if (demoEntry) {
+    // Resolved against the request, like the locale redirects, so the visitor
+    // stays on the address they came in on.
+    return NextResponse.redirect(new URL(demoEntry, request.url), 307);
   }
 
   // In standalone/proxied runs, next-intl's default-locale "as-needed"

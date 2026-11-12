@@ -39,14 +39,19 @@ func startRuntimeLoops(
 	servicehttp.SafeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
 	servicehttp.SafeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
 	servicehttp.SafeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
-	if !srv.demoMode {
+	if srv.demoMode {
+		servicehttp.SafeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })
+	} else {
 		servicehttp.SafeGo(ctx, wg, "schedule-runner", func(ctx context.Context) { srv.runScheduleRunner(ctx) })
 	}
 	servicehttp.SafeGo(ctx, wg, "live-activity-dispatch", func(ctx context.Context) { srv.runLiveActivityDispatchLoop(ctx) })
 	servicehttp.SafeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.runLiveActivityRetryLoop(ctx) })
 	servicehttp.SafeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
 	servicehttp.SafeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
-	servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+	if !srv.demoMode {
+		// Demo mode delivers no webhooks.
+		servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+	}
 	if srv.failoverStore != nil && srv.groupStore != nil && srv.assetStore != nil {
 		servicehttp.SafeGo(ctx, wg, "failover-readiness", func(ctx context.Context) { srv.runFailoverReadinessChecker(ctx) })
 	}

@@ -22,6 +22,14 @@ const OPEN_ALERT = new Set<AlertInstance["status"]>(["firing", "pending", "ackno
 /** Critical reads red and high amber; medium and low carry no dot (their word is enough). */
 const alertTone = (severity: AlertInstance["severity"]): AttentionItem["tone"] =>
   severity === "critical" ? "bad" : severity === "high" ? "warn" : "";
+/** "on nas01", "on nas01, pve01" or "on nas01, pve01 +3": the devices an alert fired for, when the hub names them. */
+function alertDevices(alert: AlertInstance, names: Map<string, string>): AttentionItem["sub"] {
+  const devices = alertAssetIds(alert).map((id) => names.get(id) ?? id);
+  if (devices.length === 0) return null;
+  const more = devices.length > 2 ? ` +${devices.length - 2}` : "";
+  return { key: "onHost", values: { host: `${devices.slice(0, 2).join(", ")}${more}` } };
+}
+
 const DOWN = new Set(["offline", "down", "dead", "failed", "error", "critical"]);
 
 /**
@@ -40,6 +48,7 @@ export function attentionItems(params: {
     .filter((a) => OPEN_ALERT.has(a.status))
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.started_at.localeCompare(a.started_at));
   const alerted = new Set(open.flatMap((a) => alertAssetIds(a)));
+  const names = new Map(allAssets.map((asset) => [asset.id, asset.name]));
 
   const fromAlerts: AttentionItem[] = open.map((a) => ({
     key: `alert:${a.id}`,
@@ -47,7 +56,7 @@ export function attentionItems(params: {
     href: `/alerts?alert=${encodeURIComponent(a.id)}`,
     at: a.started_at,
     title: { text: a.labels?.rule_name ?? ruleNames.get(a.rule_id) ?? a.rule_id },
-    sub: a.annotations?.summary ? { text: a.annotations.summary } : null,
+    sub: a.annotations?.summary ? { text: a.annotations.summary } : alertDevices(a, names),
   }));
 
   const fromDevices: AttentionItem[] = cards

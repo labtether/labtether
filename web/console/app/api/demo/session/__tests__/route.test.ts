@@ -52,4 +52,35 @@ describe("demo session route", () => {
     expect(response.status).toBe(404);
     expect(response.headers.get("location")).toBeNull();
   });
+
+  // A visitor the hub cannot give a session to (rate limit, hub starting) must
+  // reach the sign-in page, not a blank error, and must not be sent back here.
+  it("sends the visitor to the sign-in page when the hub makes no session", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 429 }));
+
+    const response = await GET(
+      new Request("https://console.example.com/api/demo/session?redirect=%2Fen%2Fnodes"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("/login?demo=manual&next=%2Fen%2Fnodes");
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("forwards the session cookie and returns to the page", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: { location: "/en/nodes", "set-cookie": "labtether_session=abc; Path=/; HttpOnly" },
+      }),
+    );
+
+    const response = await GET(
+      new Request("https://console.example.com/api/demo/session?redirect=%2Fen%2Fnodes"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("/en/nodes");
+    expect(response.headers.get("set-cookie")).toContain("labtether_session=abc");
+  });
 });

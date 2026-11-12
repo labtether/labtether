@@ -23,6 +23,16 @@ export async function HEAD() {
   }
 }
 
+// Where a visitor lands when no demo session could be made: the sign-in page,
+// with the demo account filled in. `demo=manual` stops that page from sending
+// them straight back here.
+function signInFallback(redirect: string): Response {
+  return new Response(null, {
+    status: 307,
+    headers: { Location: `/login?demo=manual&next=${encodeURIComponent(redirect)}` },
+  });
+}
+
 export async function GET(request: Request) {
   const base = await resolvedBackendBaseURLs();
   const url = new URL(request.url);
@@ -37,8 +47,13 @@ export async function GET(request: Request) {
       cache: "no-store",
     });
 
+    if (response.status === 404) {
+      // Not a demo hub.
+      return new Response(null, { status: 404 });
+    }
     if (response.status < 300 || response.status >= 400) {
-      return new Response(null, { status: response.status });
+      // Too many new sessions in a minute, or the hub is not ready.
+      return signInFallback(redirect);
     }
 
     // The hub responds with a redirect + Set-Cookie. Forward both.
@@ -46,7 +61,7 @@ export async function GET(request: Request) {
     const location = safeLocalRedirectPath(response.headers.get("location"), redirect);
 
     if (cookies.length === 0) {
-      return new Response(null, { status: 502 });
+      return signInFallback(redirect);
     }
 
     const res = new Response(null, {
@@ -60,6 +75,6 @@ export async function GET(request: Request) {
 
     return res;
   } catch {
-    return new Response("Demo session unavailable", { status: 502 });
+    return signInFallback(redirect);
   }
 }

@@ -43,7 +43,7 @@
     "tryAgain": "Erneut versuchen"
   },
   "demoBanner": {
-    "message": "Sie erkunden eine Demo-Instanz mit Beispieldaten.",
+    "message": "Schreibgeschützte Demo mit Beispielgeräten.",
     "install": "LabTether installieren"
   },
   "operatorAccess": {

@@ -43,7 +43,7 @@
     "tryAgain": "重试"
   },
   "demoBanner": {
-    "message": "您正在浏览一个包含示例数据的演示实例。",
+    "message": "只读演示，设备均为示例。",
     "install": "安装 LabTether"
   },
   "operatorAccess": {
