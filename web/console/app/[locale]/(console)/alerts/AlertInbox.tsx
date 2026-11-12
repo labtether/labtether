@@ -154,6 +154,7 @@ export function AlertInbox({ loading, instances, rules, silences, selectedId, on
           title={alertTitle(selected, ruleNames)}
           rule={rules.find((r) => r.id === selected.rule_id) ?? null}
           silence={silenceFor(selected, silences, now)}
+          silences={silences}
           deliveries={deliveries.records}
           channelNames={deliveries.channelNames}
           actions={actions}

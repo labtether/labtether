@@ -84,6 +84,8 @@
     },
     "silenced": "En silence jusqu'à {time}",
     "endSilence": "Terminer le silence",
+    "silenceDevice": "Mettre {device} en silence",
+    "endSilenceDevice": "Terminer le silence de {device}",
     "silenceEnded": "Silence terminé",
     "more": "Plus d'actions",
     "openRule": "Ouvrir la règle",

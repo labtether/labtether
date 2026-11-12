@@ -21,6 +21,24 @@ const ts = (iso: string | null | undefined) => {
 export const alertTitle = (alert: AlertInstance, ruleNames: Map<string, string>) =>
   alert.labels?.rule_name || ruleNames.get(alert.rule_id) || "";
 
+const runningSilences = (silences: AlertSilence[], now: number) => silences.filter((silence) =>
+  Object.keys(silence.matchers ?? {}).length > 0 && ts(silence.starts_at) <= now && now < ts(silence.ends_at));
+
+/** Whether a silence's matchers all hold for this alert (on this device, when one is given), as the Hub matches them. */
+function silenceHolds(alert: AlertInstance, silence: AlertSilence, device?: string): boolean {
+  const labels = alert.labels ?? {};
+  return Object.entries(silence.matchers ?? {}).every(([key, value]) => {
+    if (key === "rule_id") return alert.rule_id === value;
+    if (key === "asset_id") return labels.asset_id === value || (device !== undefined && device === value);
+    return labels[key] === value;
+  });
+}
+
+/** The running silences that name this device and mute the alert on it. */
+export function deviceSilences(alert: AlertInstance, device: string, silences: AlertSilence[], now: number): AlertSilence[] {
+  return runningSilences(silences, now).filter((silence) => silence.matchers?.asset_id === device && silenceHolds(alert, silence, device));
+}
+
 /**
  * The running silences that cover this alert, matched as the Hub matches them: rule_id is the alert's rule, asset_id
  * one of its devices (or the rule's asset_id label), any other key one of the rule's labels. A silence that names a
@@ -28,20 +46,21 @@ export const alertTitle = (alert: AlertInstance, ruleNames: Map<string, string>)
  * every device it fired for.
  */
 export function silencesFor(alert: AlertInstance, silences: AlertSilence[], now: number): AlertSilence[] {
-  const labels = alert.labels ?? {};
-  const running = silences.filter((silence) => Object.keys(silence.matchers ?? {}).length > 0
-    && ts(silence.starts_at) <= now && now < ts(silence.ends_at));
-  const holds = (silence: AlertSilence, device?: string) => Object.entries(silence.matchers ?? {}).every(([key, value]) => {
-    if (key === "rule_id") return alert.rule_id === value;
-    if (key === "asset_id") return labels.asset_id === value || (device !== undefined && device === value);
-    return labels[key] === value;
-  });
-  const whole = running.filter((silence) => holds(silence));
+  const whole = runningSilences(silences, now).filter((silence) => silenceHolds(alert, silence));
   if (whole.length > 0) return whole;
   const devices = alertAssetIds(alert);
   if (devices.length === 0) return [];
-  const perDevice = devices.map((device) => running.filter((silence) => "asset_id" in (silence.matchers ?? {}) && holds(silence, device)));
+  const perDevice = devices.map((device) => deviceSilences(alert, device, silences, now));
   return perDevice.every((list) => list.length > 0) ? [...new Set(perDevice.flat())] : [];
+}
+
+/**
+ * The silences Silence asks the Hub for: the alert's rule on the one device named, else on each device the alert
+ * fired for (the rule's other devices keep alerting), or the rule alone when the alert names no device.
+ */
+export function silenceMatchers(alert: AlertInstance, device?: string): Array<Record<string, string>> {
+  const devices = device ? [device] : alertAssetIds(alert);
+  return devices.length > 0 ? devices.map((id) => ({ rule_id: alert.rule_id, asset_id: id })) : [{ rule_id: alert.rule_id }];
 }
 
 /** A silence that covers this alert (see silencesFor), if any. */
