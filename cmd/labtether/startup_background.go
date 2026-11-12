@@ -39,7 +39,9 @@ func startRuntimeLoops(
 	servicehttp.SafeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
 	servicehttp.SafeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
 	servicehttp.SafeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
-	if !srv.demoMode {
+	if srv.demoMode {
+		servicehttp.SafeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })
+	} else {
 		servicehttp.SafeGo(ctx, wg, "schedule-runner", func(ctx context.Context) { srv.runScheduleRunner(ctx) })
 	}
 	servicehttp.SafeGo(ctx, wg, "live-activity-dispatch", func(ctx context.Context) { srv.runLiveActivityDispatchLoop(ctx) })

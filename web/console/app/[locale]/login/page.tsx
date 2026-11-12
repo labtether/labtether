@@ -94,6 +94,14 @@ export default function LoginPage() {
       try {
         const response = await fetch("/api/demo/session", { method: "HEAD", cache: "no-store" });
         if (!cancelled && response.status === 200) {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("demo") !== "manual" && !params.get("error")) {
+            // A demo visitor whose session ran out gets a new one without
+            // filling in the form. `demo=manual` means that was just tried.
+            const next = safeLocalRedirectPath(params.get("next"));
+            window.location.replace(`/api/demo/session?redirect=${encodeURIComponent(next)}`);
+            return;
+          }
           setDemoMode(true);
           setUsername("demo");
           setPassword("demo-viewer");

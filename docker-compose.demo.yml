@@ -6,8 +6,12 @@
 # - Console exposed on port 80 (Cloudflare terminates TLS)
 # - Hub TLS disabled (internal only, not exposed)
 # - Hub HTTP bound to localhost only (console proxies API calls)
-# - No admin user — demo mode auto-provisions a read-only viewer session
-# - Demo seed runs automatically after hub is healthy
+# - No admin user. The hub creates one read-only viewer, signs every visitor
+#   in as it and refuses every change.
+# - The hub plays a pretend home lab (internal/demo): its machines send the
+#   messages real agents send. Real agents cannot connect in demo mode.
+# - The seed (scripts/demo-seed.sql) loads groups, links, alerts and metric
+#   history after the hub is healthy. Its times are relative to the load.
 services:
   labtether:
     environment:
@@ -47,10 +51,10 @@ services:
       - -ec
       - |
         export PGPASSWORD="$$(cat /bootstrap/postgres/password)"
-        echo "Waiting 5s for migrations to complete..."
-        sleep 5
-        psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
-        echo "Demo seed complete."
+        # The hub is healthy, so its migrations have run. Stop on the first
+        # error: the seed is one transaction, so a failed load changes nothing.
+        psql -v ON_ERROR_STOP=1 -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
+        echo "Demo seed loaded."
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
       POSTGRES_USER: ${POSTGRES_USER:-labtether}

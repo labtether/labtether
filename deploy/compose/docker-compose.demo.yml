@@ -5,10 +5,9 @@
 ##   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh
 ##   or: LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' docker compose --env-file .env.demo -f deploy/compose/docker-compose.deploy.yml -f deploy/compose/docker-compose.demo.yml up -d
 ##
-## The demo-seed service runs once after the hub is healthy, inserting sample
-## assets, alerts, incidents, logs, and the apple-review viewer account.
-## The demo bootstrap auto-creates a read-only viewer user and auto-provisions
-## sessions for anonymous visitors — no login required.
+## The demo-seed service runs once after the hub is healthy and loads the
+## sample home lab: groups, links, alerts, incidents, logs and metric history.
+## The hub creates one read-only viewer and signs every visitor in as it.
 
 services:
   labtether:
@@ -45,10 +44,10 @@ services:
       - -ec
       - |
         export PGPASSWORD="$$(cat /bootstrap/postgres/password)"
-        echo "Waiting 5s for migrations to complete..."
-        sleep 5
-        psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
-        echo "Demo seed complete."
+        # The hub is healthy, so its migrations have run. Stop on the first
+        # error: the seed is one transaction, so a failed load changes nothing.
+        psql -v ON_ERROR_STOP=1 -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
+        echo "Demo seed loaded."
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
