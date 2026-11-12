@@ -5,6 +5,51 @@ All notable changes to LabTether are documented in this file.
 This changelog starts on 2026-03-09, when work on the first public release
 began. Hub v1.2.0 was the first public release.
 
+## [2.0.1]
+
+Changes since v2.0.0. There is no database migration and no new or removed
+setting.
+
+### Upgrade notes
+
+- **Upgrade the same way as before.** Run the installer again from the folder
+  you first ran it in, with `LABTETHER_VERSION=v2.0.1`, or run
+  `./scripts/upgrade-compose.sh --version v2.0.1`. Both keep your
+  `.env.deploy`.
+- **Agents move to 2.0.1.** The Go agent, the Mac app, the Windows app and the
+  CLI are released again as 2.0.1 with no code change, so that every part of
+  LabTether carries one version. An agent with automatic updates on installs
+  2.0.1 by itself.
+
+### Console
+
+- Device charts offer 7 days and 30 days after 24 hours, on the device page
+  and in the System tab's Metrics view. A chart longer than a day labels its
+  time axis with dates. The Hub now serves device metrics for windows up to 30
+  days; a longer window used to fall back to one hour without saying so.
+- Dashboard: an alert under Needs attention names the devices it fired for.
+- Alerts: an alert that fired for several devices has a Silence menu on each
+  device row, which silences that rule for that device only. A silenced device
+  shows until when, with End silence. Silence on the alert itself still covers
+  every device. On a narrow window the device name stays whole and the silence
+  state wraps below it.
+- First-run setup starts on "The hub's own address" when the hub's host has no
+  Tailscale, so Finish is available without picking it by hand.
+- Health: with `LABTETHER_TLS_MODE=disabled` the hub's own API is no longer
+  shown as down.
+
+### Demo mode
+
+- Demo mode shows a sample home lab of 18 machines. The hub plays them itself
+  by sending the messages real agents send, so Devices, charts, Containers,
+  Services and the Map show the same things as on a real hub. Real agents
+  cannot connect in demo mode.
+- A visitor lands in the console signed in as the read-only viewer, with no
+  sign-in form.
+- Demo mode sends no notifications and no webhooks.
+- The demo data loads with times relative to the load, so it does not go out
+  of date.
+
 ## [2.0.0] - unreleased
 
 Hub 2.0.0 ships a rebuilt console. Every page has a new design, and the
