@@ -40,14 +40,14 @@ class CPU:
 
 
 PVE = OS("linux", "debian", "Debian GNU/Linux", "12 (bookworm)",
-         "Proxmox VE 8.4 (Debian GNU/Linux 12 (bookworm))", "6.8.12-11-pve")
+         "Proxmox VE 8.4", "6.8.12-11-pve")
 TRUENAS = OS("linux", "debian", "Debian GNU/Linux", "12 (bookworm)",
-             "TrueNAS SCALE 25.04 (Debian GNU/Linux 12 (bookworm))", "6.12.15-production+truenas")
+             "TrueNAS SCALE 25.04", "6.12.15-production+truenas")
 PBS = OS("linux", "debian", "Debian GNU/Linux", "12 (bookworm)",
-         "Proxmox Backup Server 3.4 (Debian 12)", "6.8.12-11-pve")
-VYOS = OS("linux", "vyos", "VyOS", "1.4", "VyOS 1.4 (Debian 12)", "6.6.89-amd64-vyos")
+         "Proxmox Backup Server 3.4", "6.8.12-11-pve")
+VYOS = OS("linux", "vyos", "VyOS", "1.4.0", "VyOS 1.4.0 (sagitta)", "6.6.89-amd64-vyos")
 RASPBERRY_PI_OS = OS("linux", "debian", "Debian GNU/Linux", "12 (bookworm)",
-                     "Raspberry Pi OS (Debian GNU/Linux 12 (bookworm))", "6.12.25+rpt-rpi-2712")
+                     "Debian GNU/Linux 12 (bookworm)", "6.12.25+rpt-rpi-2712")
 DEBIAN = OS("linux", "debian", "Debian GNU/Linux", "12 (bookworm)",
             "Debian GNU/Linux 12 (bookworm)", "6.1.0-37-amd64")
 UBUNTU = OS("linux", "ubuntu", "Ubuntu", "24.04.3 LTS (Noble Numbat)",

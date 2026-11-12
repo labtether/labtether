@@ -135,7 +135,7 @@ def log_events() -> list:
         container = rng.choice(STORM_CONTAINERS)
         events.append(("docker01", "dockerd", level, template.format(c=container, n=rng.randint(2, 9)),
                        {"container": container}, dict(days=3, seconds=-i * 20)))
-    events.append(("docker01", "dockerd", "info", "All 14 containers are running", None, dict(days=3, hours=-3)))
+    events.append(("docker01", "dockerd", "info", "All 13 containers are running", None, dict(days=3, hours=-3)))
     # The network outage after the VyOS image update five days ago.
     for host in OUTAGE_HOSTS:
         events.append((host, "labtether-agent", "error", "Connection to the hub lost, reconnecting", None,

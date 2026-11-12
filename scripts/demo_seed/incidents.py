@@ -68,7 +68,7 @@ INCIDENTS = [
     {
         "id": "incident-docker01-restart-loop",
         "title": "Container restart loop on docker01",
-        "summary": "A scheduled image update hit the registry's pull rate limit. 9 of 14 containers on "
+        "summary": "A scheduled image update hit the registry's pull rate limit. 9 of 13 containers on "
                    "docker01 restarted in a loop for about an hour.",
         "status": "resolved", "severity": "high", "source": "manual",
         "group": "grp-services", "asset": "docker01", "created_by": DEMO_USER,
@@ -85,8 +85,8 @@ INCIDENTS = [
             ("log_burst", "logs:dockerd", "24 warning and error lines from dockerd in 8 minutes.", "high", dict(days=3, minutes=-8)),
             ("audit", "note:rate-limit", "The registry answers 429 Too Many Requests to image pulls.", "info", dict(days=3, minutes=-25)),
             ("config_change", "config:compose-down", "Affected stacks stopped with docker compose down.", "info", dict(days=3, minutes=-30)),
-            ("config_change", "config:pin-digests", "Images pinned by digest in all four stacks.", "info", dict(days=3, hours=-1)),
-            ("action_run", "action:compose-up", "docker compose up -d: 14 containers running.", "info", dict(days=3, hours=-2)),
+            ("config_change", "config:pin-digests", "Images pinned by digest in all five stacks.", "info", dict(days=3, hours=-1)),
+            ("action_run", "action:compose-up", "docker compose up -d: 13 containers running.", "info", dict(days=3, hours=-2)),
             ("alert_resolved", "alert:alert-docker01-cpu:resolved", "High CPU resolved on docker01", "info", dict(days=3, minutes=-58)),
         ],
         "links": [("rule-high-cpu", "alert-docker01-cpu", "related")],
