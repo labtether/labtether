@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AssetTelemetryDetails, TelemetryWindow } from "../../../../console/models";
+import { metricWindowParam } from "../../../../console/models";
+import type { AssetTelemetryDetails, MetricWindow } from "../../../../console/models";
 
 type UseNodeTelemetryDataArgs = {
   activeTab: string;
@@ -11,7 +12,7 @@ type UseNodeTelemetryDataArgs = {
 export function useNodeTelemetryData({ activeTab, nodeId }: UseNodeTelemetryDataArgs) {
   const [telemetryDetails, setTelemetryDetails] = useState<AssetTelemetryDetails | null>(null);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [telemetryWindow, setTelemetryWindow] = useState<TelemetryWindow>("24h");
+  const [telemetryWindow, setTelemetryWindow] = useState<MetricWindow>("24h");
 
   useEffect(() => {
     // Overview draws the usage charts; the System tab's Metrics view and drill-downs ask as "telemetry".
@@ -22,7 +23,7 @@ export function useNodeTelemetryData({ activeTab, nodeId }: UseNodeTelemetryData
     const load = async () => {
       try {
         const res = await fetch(
-          `/api/metrics/assets/${encodeURIComponent(nodeId)}?window=${telemetryWindow}`,
+          `/api/metrics/assets/${encodeURIComponent(nodeId)}?window=${metricWindowParam(telemetryWindow)}`,
           { cache: "no-store", signal: controller.signal }
         );
         if (res.ok) {

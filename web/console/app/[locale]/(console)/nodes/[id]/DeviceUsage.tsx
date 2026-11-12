@@ -2,13 +2,13 @@
 
 import { useMemo, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import type { Asset, AssetTelemetryDetails, TelemetryOverviewAsset, TelemetryWindow } from "../../../../console/models";
+import type { Asset, AssetTelemetryDetails, MetricWindow, TelemetryOverviewAsset } from "../../../../console/models";
 import { MetricChart } from "./metricsViewChart";
 import { analyzeTelemetryDetails, valueToChartY, type AnalyzedSeries } from "./nodeMetricsModel";
 import { deviceState, shortWhen } from "./deviceStatusModel";
 import { isWindowsPlatform } from "../../files/remotePaths";
 
-const RANGES: TelemetryWindow[] = ["1h", "6h", "24h"];
+const RANGES: MetricWindow[] = ["1h", "6h", "24h", "7d", "30d"];
 const num = (raw: string | undefined): number | null => (raw && /^\d+(?:\.\d+)?$/.test(raw.trim()) ? Number(raw) : null);
 const pct = (v: number) => `${Math.round(v)}%`;
 const toMbit = (bytesPerSec: number) => (bytesPerSec * 8) / 1e6;
@@ -43,8 +43,8 @@ type Props = {
   telemetry: TelemetryOverviewAsset | null;
   details: AssetTelemetryDetails | null;
   loading: boolean;
-  window: TelemetryWindow;
-  onWindowChange: (window: TelemetryWindow) => void;
+  window: MetricWindow;
+  onWindowChange: (window: MetricWindow) => void;
 };
 
 /** One chart cell: its label, the value now ("—" while the device is quiet), then the chart. */
