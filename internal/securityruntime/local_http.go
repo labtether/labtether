@@ -79,15 +79,9 @@ func IsLocalNetworkHost(host string) bool {
 // whose host is on the local network (see IsLocalNetworkHost). It also keeps
 // the outbound allowlist when LABTETHER_OUTBOUND_ALLOWLIST_MODE is on.
 func ValidateLocalHTTPURL(rawURL string) (*url.URL, error) {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" {
-		return nil, fmt.Errorf("invalid url")
-	}
-	if parsed.User != nil {
-		return nil, fmt.Errorf("url must not contain embedded credentials")
-	}
-	if !strings.EqualFold(parsed.Scheme, "http") {
-		return nil, fmt.Errorf("url scheme %q is not plain http", parsed.Scheme)
+	parsed, err := parsePlainHTTPURL(rawURL)
+	if err != nil {
+		return nil, err
 	}
 	if !IsLocalNetworkHost(parsed.Hostname()) {
 		return nil, ErrNotLocalNetworkAddress
@@ -104,6 +98,21 @@ func ValidateLocalHTTPURL(rawURL string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// parsePlainHTTPURL accepts an absolute http:// URL without credentials.
+func parsePlainHTTPURL(rawURL string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" {
+		return nil, fmt.Errorf("invalid url")
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("url must not contain embedded credentials")
+	}
+	if !strings.EqualFold(parsed.Scheme, "http") {
+		return nil, fmt.Errorf("url scheme %q is not plain http", parsed.Scheme)
+	}
+	return parsed, nil
+}
+
 // NewLocalHTTPClient returns a client for the one origin of rawURL. Each
 // connection resolves the host again, refuses it unless every address is on
 // the local network, and connects to a checked address; redirects may not
@@ -113,11 +122,22 @@ func NewLocalHTTPClient(rawURL string, timeout time.Duration) (*http.Client, err
 	if err != nil {
 		return nil, err
 	}
+	return newOneOriginHTTPClient(parsed, timeout, resolveLocalNetworkHost), nil
+}
+
+// checkedHostResolver returns the addresses a connection may use, or an error
+// when the host has an address its rule does not allow.
+type checkedHostResolver func(ctx context.Context, host string) ([]netip.Addr, error)
+
+// newOneOriginHTTPClient returns a plain http client that can reach only the
+// origin of parsed. Every connection asks resolve again and connects to an
+// address it returned. No proxy; redirects may not leave the origin.
+func newOneOriginHTTPClient(parsed *url.URL, timeout time.Duration, resolve checkedHostResolver) *http.Client {
 	origin := localHTTPOrigin(parsed)
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
 		Proxy:                 nil,
-		DialContext:           localNetworkDialer(dialer, parsed.Hostname(), origin),
+		DialContext:           localNetworkDialer(dialer, parsed.Hostname(), origin, resolve),
 		MaxIdleConns:          4,
 		IdleConnTimeout:       60 * time.Second,
 		ResponseHeaderTimeout: timeout,
@@ -131,7 +151,7 @@ func NewLocalHTTPClient(rawURL string, timeout time.Duration) (*http.Client, err
 			}
 			return nil
 		},
-	}, nil
+	}
 }
 
 func localHTTPOrigin(u *url.URL) string {
@@ -142,14 +162,14 @@ func localHTTPOrigin(u *url.URL) string {
 	return strings.ToLower(u.Scheme) + "://" + net.JoinHostPort(normalizeHostname(u.Hostname()), port)
 }
 
-func localNetworkDialer(dialer *net.Dialer, wantHost, origin string) func(context.Context, string, string) (net.Conn, error) {
+func localNetworkDialer(dialer *net.Dialer, wantHost, origin string, resolve checkedHostResolver) func(context.Context, string, string) (net.Conn, error) {
 	wantHost = normalizeHostname(wantHost)
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil || normalizeHostname(host) != wantHost || "http://"+net.JoinHostPort(wantHost, port) != origin {
 			return nil, fmt.Errorf("connection to %s is not allowed by this client", address)
 		}
-		addrs, err := resolveLocalNetworkHost(ctx, host)
+		addrs, err := resolve(ctx, host)
 		if err != nil {
 			return nil, err
 		}
@@ -172,26 +192,43 @@ func resolveLocalNetworkHost(ctx context.Context, host string) ([]netip.Addr, er
 	if !localHTTPPrivateAllowed() {
 		return nil, fmt.Errorf("outbound private host %q is not allowed", normalizeHostname(host))
 	}
-	if addr, err := netip.ParseAddr(normalizeHostname(host)); err == nil {
-		if !IsLocalNetworkAddr(addr) {
-			return nil, ErrNotLocalNetworkAddress
-		}
-		return []netip.Addr{addr.Unmap()}, nil
-	}
-	resolved, err := lookupIPAddrs(ctx, host)
+	addrs, literal, err := resolveHostAddrs(ctx, host)
 	if err != nil {
 		return nil, err
 	}
-	if len(resolved) == 0 {
-		return nil, fmt.Errorf("%s did not resolve", host)
+	for _, addr := range addrs {
+		if IsLocalNetworkAddr(addr) {
+			continue
+		}
+		if literal {
+			return nil, ErrNotLocalNetworkAddress
+		}
+		return nil, fmt.Errorf("%s resolves to an address outside your network: %w", host, ErrNotLocalNetworkAddress)
 	}
-	addrs := make([]netip.Addr, 0, len(resolved))
+	return addrs, nil
+}
+
+// resolveHostAddrs returns the address host names, or every address the name
+// resolves to. literal is true when host is an address. It checks nothing:
+// the caller decides which addresses are allowed.
+func resolveHostAddrs(ctx context.Context, host string) (addrs []netip.Addr, literal bool, err error) {
+	if addr, parseErr := netip.ParseAddr(normalizeHostname(host)); parseErr == nil {
+		return []netip.Addr{addr.Unmap()}, true, nil
+	}
+	resolved, err := lookupIPAddrs(ctx, host)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(resolved) == 0 {
+		return nil, false, fmt.Errorf("%s did not resolve", host)
+	}
+	addrs = make([]netip.Addr, 0, len(resolved))
 	for _, ipAddr := range resolved {
 		addr, ok := netip.AddrFromSlice(ipAddr.IP)
-		if !ok || !IsLocalNetworkAddr(addr) {
-			return nil, fmt.Errorf("%s resolves to an address outside your network: %w", host, ErrNotLocalNetworkAddress)
+		if !ok {
+			return nil, false, fmt.Errorf("%s resolved to an invalid address", host)
 		}
 		addrs = append(addrs, addr.Unmap())
 	}
-	return addrs, nil
+	return addrs, false, nil
 }
