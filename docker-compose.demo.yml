@@ -18,9 +18,6 @@ services:
       - LABTETHER_DEMO_MODE=true
       - LABTETHER_DEMO_CONFIRM=yes-this-is-a-demo-instance
       - LABTETHER_TLS_MODE=disabled
-      # With TLS off the hub reaches its own API over plain HTTP inside the
-      # stack. Without this its Health page reports that API as down.
-      - LABTETHER_ALLOW_INSECURE_TRANSPORT=true
       # Unset admin credentials so only the demo viewer user is created.
       # The demo bootstrap refuses to run if non-demo users exist.
       - LABTETHER_ADMIN_USERNAME=

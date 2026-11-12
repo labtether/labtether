@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 const (
 	statusRoutingBaseURLCacheTTL = 30 * time.Second
 	statusEndpointProbeCacheTTL  = 15 * time.Second
+	hubOwnProbeTimeout           = 3 * time.Second
 )
 
 // probeHTTPClient is a dedicated client for endpoint health probes with
@@ -56,19 +58,29 @@ func buildEndpointTargets(
 	apiBaseURL, agentBaseURL ResolvedRoutingURL,
 	dockerHostedHub bool,
 ) []endpointTarget {
-	targets := []endpointTarget{
-		{Name: "LabTether", URL: statusHealthURL(apiBaseURL.URL)},
-	}
+	targets := []endpointTarget{{
+		Name:          "LabTether",
+		URL:           statusHealthURL(apiBaseURL.URL),
+		HubOwnAddress: deployedAddress(apiBaseURL.Source),
+	}}
 	// The Node Agent endpoint is only relevant for Docker-hosted hub runtime.
 	// In local dev/non-container runs, stale UI overrides can otherwise surface
 	// false "Node Agent endpoint is down" warnings in dashboard narrative text.
 	if dockerHostedHub && agentBaseURL.Source != runtimesettings.SourceDefault {
 		targets = append(targets, endpointTarget{
-			Name: "Node Agent",
-			URL:  statusHealthURL(agentBaseURL.URL),
+			Name:          "Node Agent",
+			URL:           statusHealthURL(agentBaseURL.URL),
+			HubOwnAddress: deployedAddress(agentBaseURL.Source),
 		})
 	}
 	return targets
+}
+
+// deployedAddress reports whether a routing URL came with the deployment: an
+// environment variable or the built-in default. A value saved in Settings
+// does not count.
+func deployedAddress(source runtimesettings.Source) bool {
+	return source == runtimesettings.SourceDocker || source == runtimesettings.SourceDefault
 }
 
 func dockerHostedHubRuntime() bool {
@@ -190,6 +202,9 @@ func endpointTargetsFingerprint(targets []endpointTarget) string {
 		builder.WriteString(strings.TrimSpace(target.Name))
 		builder.WriteByte('@')
 		builder.WriteString(strings.TrimSpace(target.URL))
+		if target.HubOwnAddress {
+			builder.WriteString("#own")
+		}
 	}
 	return builder.String()
 }
@@ -239,14 +254,7 @@ func probeEndpoint(ctx context.Context, target endpointTarget) EndpointResult {
 	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	req, err := securityruntime.NewOutboundRequestWithContext(probeCtx, http.MethodGet, target.URL, nil)
-	if err != nil {
-		result.LatencyMs = time.Since(startedAt).Milliseconds()
-		result.Error = err.Error()
-		return result
-	}
-
-	resp, err := securityruntime.DoOutboundRequest(probeHTTPClient, req)
+	resp, err := sendProbe(probeCtx, target)
 	result.LatencyMs = time.Since(startedAt).Milliseconds()
 	if err != nil {
 		result.Error = err.Error()
@@ -261,4 +269,24 @@ func probeEndpoint(ctx context.Context, target endpointTarget) EndpointResult {
 		result.Status = "up"
 	}
 	return result
+}
+
+// sendProbe sends the health request through the outbound policy. The one
+// exception is the hub's own deployed address over plain http, which is what
+// a hub has when a reverse proxy ends TLS (LABTETHER_TLS_MODE=disabled): that
+// request can reach only that origin, on this host or a private network.
+func sendProbe(ctx context.Context, target endpointTarget) (*http.Response, error) {
+	if target.HubOwnAddress && hasPlainHTTPScheme(target.URL) {
+		return securityruntime.GetHubOwnHTTP(ctx, target.URL, hubOwnProbeTimeout)
+	}
+	req, err := securityruntime.NewOutboundRequestWithContext(ctx, http.MethodGet, target.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return securityruntime.DoOutboundRequest(probeHTTPClient, req)
+}
+
+func hasPlainHTTPScheme(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	return err == nil && strings.EqualFold(parsed.Scheme, "http")
 }

@@ -69,6 +69,11 @@ type EndpointResult struct {
 type EndpointTarget struct {
 	Name string
 	URL  string
+	// HubOwnAddress is true when URL is the hub's own address from its
+	// deployment: an environment variable or the built-in default. Only such
+	// a target may be probed over plain http. An address saved in Settings is
+	// never marked.
+	HubOwnAddress bool
 }
 
 // endpointTarget is the unexported alias used internally within this package.
