@@ -6,15 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
 // CollectorIntervalMetadataKey carries a connection's sync interval on every
 // device it makes. A connection refreshes its devices once per interval, so
-// the console judges their freshness against it instead of the agent
-// heartbeat limits (65 s / 300 s), which made devices of a 120 s connection
-// flap between online and "Not responding".
-const CollectorIntervalMetadataKey = "collector_interval_seconds"
+// the console and the Hub's counts (assets.Freshness) judge their freshness
+// against it instead of the agent heartbeat limits (65 s / 300 s), which made
+// devices of a 120 s connection flap between online and "Not responding".
+const CollectorIntervalMetadataKey = assets.MetadataKeyCollectorInterval
 
 const collectorIntervalCacheTTL = 30 * time.Second
 

@@ -414,7 +414,7 @@ func (d *Deps) newGroupReliabilityComputation(
 
 		counts := computation.assetCounts[groupID]
 		counts.Total++
-		switch GroupAssetFreshness(assetEntry.LastSeenAt, computation.now) {
+		switch assets.Freshness(assetEntry.LastSeenAt, computation.now, assetEntry.Metadata) {
 		case "online":
 			counts.Online++
 		case "stale":
@@ -459,21 +459,6 @@ func (d *Deps) buildGroupReliabilityRecordFromComputation(
 	record.Score = GroupReliabilityScore(record)
 	record.Grade = GroupReliabilityGrade(record.Score)
 	return record, nil
-}
-
-// GroupAssetFreshness classifies an asset's connectivity freshness.
-func GroupAssetFreshness(lastSeen time.Time, now time.Time) string {
-	diff := now.Sub(lastSeen.UTC())
-	if diff < 0 {
-		return "offline"
-	}
-	if diff < GroupOnlineWindow {
-		return "online"
-	}
-	if diff < GroupStaleWindow {
-		return "stale"
-	}
-	return "offline"
 }
 
 // GroupReliabilityScore computes the 0-100 reliability score for a record.

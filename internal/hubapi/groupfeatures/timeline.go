@@ -236,7 +236,7 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 	stale := 0
 	offline := 0
 	for _, assetEntry := range groupAssets {
-		switch GroupAssetFreshness(assetEntry.LastSeenAt, now) {
+		switch assets.Freshness(assetEntry.LastSeenAt, now, assetEntry.Metadata) {
 		case "online":
 			online++
 		case "stale":

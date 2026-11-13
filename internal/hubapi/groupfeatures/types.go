@@ -7,11 +7,6 @@ import (
 	"github.com/labtether/labtether/internal/groups"
 )
 
-const (
-	GroupOnlineWindow = 65 * time.Second
-	GroupStaleWindow  = 5 * time.Minute
-)
-
 // GroupMaintenanceGuardrails summarises the active maintenance constraints for a group.
 type GroupMaintenanceGuardrails struct {
 	GroupID        string                               `json:"group_id,omitempty"`

@@ -53,33 +53,16 @@ func AssetGroupLookup(assetList []assets.Asset) map[string]string {
 }
 
 // CountStaleAssets returns the number of assets that are not "online" at now.
+// A device from a connection (Docker, Proxmox and the others) is judged by
+// that connection's sync interval, so it counts only after a missed sync.
 func CountStaleAssets(assetList []assets.Asset, now time.Time) int {
 	count := 0
 	for _, assetEntry := range assetList {
-		if AssetFreshness(assetEntry.LastSeenAt, now) != "online" {
+		if assets.Freshness(assetEntry.LastSeenAt, now, assetEntry.Metadata) != "online" {
 			count++
 		}
 	}
 	return count
-}
-
-// AssetFreshness returns "online", "stale", or "offline" based on how recently
-// the asset was last seen.
-func AssetFreshness(lastSeenAt, now time.Time) string {
-	if lastSeenAt.IsZero() {
-		return "offline"
-	}
-	diff := now.Sub(lastSeenAt.UTC())
-	if diff < 0 {
-		return "offline"
-	}
-	if diff < 65*time.Second {
-		return "online"
-	}
-	if diff < 5*time.Minute {
-		return "stale"
-	}
-	return "offline"
 }
 
 // --- Web service summary ---
