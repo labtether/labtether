@@ -4,6 +4,8 @@ umask 077
 
 # Fetch a pinned dashboard-icons archive, verify its digest, validate every
 # extracted SVG as passive XML, and normalize it into the console bundle.
+# The archive's LICENSE (and NOTICE, if upstream has one) is copied next to
+# the icons, because Apache-2.0 section 4 requires it with every copy.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -79,7 +81,14 @@ import tarfile
 import xml.etree.ElementTree as ET
 
 archive, destination, commit = sys.argv[1:]
-expected_prefix = f"dashboard-icons-{commit}/svg/"
+root_prefix = f"dashboard-icons-{commit}/"
+expected_prefix = f"{root_prefix}svg/"
+notice_files = {
+    f"{root_prefix}LICENSE": "LICENSE-dashboard-icons.txt",
+    f"{root_prefix}NOTICE": "NOTICE-dashboard-icons.txt",
+}
+max_notice_bytes = 1024 * 1024
+found_notices = set()
 safe_name = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,199}\.svg$")
 active_attribute = re.compile(r"^on[a-z]+$", re.I)
 active_scheme = re.compile(r"^(?:javascript|vbscript|data):", re.I)
@@ -96,6 +105,14 @@ seen = set()
 def local_name(value):
     return value.rsplit("}", 1)[-1].lower()
 
+def write_new(name, data):
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(os.path.join(destination, name), flags, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(data)
+
 with tarfile.open(archive, "r|gz") as bundle:
     for member in bundle:
         member_count += 1
@@ -110,6 +127,17 @@ with tarfile.open(archive, "r|gz") as bundle:
             archive_bytes += member.size
             if archive_bytes > max_archive_bytes:
                 raise SystemExit("dashboard-icons archive exceeds the uncompressed size limit")
+        notice_name = notice_files.get(member.name)
+        if notice_name and member.isfile():
+            if member.size <= 0 or member.size > max_notice_bytes:
+                raise SystemExit(f"invalid size for {member.name!r}")
+            source = bundle.extractfile(member)
+            data = source.read(max_notice_bytes + 1) if source else b""
+            if len(data) != member.size:
+                raise SystemExit(f"could not read {member.name!r}")
+            write_new(notice_name, data)
+            found_notices.add(notice_name)
+            continue
         if not member.isfile() or not member.name.startswith(expected_prefix):
             continue
         relative = member.name[len(expected_prefix):]
@@ -157,32 +185,46 @@ with tarfile.open(archive, "r|gz") as bundle:
                 if "url(" in text.lower() and not re.fullmatch(r"url\(\s*#[A-Za-z0-9_.:-]+\s*\)", text, re.I):
                     raise SystemExit(f"external SVG CSS reference in {member.name!r}")
 
-        output = os.path.join(destination, normalized_name)
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        descriptor = os.open(output, flags, 0o600)
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(data)
+        write_new(normalized_name, data)
 
 if not seen:
     raise SystemExit("archive contained no direct svg/ icon files")
+if "LICENSE-dashboard-icons.txt" not in found_notices:
+    raise SystemExit("archive contained no top-level LICENSE file")
 PY
+
+install_validated() {
+  local name=$1
+  local destination="$ICONS_DIR/$name"
+  if [[ -L "$destination" ]]; then
+    log_fail "refusing to replace symlinked icon destination: $destination"
+    exit 1
+  fi
+  local temporary
+  temporary=$(mktemp "$ICONS_DIR/.${name}.tmp.XXXXXX")
+  install -m 0644 "$SRC_DIR/$name" "$temporary"
+  mv -f "$temporary" "$destination"
+}
 
 echo "Copying validated icons..."
 count=0
 for svg in "$SRC_DIR"/*.svg; do
   [[ -f "$svg" && ! -L "$svg" ]] || continue
-  name=$(basename "$svg")
-  destination="$ICONS_DIR/$name"
-  if [[ -L "$destination" ]]; then
-    log_fail "refusing to replace symlinked icon destination: $destination"
-    exit 1
-  fi
-  temporary=$(mktemp "$ICONS_DIR/.${name}.tmp.XXXXXX")
-  install -m 0644 "$svg" "$temporary"
-  mv -f "$temporary" "$destination"
+  install_validated "$(basename "$svg")"
   count=$((count + 1))
+done
+
+echo "Copying upstream license files..."
+for notice in LICENSE-dashboard-icons.txt NOTICE-dashboard-icons.txt; do
+  if [[ -f "$SRC_DIR/$notice" ]]; then
+    install_validated "$notice"
+  elif [[ -L "$ICONS_DIR/$notice" ]]; then
+    log_fail "refusing to remove symlinked license destination: $ICONS_DIR/$notice"
+    exit 1
+  else
+    # This pin has no such file; drop one left by an older pin.
+    rm -f -- "$ICONS_DIR/$notice"
+  fi
 done
 
 echo "Generating index.json..."
