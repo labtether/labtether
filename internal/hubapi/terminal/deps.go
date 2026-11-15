@@ -161,20 +161,3 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/terminal/quick-session"] = d.WrapAuth(d.HandleQuickSession)
 	handlers["/terminal/host-keys/"] = d.WrapAuth(d.HandleSSHHostKeys)
 }
-
-// RegisterWSHandlers registers WebSocket message handlers for terminal-related
-// agent messages into the shared router.
-func RegisterWSHandlers(router map[string]func(*agentmgr.AgentConn, agentmgr.Message), d *Deps) {
-	router[agentmgr.MsgTerminalProbed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentTerminalProbed(conn, msg)
-	}
-	router[agentmgr.MsgTerminalStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentTerminalStarted(conn, msg)
-	}
-	router[agentmgr.MsgTerminalData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentTerminalData(conn, msg)
-	}
-	router[agentmgr.MsgTerminalClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentTerminalClosed(conn, msg)
-	}
-}

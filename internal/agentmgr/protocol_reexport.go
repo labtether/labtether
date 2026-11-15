@@ -58,6 +58,11 @@ type DesktopDiagnosticRequest = protocol.DesktopDiagnosticRequest
 type DesktopDiagnosticData = protocol.DesktopDiagnosticData
 type WoLSendData = protocol.WoLSendData
 type WoLResultData = protocol.WoLResultData
+type PowerAction = protocol.PowerAction
+type PowerResultStatus = protocol.PowerResultStatus
+type PowerResultCode = protocol.PowerResultCode
+type PowerActionData = protocol.PowerActionData
+type PowerResultData = protocol.PowerResultData
 type FileListData = protocol.FileListData
 type FileEntry = protocol.FileEntry
 type FileListedData = protocol.FileListedData
@@ -278,4 +283,22 @@ const (
 	DockerEndpointTestCodeBusy           = protocol.DockerEndpointTestCodeBusy
 	DockerEndpointTestCodeUnreachable    = protocol.DockerEndpointTestCodeUnreachable
 	DockerEndpointTestCodeTimeout        = protocol.DockerEndpointTestCodeTimeout
+)
+
+const (
+	MsgPowerAction                     = protocol.MsgPowerAction
+	MsgPowerResult                     = protocol.MsgPowerResult
+	PowerActionReboot                  = protocol.PowerActionReboot
+	PowerActionShutdown                = protocol.PowerActionShutdown
+	PowerResultAccepted                = protocol.PowerResultAccepted
+	PowerResultUnsupported             = protocol.PowerResultUnsupported
+	PowerResultRejected                = protocol.PowerResultRejected
+	PowerResultFailed                  = protocol.PowerResultFailed
+	PowerResultCodeInvalidRequest      = protocol.PowerResultCodeInvalidRequest
+	PowerResultCodeAssetMismatch       = protocol.PowerResultCodeAssetMismatch
+	PowerResultCodeCapabilityDenied    = protocol.PowerResultCodeCapabilityDenied
+	PowerResultCodeBusy                = protocol.PowerResultCodeBusy
+	PowerResultCodeUnsupportedPlatform = protocol.PowerResultCodeUnsupportedPlatform
+	PowerResultCodeExecutionFailed     = protocol.PowerResultCodeExecutionFailed
+	PowerResultCodeExecutionTimeout    = protocol.PowerResultCodeExecutionTimeout
 )

@@ -157,6 +157,5 @@ Releases and bakes them into the image.
 ## Sibling repos
 
 All live under `../`: `website/`, `labtether-agent/` (Go agent), `protocol/`,
-`mac-agent/`, `win-agent/`, `ios/`, `labtether-cli/`,
-`labtether-homeassistant/` and `labtether-linux/`. The workspace guide has the
-full map.
+`mac-agent/`, `win-agent/`, `ios/`, `labtether-cli/` and
+`labtether-homeassistant/`. The workspace guide has the full map.
