@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/runtimesettings"
 	"github.com/labtether/labtether/internal/telemetry"
@@ -29,9 +31,9 @@ type processMetricsConfigResolver func() (enabled bool, topN int)
 // and fleets larger than one sweep cap are covered over subsequent intervals.
 type agentTelemetryAdapter struct {
 	agentMgr       *agentmgr.AgentManager
-	processBridges *sync.Map
-	networkBridges *sync.Map
-	diskBridges    *sync.Map
+	processReplies *respkg.AgentReplies
+	networkReplies *respkg.AgentReplies
+	diskReplies    *respkg.AgentReplies
 	resolveProcess processMetricsConfigResolver
 	requestTimeout time.Duration
 	requestSem     chan struct{}
@@ -54,9 +56,9 @@ type networkCounterSnapshot struct {
 func newAgentTelemetryAdapter(srv *apiServer) *agentTelemetryAdapter {
 	adapter := &agentTelemetryAdapter{
 		agentMgr:        srv.agentMgr,
-		processBridges:  &srv.processBridges,
-		networkBridges:  &srv.networkBridges,
-		diskBridges:     &srv.diskBridges,
+		processReplies:  &srv.processReplies,
+		networkReplies:  &srv.networkReplies,
+		diskReplies:     &srv.diskReplies,
 		requestTimeout:  agentTelemetryRequestTimeout,
 		requestSem:      make(chan struct{}, agentTelemetryConcurrency),
 		cursors:         make(map[string]int),
@@ -91,6 +93,15 @@ func (a *agentTelemetryAdapter) timeout() time.Duration {
 		return agentTelemetryRequestTimeout
 	}
 	return a.requestTimeout
+}
+
+// request sends one message on conn and waits in p for the reply from
+// assetID. The wait is read after the send. Any failure gives no reply.
+func (a *agentTelemetryAdapter) request(p *respkg.AgentReplies, conn *agentmgr.AgentConn, msgType, requestID string, payload any, assetID string) (agentmgr.Message, bool) {
+	msg, err := agentmgr.Request(context.Background(), p, agentmgr.Call[any, agentmgr.Message]{
+		Type: msgType, ID: requestID, Payload: payload, Send: conn.Send, Device: assetID, TimeoutFunc: a.timeout,
+	})
+	return msg, err == nil
 }
 
 func (a *agentTelemetryAdapter) connectedAssetBatch(kind string) []string {
@@ -170,26 +181,14 @@ func (a *agentTelemetryAdapter) AllProcessMetrics() []bridge.ProcessMetricEntry 
 
 func (a *agentTelemetryAdapter) collectProcesses(assetID string, topN int) []bridge.ProcessMetricEntry {
 	conn, ok := a.agentMgr.Get(assetID)
-	if !ok || conn == nil || a.processBridges == nil {
+	if !ok || conn == nil || a.processReplies == nil {
 		return nil
 	}
 	requestID := generateRequestID()
-	waiter := &processBridge{Ch: make(chan agentmgr.Message, 1), ExpectedAssetID: assetID}
-	a.processBridges.Store(requestID, waiter)
-	defer a.processBridges.Delete(requestID)
-	payload, _ := json.Marshal(agentmgr.ProcessListData{RequestID: requestID, SortBy: "cpu", Limit: topN})
-	if err := conn.Send(agentmgr.Message{Type: agentmgr.MsgProcessList, ID: requestID, Data: payload}); err != nil {
-		return nil
-	}
-	timer := time.NewTimer(a.timeout())
-	defer timer.Stop()
+	msg, ok := a.request(a.processReplies, conn, agentmgr.MsgProcessList, requestID,
+		agentmgr.ProcessListData{RequestID: requestID, SortBy: "cpu", Limit: topN}, assetID)
 	var response agentmgr.ProcessListedData
-	select {
-	case msg := <-waiter.Ch:
-		if json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
-			return nil
-		}
-	case <-timer.C:
+	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawProcesses := telemetry.MaxBridgeProcessesPerAsset * 10
@@ -239,26 +238,14 @@ func (a *agentTelemetryAdapter) AllNetworkInterfaces() []bridge.NetworkInterface
 
 func (a *agentTelemetryAdapter) collectNetworkInterfaces(assetID string) []bridge.NetworkInterfaceEntry {
 	conn, ok := a.agentMgr.Get(assetID)
-	if !ok || conn == nil || a.networkBridges == nil {
+	if !ok || conn == nil || a.networkReplies == nil {
 		return nil
 	}
 	requestID := generateRequestID()
-	waiter := &networkBridge{Ch: make(chan agentmgr.Message, 1), ExpectedAssetID: assetID}
-	a.networkBridges.Store(requestID, waiter)
-	defer a.networkBridges.Delete(requestID)
-	payload, _ := json.Marshal(agentmgr.NetworkListData{RequestID: requestID})
-	if err := conn.Send(agentmgr.Message{Type: agentmgr.MsgNetworkList, ID: requestID, Data: payload}); err != nil {
-		return nil
-	}
-	timer := time.NewTimer(a.timeout())
-	defer timer.Stop()
+	msg, ok := a.request(a.networkReplies, conn, agentmgr.MsgNetworkList, requestID,
+		agentmgr.NetworkListData{RequestID: requestID}, assetID)
 	var response agentmgr.NetworkListedData
-	select {
-	case msg := <-waiter.Ch:
-		if json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
-			return nil
-		}
-	case <-timer.C:
+	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawInterfaces := telemetry.MaxBridgeInterfacesPerAsset * 10
@@ -323,26 +310,14 @@ func (a *agentTelemetryAdapter) AllDiskMounts() []bridge.DiskMountEntry {
 
 func (a *agentTelemetryAdapter) collectDiskMounts(assetID string) []bridge.DiskMountEntry {
 	conn, ok := a.agentMgr.Get(assetID)
-	if !ok || conn == nil || a.diskBridges == nil {
+	if !ok || conn == nil || a.diskReplies == nil {
 		return nil
 	}
 	requestID := generateRequestID()
-	waiter := &diskBridge{Ch: make(chan agentmgr.Message, 1), ExpectedAssetID: assetID}
-	a.diskBridges.Store(requestID, waiter)
-	defer a.diskBridges.Delete(requestID)
-	payload, _ := json.Marshal(agentmgr.DiskListData{RequestID: requestID})
-	if err := conn.Send(agentmgr.Message{Type: agentmgr.MsgDiskList, ID: requestID, Data: payload}); err != nil {
-		return nil
-	}
-	timer := time.NewTimer(a.timeout())
-	defer timer.Stop()
+	msg, ok := a.request(a.diskReplies, conn, agentmgr.MsgDiskList, requestID,
+		agentmgr.DiskListData{RequestID: requestID}, assetID)
 	var response agentmgr.DiskListedData
-	select {
-	case msg := <-waiter.Ch:
-		if json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
-			return nil
-		}
-	case <-timer.C:
+	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawMounts := telemetry.MaxBridgeMountsPerAsset * 10

@@ -13,10 +13,17 @@ import (
 
 const clipboardRequestTimeout = 10 * time.Second
 
-// ClipboardBridge holds the channel for a pending clipboard request.
-type ClipboardBridge struct {
-	Ch              chan agentmgr.Message
-	ExpectedAgentID string
+// requestClipboard sends one clipboard message and waits for the reply from
+// the connection's own device, until the HTTP request ends.
+func (d *Deps) requestClipboard(r *http.Request, agentConn *agentmgr.AgentConn, msgType, requestID string, payload any) (agentmgr.Message, error) {
+	return agentmgr.Request(r.Context(), d.ClipboardReplies, agentmgr.Call[any, agentmgr.Message]{
+		Type:        msgType,
+		ID:          requestID,
+		Payload:     payload,
+		Send:        agentConn.Send,
+		Device:      strings.TrimSpace(agentConn.AssetID),
+		TimeoutFunc: d.replyWaitFunc(clipboardRequestTimeout),
+	})
 }
 
 // HandleClipboardRoutes dispatches /api/v1/nodes/{id}/clipboard/{action} requests.
@@ -85,43 +92,25 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 
 	requestID := d.GenerateRequestID()
 
-	bridge := &ClipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: strings.TrimSpace(agentConn.AssetID),
-	}
-	d.ClipboardBridges.Store(requestID, bridge)
-	defer d.ClipboardBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.ClipboardGetData{
-		RequestID: requestID,
-		Format:    format,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgClipboardGet,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardGet, requestID,
+		agentmgr.ClipboardGetData{RequestID: requestID, Format: format})
+	if err != nil {
+		// A request whose caller went away writes nothing.
+		if agentmgr.RequestKind(err) != agentmgr.RequestCanceled {
+			d.writeAgentRequestFailure(w, assetID, err)
+		}
 		return
 	}
-
-	select {
-	case <-r.Context().Done():
+	var payload agentmgr.ClipboardDataPayload
+	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
-	case msg := <-bridge.Ch:
-		var payload agentmgr.ClipboardDataPayload
-		if err := json.Unmarshal(msg.Data, &payload); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if payload.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, payload.Error)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, payload)
-	case <-time.After(d.agentReplyTimeout(clipboardRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
+	if payload.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, payload.Error)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, payload)
 }
 
 // handleClipboardSet writes content to the agent's clipboard.
@@ -144,40 +133,23 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 	requestID := d.GenerateRequestID()
 	body.RequestID = requestID
 
-	bridge := &ClipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: strings.TrimSpace(agentConn.AssetID),
-	}
-	d.ClipboardBridges.Store(requestID, bridge)
-	defer d.ClipboardBridges.Delete(requestID)
-
-	data, _ := json.Marshal(body)
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgClipboardSet,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardSet, requestID, body)
+	if err != nil {
+		if agentmgr.RequestKind(err) != agentmgr.RequestCanceled {
+			d.writeAgentRequestFailure(w, assetID, err)
+		}
 		return
 	}
-
-	select {
-	case <-r.Context().Done():
+	var ack agentmgr.ClipboardSetAckData
+	if err := json.Unmarshal(msg.Data, &ack); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
-	case msg := <-bridge.Ch:
-		var ack agentmgr.ClipboardSetAckData
-		if err := json.Unmarshal(msg.Data, &ack); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if ack.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, ack.Error)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, ack)
-	case <-time.After(d.agentReplyTimeout(clipboardRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
+	if ack.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, ack.Error)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, ack)
 }
 
 // ProcessAgentClipboardData handles clipboard.data from agent.
@@ -200,19 +172,7 @@ func (d *Deps) ProcessAgentClipboardSetAck(conn *agentmgr.AgentConn, msg agentmg
 
 // deliverClipboardResponse routes an agent clipboard response to the waiting HTTP handler.
 func (d *Deps) deliverClipboardResponse(requestID string, conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	if raw, ok := d.ClipboardBridges.Load(requestID); ok {
-		bridge, ok := raw.(*ClipboardBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if bridge.ExpectedAgentID != "" {
-			if conn == nil || strings.TrimSpace(conn.AssetID) != bridge.ExpectedAgentID {
-				return
-			}
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	d.ClipboardReplies.Deliver(matchClipboard, agentmgr.Reply[agentmgr.Message]{
+		EnvelopeID: msg.ID, PayloadID: requestID, Conn: conn, Value: msg,
+	})
 }

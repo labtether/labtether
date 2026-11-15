@@ -2,7 +2,6 @@ package resources
 
 import (
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,27 +17,23 @@ import (
 type depsHandler func(*Deps, http.ResponseWriter, *http.Request)
 type depsDeliver func(*Deps, *agentmgr.AgentConn, agentmgr.Message)
 
-func bindDeps(site testutil.ReplySite, handle depsHandler, deliver depsDeliver, waiters func(*Deps) *sync.Map) testutil.ReplySite {
+func bindDeps(site testutil.ReplySite, handle depsHandler, deliver depsDeliver, waiters func(*Deps) *AgentReplies) testutil.ReplySite {
 	site.Bind = func(_ *testing.T, manager *agentmgr.AgentManager) testutil.ReplyHarness {
 		d := &Deps{
 			AgentMgr:       manager,
-			DiskBridges:    &sync.Map{},
-			CronBridges:    &sync.Map{},
-			UsersBridges:   &sync.Map{},
-			JournalBridges: &sync.Map{},
-			ProcessBridges: &sync.Map{},
-			ServiceBridges: &sync.Map{},
-			NetworkBridges: &sync.Map{},
-			PackageBridges: &sync.Map{},
+			DiskReplies:    &AgentReplies{},
+			CronReplies:    &AgentReplies{},
+			UsersReplies:   &AgentReplies{},
+			JournalReplies: &AgentReplies{},
+			ProcessReplies: &AgentReplies{},
+			ServiceReplies: &AgentReplies{},
+			NetworkReplies: &AgentReplies{},
+			PackageReplies: &AgentReplies{},
 		}
 		return testutil.ReplyHarness{
-			Handle:  func(w http.ResponseWriter, r *http.Request) { handle(d, w, r) },
-			Deliver: func(conn *agentmgr.AgentConn, msg agentmgr.Message) { deliver(d, conn, msg) },
-			Pending: func() int {
-				n := 0
-				waiters(d).Range(func(any, any) bool { n++; return true })
-				return n
-			},
+			Handle:     func(w http.ResponseWriter, r *http.Request) { handle(d, w, r) },
+			Deliver:    func(conn *agentmgr.AgentConn, msg agentmgr.Message) { deliver(d, conn, msg) },
+			Pending:    func() int { return waiters(d).Len() },
 			SetTimeout: func(pick func(time.Duration) time.Duration) { d.replyTimeout = pick },
 		}
 	}
@@ -84,14 +79,14 @@ func resourceReplySites() []testutil.ReplySite {
 		site.Accepts, site.OfflinePinnedBy, site.Reply = accepts, offline, build
 		return site
 	}
-	disks := func(d *Deps) *sync.Map { return d.DiskBridges }
-	crons := func(d *Deps) *sync.Map { return d.CronBridges }
-	users := func(d *Deps) *sync.Map { return d.UsersBridges }
-	journal := func(d *Deps) *sync.Map { return d.JournalBridges }
-	processes := func(d *Deps) *sync.Map { return d.ProcessBridges }
-	services := func(d *Deps) *sync.Map { return d.ServiceBridges }
-	networks := func(d *Deps) *sync.Map { return d.NetworkBridges }
-	packages := func(d *Deps) *sync.Map { return d.PackageBridges }
+	disks := func(d *Deps) *AgentReplies { return d.DiskReplies }
+	crons := func(d *Deps) *AgentReplies { return d.CronReplies }
+	users := func(d *Deps) *AgentReplies { return d.UsersReplies }
+	journal := func(d *Deps) *AgentReplies { return d.JournalReplies }
+	processes := func(d *Deps) *AgentReplies { return d.ProcessReplies }
+	services := func(d *Deps) *AgentReplies { return d.ServiceReplies }
+	networks := func(d *Deps) *AgentReplies { return d.NetworkReplies }
+	packages := func(d *Deps) *AgentReplies { return d.PackageReplies }
 	return []testutil.ReplySite{
 		bindDeps(with(get("disk list", "/disks/nas01", agentmgr.MsgDiskList, agentmgr.MsgDiskListed, 10*time.Second), acceptsNilConn, offlinePinned,
 			func(id, m string) any { return agentmgr.DiskListedData{RequestID: id, Error: m} }),

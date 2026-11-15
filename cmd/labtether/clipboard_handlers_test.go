@@ -9,16 +9,12 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
 func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
 	sut := newTestAPIServer(t)
-	bridge := &clipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: "node-allowed",
-	}
-	sut.clipboardBridges.Store("req-1", bridge)
-	defer sut.clipboardBridges.Delete("req-1")
+	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-1", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardDataPayload{
 		RequestID: "req-1",
@@ -32,7 +28,7 @@ func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
 	sut.processAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
 
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected clipboard response from wrong agent to be ignored")
 	default:
 	}
@@ -40,12 +36,7 @@ func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
 
 func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
 	sut := newTestAPIServer(t)
-	bridge := &clipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: "node-allowed",
-	}
-	sut.clipboardBridges.Store("req-1", bridge)
-	defer sut.clipboardBridges.Delete("req-1")
+	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-1", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardDataPayload{
 		RequestID: "req-1",
@@ -59,7 +50,7 @@ func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
 	sut.processAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
 
 	select {
-	case msg := <-bridge.Ch:
+	case msg := <-replies:
 		var got agentmgr.ClipboardDataPayload
 		if err := json.Unmarshal(msg.Data, &got); err != nil {
 			t.Fatalf("unmarshal delivered payload: %v", err)
@@ -74,12 +65,7 @@ func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
 
 func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
 	sut := newTestAPIServer(t)
-	bridge := &clipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: "node-allowed",
-	}
-	sut.clipboardBridges.Store("req-ack", bridge)
-	defer sut.clipboardBridges.Delete("req-ack")
+	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-ack", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardSetAckData{
 		RequestID: "req-ack",
@@ -91,7 +77,7 @@ func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
 	sut.processAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
 
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected clipboard ack from wrong agent to be ignored")
 	default:
 	}
@@ -99,12 +85,7 @@ func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
 
 func TestProcessAgentClipboardSetAckAcceptsExpectedAgent(t *testing.T) {
 	sut := newTestAPIServer(t)
-	bridge := &clipboardBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAgentID: "node-allowed",
-	}
-	sut.clipboardBridges.Store("req-ack", bridge)
-	defer sut.clipboardBridges.Delete("req-ack")
+	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-ack", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardSetAckData{
 		RequestID: "req-ack",
@@ -116,7 +97,7 @@ func TestProcessAgentClipboardSetAckAcceptsExpectedAgent(t *testing.T) {
 	sut.processAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
 
 	select {
-	case msg := <-bridge.Ch:
+	case msg := <-replies:
 		var got agentmgr.ClipboardSetAckData
 		if err := json.Unmarshal(msg.Data, &got); err != nil {
 			t.Fatalf("unmarshal delivered ack payload: %v", err)

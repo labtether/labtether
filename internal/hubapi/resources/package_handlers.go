@@ -27,10 +27,6 @@ var validPackageActions = map[string]bool{
 
 const packageUpdatePreviewSummaryMaxBytes = 220
 
-type packagePreviewLogicalKey string
-
-// packageBridge holds the channel for a pending package list request.
-
 // HandlePackages dispatches exact v1 package inventory and action routes.
 // Public "update" is retained as an alias while the agent wire keeps the
 // package-manager-native canonical action name "upgrade".
@@ -102,49 +98,32 @@ func (d *Deps) handlePackageList(w http.ResponseWriter, r *http.Request, assetID
 	}
 
 	requestID := generateRequestID()
-
-	bridge := &PackageBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.PackageBridges.Store(requestID, bridge)
-	defer d.PackageBridges.Delete(requestID)
-
 	request := packageListRequestWire{
 		RequestID: requestID,
 	}
 	if inventory == packageInventoryUpgradable {
 		request.Inventory = packageInventoryUpgradable
 	}
-	data, _ := json.Marshal(request)
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgPackageList,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestAgent(d.PackageReplies, agentConn, agentmgr.MsgPackageList, requestID,
+		request, assetID, packageRequestTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var listed packageListedResponseWire
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if err := validatePackageListedResponse(listed, requestID, inventory); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(d.agentReplyTimeout(packageRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var listed packageListedResponseWire
+	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if err := validatePackageListedResponse(listed, requestID, inventory); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if listed.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, listed)
 }
 
 // PreviewOSPackageUpdatesViaAgent requests the agent's validated upgradable
@@ -186,7 +165,7 @@ func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, a
 	if d.AgentMgr == nil {
 		return failed("agent manager unavailable; no changes applied")
 	}
-	if d.PackageBridges == nil {
+	if d.PackageReplies == nil {
 		return failed("package update preview bridge unavailable; no changes applied")
 	}
 	agentConn, ok := d.AgentMgr.Get(assetID)
@@ -197,64 +176,52 @@ func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, a
 		timeout = packageRequestTimeout
 	}
 
-	bridge := &PackageBridge{
-		ExpectedConn:    agentConn,
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	logicalKey := packagePreviewLogicalKey(requestID)
-	if _, loaded := d.PackageBridges.LoadOrStore(logicalKey, bridge); loaded {
-		return failed("package update preview request id is already in use; no changes applied")
-	}
-	defer d.PackageBridges.CompareAndDelete(logicalKey, bridge)
-	if _, loaded := d.PackageBridges.LoadOrStore(wireID, bridge); loaded {
-		return failed("package update preview request id is already in use; no changes applied")
-	}
-	defer d.PackageBridges.CompareAndDelete(wireID, bridge)
-
-	data, err := json.Marshal(packageListRequestWire{
-		RequestID: wireID,
-		Inventory: packageInventoryUpgradable,
-	})
-	if err != nil {
-		return failed("failed to encode package update preview request; no changes applied")
-	}
-	if err := agentConn.SendContext(ctx, agentmgr.Message{
+	msg, err := agentmgr.Request(ctx, d.PackageReplies, agentmgr.Call[packageListRequestWire, agentmgr.Message]{
 		Type: agentmgr.MsgPackageList,
 		ID:   wireID,
-		Data: data,
-	}); err != nil {
-		return failed("failed to send package update preview request to agent; no changes applied")
+		// The caller's request ID stays held while the preview runs, so a
+		// second preview with it is refused. No reply can reach it.
+		Reserve:    []string{requestID},
+		Payload:    packageListRequestWire{RequestID: wireID, Inventory: packageInventoryUpgradable},
+		Send:       func(msg agentmgr.Message) error { return agentConn.SendContext(ctx, msg) },
+		Device:     assetID,
+		ExactConn:  agentConn,
+		Timeout:    timeout,
+		Disconnect: agentConn.Done(),
+	})
+	if err != nil {
+		switch agentmgr.RequestKind(err) {
+		case agentmgr.RequestDuplicate, agentmgr.RequestBusy:
+			return failed("package update preview request id is already in use; no changes applied")
+		case agentmgr.RequestInvalid:
+			return failed("failed to encode package update preview request; no changes applied")
+		case agentmgr.RequestSendFailed:
+			return failed("failed to send package update preview request to agent; no changes applied")
+		case agentmgr.RequestCanceled:
+			return failed("package update preview canceled; no changes applied: " + ctx.Err().Error())
+		case agentmgr.RequestDisconnected:
+			return failed("agent disconnected during package update preview; no changes applied")
+		default:
+			return failed("agent did not respond to package update preview in time; no changes applied")
+		}
 	}
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case msg := <-bridge.Ch:
-		if err := ctx.Err(); err != nil {
-			return failed("package update preview canceled; no changes applied: " + err.Error())
-		}
-		var listed packageListedResponseWire
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
-			return failed("invalid package update preview response; no changes applied")
-		}
-		if err := validatePackageListedResponse(listed, wireID, packageInventoryUpgradable); err != nil {
-			return failed("package update preview failed; no changes applied: " + err.Error())
-		}
-		if strings.TrimSpace(listed.Error) != "" {
-			return failed("package update preview failed; no changes applied: agent reported " + strings.TrimSpace(listed.Error))
-		}
-		return agentmgr.CommandResultData{
-			JobID:  requestID,
-			Status: "succeeded",
-			Output: summarizeOSPackageUpdatePreview(assetID, listed.Packages),
-		}
-	case <-ctx.Done():
-		return failed("package update preview canceled; no changes applied: " + ctx.Err().Error())
-	case <-agentConn.Done():
-		return failed("agent disconnected during package update preview; no changes applied")
-	case <-timer.C:
-		return failed("agent did not respond to package update preview in time; no changes applied")
+	if err := ctx.Err(); err != nil {
+		return failed("package update preview canceled; no changes applied: " + err.Error())
+	}
+	var listed packageListedResponseWire
+	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		return failed("invalid package update preview response; no changes applied")
+	}
+	if err := validatePackageListedResponse(listed, wireID, packageInventoryUpgradable); err != nil {
+		return failed("package update preview failed; no changes applied: " + err.Error())
+	}
+	if strings.TrimSpace(listed.Error) != "" {
+		return failed("package update preview failed; no changes applied: agent reported " + strings.TrimSpace(listed.Error))
+	}
+	return agentmgr.CommandResultData{
+		JobID:  requestID,
+		Status: "succeeded",
+		Output: summarizeOSPackageUpdatePreview(assetID, listed.Packages),
 	}
 }
 
@@ -331,46 +298,26 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 	}
 
 	requestID := generateRequestID()
-	bridge := &PackageBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.PackageBridges.Store(requestID, bridge)
-	defer d.PackageBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.PackageActionData{
-		RequestID: requestID,
-		Action:    action,
-		Packages:  cleanedPackages,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgPackageAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestAgent(d.PackageReplies, agentConn, agentmgr.MsgPackageAction, requestID,
+		agentmgr.PackageActionData{RequestID: requestID, Action: action, Packages: cleanedPackages}, assetID, packageActionTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var result agentmgr.PackageResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if err := validatePackageActionResult(result, requestID); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(d.agentReplyTimeout(packageActionTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var result agentmgr.PackageResultData
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if err := validatePackageActionResult(result, requestID); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if result.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -383,25 +330,7 @@ func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.
 	if requestID == "" || len(requestID) > maxPackageRequestIDBytes {
 		return
 	}
-	if raw, ok := d.PackageBridges.Load(requestID); ok {
-		bridge, ok := raw.(*PackageBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if bridge.ExpectedConn != nil && bridge.ExpectedConn != conn {
-			return
-		}
-		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
-			return
-		}
-		if strings.TrimSpace(msg.ID) != "" && strings.TrimSpace(msg.ID) != strings.TrimSpace(data.RequestID) {
-			return
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.PackageReplies, matchPackage, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -414,23 +343,5 @@ func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.
 	if requestID == "" || len(requestID) > maxPackageRequestIDBytes {
 		return
 	}
-	if raw, ok := d.PackageBridges.Load(requestID); ok {
-		bridge, ok := raw.(*PackageBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if bridge.ExpectedConn != nil && bridge.ExpectedConn != conn {
-			return
-		}
-		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
-			return
-		}
-		if strings.TrimSpace(msg.ID) != "" && strings.TrimSpace(msg.ID) != strings.TrimSpace(data.RequestID) {
-			return
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.PackageReplies, matchPackage, conn, msg, data.RequestID)
 }

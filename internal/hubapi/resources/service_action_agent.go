@@ -3,7 +3,6 @@ package resources
 import (
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 )
@@ -27,36 +26,19 @@ func (d *Deps) RunServiceAction(assetID, service, action string) (agentmgr.Servi
 	}
 
 	requestID := generateRequestID()
-	bridge := &ServiceBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.ServiceBridges.Store(requestID, bridge)
-	defer d.ServiceBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.ServiceActionData{
-		RequestID: requestID,
-		Service:   service,
-		Action:    action,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgServiceAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	msg, err := d.requestAgent(d.ServiceReplies, agentConn, agentmgr.MsgServiceAction, requestID,
+		agentmgr.ServiceActionData{RequestID: requestID, Service: service, Action: action}, assetID, serviceActionTimeout)
+	switch {
+	case agentmgr.RequestKind(err) == agentmgr.RequestTimedOut:
+		return agentmgr.ServiceResultData{}, ErrServiceAgentTimeout
+	case err != nil:
 		return agentmgr.ServiceResultData{}, ErrServiceAgentNotConnected
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var result agentmgr.ServiceResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
-			return agentmgr.ServiceResultData{}, ErrServiceAgentBadAnswer
-		}
-		return result, nil
-	case <-time.After(d.agentReplyTimeout(serviceActionTimeout)):
-		return agentmgr.ServiceResultData{}, ErrServiceAgentTimeout
+	var result agentmgr.ServiceResultData
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return agentmgr.ServiceResultData{}, ErrServiceAgentBadAnswer
 	}
+	return result, nil
 }
 
 // serviceActionWhat finishes the sentence for a device that cannot manage services.

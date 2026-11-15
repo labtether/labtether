@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ func TestPackagePreviewContextOwnsAttemptAndSocket(t *testing.T) {
 	manager := agentmgr.NewManager()
 	manager.Register(conn)
 	defer manager.Unregister(conn.AssetID)
-	deps := &Deps{AgentMgr: manager, PackageBridges: &sync.Map{}}
+	deps := &Deps{AgentMgr: manager, PackageReplies: &AgentReplies{}}
 	run := func(ctx context.Context) agentmgr.CommandResultData {
 		return deps.PreviewOSPackageUpdatesViaAgentContext(ctx, "same-preview", conn.AssetID, time.Minute)
 	}
@@ -100,13 +99,15 @@ func TestPackagePreviewContextOwnsAttemptAndSocket(t *testing.T) {
 	}
 	deliver(conn, wireA)
 	deliver(&agentmgr.AgentConn{AssetID: conn.AssetID}, wireB)
-	raw, ok := deps.PackageBridges.Load(wireB)
-	if !ok || len(raw.(*PackageBridge).Ch) != 0 {
+	waiting, ok := deps.PackageReplies.Load(wireB)
+	if !ok || waiting.Delivered {
 		t.Fatal("stale preview reached replacement")
 	}
 	deliver(conn, wireB)
 	if r := wait(resultsB); r.JobID != "same-preview" || r.Status != "succeeded" {
 		t.Fatalf("current preview: %+v", r)
 	}
-	deps.PackageBridges.Range(func(key, value any) bool { t.Errorf("preview bridge retained: %v", key); return true })
+	if n := deps.PackageReplies.Len(); n != 0 {
+		t.Errorf("preview bridge retained: %d key(s)", n)
+	}
 }

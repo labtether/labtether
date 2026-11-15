@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/telemetry/bridge"
 )
@@ -20,7 +20,7 @@ type telemetryCollector struct {
 	name    string
 	sends   string
 	reply   string
-	waiters func(*apiServer) *sync.Map
+	waiters func(*apiServer) *respkg.AgentReplies
 	collect func(a *agentTelemetryAdapter) []string // the item named by each entry
 	// answer is the agent's reply naming one item. took, when set, reports
 	// whether the collector used an item it returns no entry for.
@@ -32,7 +32,7 @@ func telemetryCollectors() []telemetryCollector {
 	return []telemetryCollector{
 		{
 			name: "processes", sends: agentmgr.MsgProcessList, reply: agentmgr.MsgProcessListed,
-			waiters: func(s *apiServer) *sync.Map { return &s.processBridges },
+			waiters: func(s *apiServer) *respkg.AgentReplies { return &s.processReplies },
 			collect: func(a *agentTelemetryAdapter) []string {
 				return metricItems(a.collectProcesses(testutil.ReplyDevice, 1), func(e bridge.ProcessMetricEntry) string { return e.Labels["process_name"] })
 			},
@@ -42,7 +42,7 @@ func telemetryCollectors() []telemetryCollector {
 		},
 		{
 			name: "network interfaces", sends: agentmgr.MsgNetworkList, reply: agentmgr.MsgNetworkListed,
-			waiters: func(s *apiServer) *sync.Map { return &s.networkBridges },
+			waiters: func(s *apiServer) *respkg.AgentReplies { return &s.networkReplies },
 			collect: func(a *agentTelemetryAdapter) []string {
 				return metricItems(a.collectNetworkInterfaces(testutil.ReplyDevice), func(e bridge.NetworkInterfaceEntry) string { return e.Labels["interface"] })
 			},
@@ -59,7 +59,7 @@ func telemetryCollectors() []telemetryCollector {
 		},
 		{
 			name: "disk mounts", sends: agentmgr.MsgDiskList, reply: agentmgr.MsgDiskListed,
-			waiters: func(s *apiServer) *sync.Map { return &s.diskBridges },
+			waiters: func(s *apiServer) *respkg.AgentReplies { return &s.diskReplies },
 			collect: func(a *agentTelemetryAdapter) []string {
 				return metricItems(a.collectDiskMounts(testutil.ReplyDevice), func(e bridge.DiskMountEntry) string { return e.Labels["mount_point"] })
 			},
@@ -87,11 +87,7 @@ func metricItems[T any](entries []T, item func(T) string) []string {
 	return out
 }
 
-func countWaiters(m *sync.Map) int {
-	n := 0
-	m.Range(func(any, any) bool { n++; return true })
-	return n
-}
+func countWaiters(m *respkg.AgentReplies) int { return m.Len() }
 
 func TestAgentTelemetryCollectorsWithoutAnAnswer(t *testing.T) {
 	_, adapter := newTelemetryFreezeAdapter(t, agentmgr.NewManager(), 0)
