@@ -50,15 +50,15 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		RemoteBookmarkStore: s.db,
 
 		FileBridges:    &s.fileBridges,
-		ProcessBridges: &s.processBridges,
-		ServiceBridges: &s.serviceBridges,
-		JournalBridges: &s.journalBridges,
-		DiskBridges:    &s.diskBridges,
-		NetworkBridges: &s.networkBridges,
+		ProcessReplies: &s.processReplies,
+		ServiceReplies: &s.serviceReplies,
+		JournalReplies: &s.journalReplies,
+		DiskReplies:    &s.diskReplies,
+		NetworkReplies: &s.networkReplies,
 		WoLPending:     &s.wolPending,
-		PackageBridges: &s.packageBridges,
-		CronBridges:    &s.cronBridges,
-		UsersBridges:   &s.usersBridges,
+		PackageReplies: &s.packageReplies,
+		CronReplies:    &s.cronReplies,
+		UsersReplies:   &s.usersReplies,
 
 		WrapAuth: s.withAuth,
 
@@ -276,14 +276,6 @@ func (s *apiServer) processAgentJournalEntries(conn *agentmgr.AgentConn, msg age
 // Type aliases for bridge types used in cmd/labtether/.
 type uploadRelaySendError = respkg.UploadRelaySendError
 type fileBridge = respkg.FileBridge
-type processBridge = respkg.ProcessBridge
-type serviceBridge = respkg.ServiceBridge
-type journalBridge = respkg.JournalBridge
-type diskBridge = respkg.DiskBridge
-type networkBridge = respkg.NetworkBridge
-type packageBridge = respkg.PackageBridge
-type cronBridge = respkg.CronBridge
-type usersBridge = respkg.UsersBridge
 
 func newFileBridge(buffer int, expectedAssetID string) *fileBridge {
 	return respkg.NewFileBridge(buffer, expectedAssetID)

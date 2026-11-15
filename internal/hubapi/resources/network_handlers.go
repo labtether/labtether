@@ -24,8 +24,6 @@ var validNetworkActions = map[string]bool{
 	"rollback": true,
 }
 
-// networkBridge holds the channel for a pending network request.
-
 // handleNetworks dispatches /network/{assetId} and /network/{assetId}/{action} requests.
 func (d *Deps) HandleNetworks(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/network/")
@@ -75,38 +73,22 @@ func (d *Deps) handleNetworkList(w http.ResponseWriter, r *http.Request, assetID
 	}
 
 	requestID := generateRequestID()
-	bridge := &NetworkBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.NetworkBridges.Store(requestID, bridge)
-	defer d.NetworkBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.NetworkListData{RequestID: requestID})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgNetworkList,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestAgent(d.NetworkReplies, agentConn, agentmgr.MsgNetworkList, requestID,
+		agentmgr.NetworkListData{RequestID: requestID}, assetID, networkRequestTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var listed agentmgr.NetworkListedData
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(d.agentReplyTimeout(networkRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var listed agentmgr.NetworkListedData
+	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if listed.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, listed)
 }
 
 func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, assetID, action string) {
@@ -135,44 +117,27 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 	}
 
 	requestID := generateRequestID()
-	bridge := &NetworkBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.NetworkBridges.Store(requestID, bridge)
-	defer d.NetworkBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.NetworkActionData{
+	msg, err := d.requestAgent(d.NetworkReplies, agentConn, agentmgr.MsgNetworkAction, requestID, agentmgr.NetworkActionData{
 		RequestID:    requestID,
 		Action:       action,
 		Method:       strings.TrimSpace(body.Method),
 		Connection:   strings.TrimSpace(body.Connection),
 		VerifyTarget: strings.TrimSpace(body.VerifyTarget),
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgNetworkAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	}, assetID, networkActionTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var result agentmgr.NetworkResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if result.Error != "" {
-			servicehttp.WriteJSON(w, http.StatusBadRequest, result)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(d.agentReplyTimeout(networkActionTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var result agentmgr.NetworkResultData
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if result.Error != "" {
+		servicehttp.WriteJSON(w, http.StatusBadRequest, result)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (d *Deps) ProcessAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -181,19 +146,7 @@ func (d *Deps) ProcessAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid network listed data: %v", err)
 		return
 	}
-	if raw, ok := d.NetworkBridges.Load(data.RequestID); ok {
-		bridge, ok := raw.(*NetworkBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
-			return
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.NetworkReplies, matchPayloadID, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -202,17 +155,5 @@ func (d *Deps) ProcessAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid network result data: %v", err)
 		return
 	}
-	if raw, ok := d.NetworkBridges.Load(data.RequestID); ok {
-		bridge, ok := raw.(*NetworkBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
-			return
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.NetworkReplies, matchPayloadID, conn, msg, data.RequestID)
 }

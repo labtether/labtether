@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -38,26 +39,18 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	requestID := d.GenerateRequestID()
-	resultCh := make(chan agentmgr.DesktopDiagnosticData, 1)
-	d.DesktopDiagnosticWaiters.Store(requestID, resultCh)
-	defer d.DesktopDiagnosticWaiters.Delete(requestID)
-
-	payload, _ := json.Marshal(agentmgr.DesktopDiagnosticRequest{RequestID: requestID})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDesktopDiagnose,
-		ID:   requestID,
-		Data: payload,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	result, err := agentmgr.Request(context.Background(), d.DiagnosticReplies, agentmgr.Call[agentmgr.DesktopDiagnosticRequest, agentmgr.DesktopDiagnosticData]{
+		Type:        agentmgr.MsgDesktopDiagnose,
+		ID:          requestID,
+		Payload:     agentmgr.DesktopDiagnosticRequest{RequestID: requestID},
+		Send:        agentConn.Send,
+		TimeoutFunc: d.replyWaitFunc(desktopDiagnoseTimeout),
+	})
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case result := <-resultCh:
-		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(d.agentReplyTimeout(desktopDiagnoseTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
-	}
+	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
 // ProcessAgentDesktopDiagnosed handles desktop.diagnosed messages from the agent.
@@ -68,16 +61,7 @@ func (d *Deps) ProcessAgentDesktopDiagnosed(conn *agentmgr.AgentConn, msg agentm
 		return
 	}
 
-	raw, ok := d.DesktopDiagnosticWaiters.Load(data.RequestID)
-	if !ok {
-		return
-	}
-	ch, ok := raw.(chan agentmgr.DesktopDiagnosticData)
-	if !ok || ch == nil {
-		return
-	}
-	select {
-	case ch <- data:
-	default:
-	}
+	d.DiagnosticReplies.Deliver(matchDiagnostic, agentmgr.Reply[agentmgr.DesktopDiagnosticData]{
+		EnvelopeID: msg.ID, PayloadID: data.RequestID, Conn: conn, Value: data,
+	})
 }

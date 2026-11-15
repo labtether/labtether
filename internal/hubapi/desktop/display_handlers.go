@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -47,12 +48,6 @@ func (d *Deps) HandleNodeSubRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DisplayBridge holds the channel for a pending display list request.
-type DisplayBridge struct {
-	Ch              chan agentmgr.DisplayListData
-	ExpectedAssetID string
-}
-
 // HandleDisplayListDirect queries the list of displays/monitors on a remote agent.
 // This is the exported variant for callers that already resolved the asset ID.
 // Endpoint: GET /api/v1/nodes/{id}/displays
@@ -78,38 +73,30 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 	go func() { rdpGateway <- rdpGatewayReachable(r.Context()) }()
 
 	requestID := idgen.New("dreq")
-	bridge := &DisplayBridge{
-		Ch:              make(chan agentmgr.DisplayListData, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.DisplayBridges.Store(requestID, bridge)
-	defer d.DisplayBridges.Delete(requestID)
-
-	payload, _ := json.Marshal(map[string]string{"request_id": requestID})
-	if err := d.AgentMgr.SendToAgent(assetID, agentmgr.Message{
-		Type: agentmgr.MsgDesktopListDisplays,
-		ID:   requestID,
-		Data: payload,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	result, err := agentmgr.Request(context.Background(), d.DisplayReplies, agentmgr.Call[map[string]string, agentmgr.DisplayListData]{
+		Type:    agentmgr.MsgDesktopListDisplays,
+		ID:      requestID,
+		Payload: map[string]string{"request_id": requestID},
+		Send: func(msg agentmgr.Message) error {
+			return d.AgentMgr.SendToAgent(assetID, msg)
+		},
+		Device:      assetID,
+		TimeoutFunc: d.replyWaitFunc(displayRequestTimeout),
+	})
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case result := <-bridge.Ch:
-		if strings.TrimSpace(result.Error) != "" {
-			servicehttp.WriteError(w, http.StatusBadGateway, result.Error)
-			return
-		}
-		// rdp_gateway tells the console whether this Hub can serve RDP, so it
-		// does not offer or recommend a protocol that cannot start.
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"displays":    result.Displays,
-			"rdp_gateway": <-rdpGateway,
-		})
-	case <-time.After(d.agentReplyTimeout(displayRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	if strings.TrimSpace(result.Error) != "" {
+		servicehttp.WriteError(w, http.StatusBadGateway, result.Error)
+		return
 	}
+	// rdp_gateway tells the console whether this Hub can serve RDP, so it
+	// does not offer or recommend a protocol that cannot start.
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+		"displays":    result.Displays,
+		"rdp_gateway": <-rdpGateway,
+	})
 }
 
 // ProcessAgentDesktopDisplays handles desktop.displays from agent.
@@ -119,17 +106,7 @@ func (d *Deps) ProcessAgentDesktopDisplays(conn *agentmgr.AgentConn, msg agentmg
 		log.Printf("display: invalid desktop.displays payload: %v", err)
 		return
 	}
-	if raw, ok := d.DisplayBridges.Load(data.RequestID); ok {
-		bridge, ok := raw.(*DisplayBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
-			return
-		}
-		select {
-		case bridge.Ch <- data:
-		default:
-		}
-	}
+	d.DisplayReplies.Deliver(matchDisplays, agentmgr.Reply[agentmgr.DisplayListData]{
+		EnvelopeID: msg.ID, PayloadID: data.RequestID, Conn: conn, Value: data,
+	})
 }

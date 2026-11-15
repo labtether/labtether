@@ -48,11 +48,13 @@ type Deps struct {
 	PolicyState PolicyStateProvider
 
 	// Bridge maps (shared with cmd/labtether for WS handler dispatch).
-	DesktopBridges           *sync.Map
-	WebRTCBridges            *sync.Map
-	ClipboardBridges         *sync.Map
-	DisplayBridges           *sync.Map
-	DesktopDiagnosticWaiters *sync.Map
+	DesktopBridges *sync.Map
+	WebRTCBridges  *sync.Map
+
+	// Requests waiting for one agent reply, shared with cmd/labtether's router.
+	ClipboardReplies  *ClipboardReplies
+	DisplayReplies    *DisplayReplies
+	DiagnosticReplies *DiagnosticReplies
 
 	// Wire maps above route only a concrete stream. Public IDs select its current owner.
 	streamOwnerMu sync.Mutex

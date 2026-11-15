@@ -118,8 +118,8 @@ func TestDisplaysAnswerSaysWhetherThisHubCanServeRDP(t *testing.T) {
 	defer conn.Close()
 	manager := agentmgr.NewManager()
 	manager.Register(conn)
-	var bridges sync.Map
-	deps := &Deps{AgentMgr: manager, DisplayBridges: &bridges}
+	var bridges DisplayReplies
+	deps := &Deps{AgentMgr: manager, DisplayReplies: &bridges}
 
 	gateway, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
 func marshalAgentMessage(t *testing.T, payload any) agentmgr.Message {
@@ -20,11 +21,7 @@ func marshalAgentMessage(t *testing.T, payload any) agentmgr.Message {
 
 func TestProcessAgentProcessListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &processBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.processBridges.Store("req-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.processReplies, "req-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.ProcessListedData{
 		RequestID: "req-asset-bound",
@@ -33,14 +30,14 @@ func TestProcessAgentProcessListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender process payload to be ignored")
 	default:
 	}
 
 	srv.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender process payload to be delivered")
 	}
@@ -48,11 +45,7 @@ func TestProcessAgentProcessListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentProcessKillResultRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &processBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.processBridges.Store("req-kill-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.processReplies, "req-kill-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.ProcessKillResultData{
 		PID:     42,
@@ -63,14 +56,14 @@ func TestProcessAgentProcessKillResultRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender process kill payload to be ignored")
 	default:
 	}
 
 	srv.processAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender process kill payload to be delivered")
 	}
@@ -78,11 +71,7 @@ func TestProcessAgentProcessKillResultRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentCronListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &cronBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.cronBridges.Store("req-cron-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.cronReplies, "req-cron-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.CronListedData{
 		RequestID: "req-cron-asset-bound",
@@ -91,14 +80,14 @@ func TestProcessAgentCronListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender cron payload to be ignored")
 	default:
 	}
 
 	srv.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender cron payload to be delivered")
 	}
@@ -106,11 +95,7 @@ func TestProcessAgentCronListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentUsersListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &usersBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.usersBridges.Store("req-users-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.usersReplies, "req-users-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.UsersListedData{
 		RequestID: "req-users-asset-bound",
@@ -119,14 +104,14 @@ func TestProcessAgentUsersListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender users payload to be ignored")
 	default:
 	}
 
 	srv.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender users payload to be delivered")
 	}
@@ -134,11 +119,7 @@ func TestProcessAgentUsersListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentDiskListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &diskBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.diskBridges.Store("req-disk-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.diskReplies, "req-disk-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.DiskListedData{
 		RequestID: "req-disk-asset-bound",
@@ -147,14 +128,14 @@ func TestProcessAgentDiskListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender disk payload to be ignored")
 	default:
 	}
 
 	srv.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender disk payload to be delivered")
 	}
@@ -162,11 +143,7 @@ func TestProcessAgentDiskListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentServiceListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &serviceBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.serviceBridges.Store("req-svc-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.serviceReplies, "req-svc-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.ServiceListedData{
 		RequestID: "req-svc-asset-bound",
@@ -175,14 +152,14 @@ func TestProcessAgentServiceListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender service list payload to be ignored")
 	default:
 	}
 
 	srv.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender service list payload to be delivered")
 	}
@@ -190,11 +167,7 @@ func TestProcessAgentServiceListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentServiceResultRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &serviceBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.serviceBridges.Store("req-svc-result-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.serviceReplies, "req-svc-result-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.ServiceResultData{
 		RequestID: "req-svc-result-asset-bound",
@@ -203,14 +176,14 @@ func TestProcessAgentServiceResultRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender service result payload to be ignored")
 	default:
 	}
 
 	srv.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender service result payload to be delivered")
 	}
@@ -218,11 +191,7 @@ func TestProcessAgentServiceResultRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentNetworkListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &networkBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.networkBridges.Store("req-net-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.networkReplies, "req-net-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.NetworkListedData{
 		RequestID: "req-net-asset-bound",
@@ -233,14 +202,14 @@ func TestProcessAgentNetworkListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender network list payload to be ignored")
 	default:
 	}
 
 	srv.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender network list payload to be delivered")
 	}
@@ -248,11 +217,7 @@ func TestProcessAgentNetworkListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentNetworkResultRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &networkBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.networkBridges.Store("req-net-result-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.networkReplies, "req-net-result-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.NetworkResultData{
 		RequestID: "req-net-result-asset-bound",
@@ -261,14 +226,14 @@ func TestProcessAgentNetworkResultRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender network result payload to be ignored")
 	default:
 	}
 
 	srv.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender network result payload to be delivered")
 	}
@@ -276,11 +241,7 @@ func TestProcessAgentNetworkResultRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &packageBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.packageBridges.Store("req-pkg-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.packageReplies, "req-pkg-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.PackageListedData{
 		RequestID: "req-pkg-asset-bound",
@@ -289,7 +250,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender package list payload to be ignored")
 	default:
 	}
@@ -297,7 +258,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	payload.ID = "different-request"
 	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched envelope/package request id to be ignored")
 	default:
 	}
@@ -305,7 +266,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	payload.ID = "req-pkg-asset-bound"
 	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender package list payload to be delivered")
 	}
@@ -313,11 +274,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &packageBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.packageBridges.Store("req-pkg-result-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.packageReplies, "req-pkg-result-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.PackageResultData{
 		RequestID: "req-pkg-result-asset-bound",
@@ -326,7 +283,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender package result payload to be ignored")
 	default:
 	}
@@ -334,7 +291,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	payload.ID = "different-request"
 	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched envelope/package result id to be ignored")
 	default:
 	}
@@ -342,7 +299,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	payload.ID = "req-pkg-result-asset-bound"
 	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender package result payload to be delivered")
 	}
@@ -350,11 +307,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentDesktopDisplaysRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &displayBridge{
-		Ch:              make(chan agentmgr.DisplayListData, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.displayBridges.Store("req-display-asset-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.displayReplies, "req-display-asset-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.DisplayListData{
 		RequestID: "req-display-asset-bound",
@@ -363,14 +316,14 @@ func TestProcessAgentDesktopDisplaysRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender display payload to be ignored")
 	default:
 	}
 
 	srv.processAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender display payload to be delivered")
 	}
@@ -404,11 +357,7 @@ func TestProcessAgentFileDataRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentJournalEntriesRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := &journalBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: "node-1",
-	}
-	srv.journalBridges.Store("req-journal-bound", bridge)
+	replies := testutil.AwaitReply(t, &srv.journalReplies, "req-journal-bound", "node-1")
 
 	payload := marshalAgentMessage(t, agentmgr.JournalEntriesData{
 		RequestID: "req-journal-bound",
@@ -416,14 +365,14 @@ func TestProcessAgentJournalEntriesRejectsMismatchedSender(t *testing.T) {
 
 	srv.processAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 		t.Fatal("expected mismatched sender journal payload to be ignored")
 	default:
 	}
 
 	srv.processAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
-	case <-bridge.Ch:
+	case <-replies:
 	case <-time.After(time.Second):
 		t.Fatal("expected matched sender journal payload to be delivered")
 	}
@@ -445,21 +394,21 @@ func TestParseProcessListLimitClamp(t *testing.T) {
 }
 
 func TestProcessAgentNodeOpsHandlersIgnoreNonBridgeEntries(t *testing.T) {
+	// The reply registries are typed now, so a non-bridge entry can no
+	// longer be stored; each handler still gets a reply with no waiter and
+	// no connection and must drop it without a panic.
 	t.Run("cron listed", func(t *testing.T) {
 		var srv apiServer
-		srv.cronBridges.Store("req-cron", "ignore-me")
 		srv.processAgentCronListed(nil, marshalAgentMessage(t, agentmgr.CronListedData{RequestID: "req-cron"}))
 	})
 
 	t.Run("process listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processBridges.Store("req-proc", "ignore-me")
 		srv.processAgentProcessListed(nil, marshalAgentMessage(t, agentmgr.ProcessListedData{RequestID: "req-proc"}))
 	})
 
 	t.Run("process kill result", func(t *testing.T) {
 		var srv apiServer
-		srv.processBridges.Store("req-proc-kill", "ignore-me")
 		msg := marshalAgentMessage(t, agentmgr.ProcessKillResultData{PID: 42, Success: true})
 		msg.ID = "req-proc-kill"
 		srv.processAgentProcessKillResult(nil, msg)
@@ -467,61 +416,51 @@ func TestProcessAgentNodeOpsHandlersIgnoreNonBridgeEntries(t *testing.T) {
 
 	t.Run("service listed", func(t *testing.T) {
 		var srv apiServer
-		srv.serviceBridges.Store("req-svc-list", "ignore-me")
 		srv.processAgentServiceListed(nil, marshalAgentMessage(t, agentmgr.ServiceListedData{RequestID: "req-svc-list"}))
 	})
 
 	t.Run("service result", func(t *testing.T) {
 		var srv apiServer
-		srv.serviceBridges.Store("req-svc-result", "ignore-me")
 		srv.processAgentServiceResult(nil, marshalAgentMessage(t, agentmgr.ServiceResultData{RequestID: "req-svc-result"}))
 	})
 
 	t.Run("network listed", func(t *testing.T) {
 		var srv apiServer
-		srv.networkBridges.Store("req-net-list", "ignore-me")
 		srv.processAgentNetworkListed(nil, marshalAgentMessage(t, agentmgr.NetworkListedData{RequestID: "req-net-list"}))
 	})
 
 	t.Run("network result", func(t *testing.T) {
 		var srv apiServer
-		srv.networkBridges.Store("req-net-result", "ignore-me")
 		srv.processAgentNetworkResult(nil, marshalAgentMessage(t, agentmgr.NetworkResultData{RequestID: "req-net-result"}))
 	})
 
 	t.Run("disk listed", func(t *testing.T) {
 		var srv apiServer
-		srv.diskBridges.Store("req-disk", "ignore-me")
 		srv.processAgentDiskListed(nil, marshalAgentMessage(t, agentmgr.DiskListedData{RequestID: "req-disk"}))
 	})
 
 	t.Run("package listed", func(t *testing.T) {
 		var srv apiServer
-		srv.packageBridges.Store("req-pkg-list", "ignore-me")
 		srv.processAgentPackageListed(nil, marshalAgentMessage(t, agentmgr.PackageListedData{RequestID: "req-pkg-list"}))
 	})
 
 	t.Run("package result", func(t *testing.T) {
 		var srv apiServer
-		srv.packageBridges.Store("req-pkg-result", "ignore-me")
 		srv.processAgentPackageResult(nil, marshalAgentMessage(t, agentmgr.PackageResultData{RequestID: "req-pkg-result"}))
 	})
 
 	t.Run("users listed", func(t *testing.T) {
 		var srv apiServer
-		srv.usersBridges.Store("req-users", "ignore-me")
 		srv.processAgentUsersListed(nil, marshalAgentMessage(t, agentmgr.UsersListedData{RequestID: "req-users"}))
 	})
 
 	t.Run("journal entries", func(t *testing.T) {
 		var srv apiServer
-		srv.journalBridges.Store("req-journal", "ignore-me")
 		srv.processAgentJournalEntries(nil, marshalAgentMessage(t, agentmgr.JournalEntriesData{RequestID: "req-journal"}))
 	})
 
 	t.Run("desktop displays", func(t *testing.T) {
 		var srv apiServer
-		srv.displayBridges.Store("req-display", "ignore-me")
 		srv.processAgentDesktopDisplays(nil, marshalAgentMessage(t, agentmgr.DisplayListData{RequestID: "req-display"}))
 	})
 }

@@ -30,8 +30,6 @@ var ValidProcessSignals = map[string]bool{
 	"SIGHUP":  true,
 }
 
-// processBridge holds the channel for a pending process list request.
-
 // handleProcesses dispatches /processes/{assetId} and /processes/{assetId}/kill requests.
 func (d *Deps) HandleProcesses(w http.ResponseWriter, r *http.Request) {
 	// Extract path after /processes/
@@ -89,48 +87,27 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 	limit := ParseProcessListLimit(r.URL.Query().Get("limit"))
 
 	requestID := generateRequestID()
-
-	bridge := &ProcessBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.ProcessBridges.Store(requestID, bridge)
-	defer d.ProcessBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.ProcessListData{
-		RequestID: requestID,
-		SortBy:    sortBy,
-		Limit:     limit,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgProcessList,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestAgent(d.ProcessReplies, agentConn, agentmgr.MsgProcessList, requestID,
+		agentmgr.ProcessListData{RequestID: requestID, SortBy: sortBy, Limit: limit}, assetID, processRequestTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var listed agentmgr.ProcessListedData
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if listed.Error != "" {
-			if !writeMissingCommand(w, listed.Error, "processes can't be listed") {
-				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
-			}
-			return
-		}
-		if listed.Processes == nil {
-			listed.Processes = []agentmgr.ProcessInfo{}
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(d.agentReplyTimeout(processRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var listed agentmgr.ProcessListedData
+	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if listed.Error != "" {
+		if !writeMissingCommand(w, listed.Error, "processes can't be listed") {
+			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+		}
+		return
+	}
+	if listed.Processes == nil {
+		listed.Processes = []agentmgr.ProcessInfo{}
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, listed)
 }
 
 func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID string) {
@@ -163,41 +140,23 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 	}
 
 	requestID := generateRequestID()
-	bridge := &ProcessBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.ProcessBridges.Store(requestID, bridge)
-	defer d.ProcessBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.ProcessKillData{
-		PID:    body.PID,
-		Signal: signal,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgProcessKill,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	// Kill data carries no request ID; the agent answers with the envelope ID.
+	msg, err := d.requestAgent(d.ProcessReplies, agentConn, agentmgr.MsgProcessKill, requestID,
+		agentmgr.ProcessKillData{PID: body.PID, Signal: signal}, assetID, processActionTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var result agentmgr.ProcessKillResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(d.agentReplyTimeout(processActionTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var result agentmgr.ProcessKillResultData
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if result.Error != "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (d *Deps) ProcessAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -206,27 +165,7 @@ func (d *Deps) ProcessAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid process listed data: %v", err)
 		return
 	}
-
-	bridgeID := strings.TrimSpace(data.RequestID)
-	if bridgeID == "" {
-		return
-	}
-
-	if raw, ok := d.ProcessBridges.Load(bridgeID); ok {
-		bridge, ok := raw.(*ProcessBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if strings.TrimSpace(bridge.ExpectedAssetID) != "" {
-			if conn == nil || !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID)) {
-				return
-			}
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.ProcessReplies, matchProcessList, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentProcessKillResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -235,27 +174,7 @@ func (d *Deps) ProcessAgentProcessKillResult(conn *agentmgr.AgentConn, msg agent
 		log.Printf("agentws: invalid process kill result data: %v", err)
 		return
 	}
-
-	bridgeID := strings.TrimSpace(msg.ID)
-	if bridgeID == "" {
-		return
-	}
-
-	if raw, ok := d.ProcessBridges.Load(bridgeID); ok {
-		bridge, ok := raw.(*ProcessBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if strings.TrimSpace(bridge.ExpectedAssetID) != "" {
-			if conn == nil || !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID)) {
-				return
-			}
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.ProcessReplies, matchProcessKill, conn, msg, "")
 }
 
 func (d *Deps) collectProcessListViaCommand(assetID, sortBy string, limit int) (agentmgr.ProcessListedData, error) {

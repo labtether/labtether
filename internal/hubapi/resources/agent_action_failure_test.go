@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ func TestFailedServiceActionSaysWhatSystemctlSaid(t *testing.T) {
 	manager := agentmgr.NewManager()
 	manager.Register(conn)
 	defer manager.Unregister(conn.AssetID)
-	deps := &Deps{AgentMgr: manager, ServiceBridges: &sync.Map{}}
+	deps := &Deps{AgentMgr: manager, ServiceReplies: &AgentReplies{}}
 	go func() {
 		_ = peer.SetReadDeadline(time.Now().Add(2 * time.Second))
 		var msg agentmgr.Message

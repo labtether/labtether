@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
 func TestHandleDesktopDiagnoseRequestRejectsNonPOST(t *testing.T) {
@@ -152,9 +153,8 @@ func TestProcessAgentDesktopDiagnosedIgnoresUnknownRequestID(t *testing.T) {
 func TestProcessAgentDesktopDiagnosedDeliversToChan(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	ch := make(chan agentmgr.DesktopDiagnosticData, 1)
-	sut.desktopDiagnosticWaiters.Store("req-deliver", ch)
-	defer sut.desktopDiagnosticWaiters.Delete("req-deliver")
+	// The diagnostic checks no device, so the waiter expects none.
+	ch := testutil.AwaitReply(t, &sut.diagnosticReplies, "req-deliver", "")
 
 	raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{
 		RequestID:   "req-deliver",

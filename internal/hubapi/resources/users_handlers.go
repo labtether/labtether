@@ -13,8 +13,6 @@ import (
 
 const usersRequestTimeout = 10 * time.Second
 
-// usersBridge holds the channel for a pending users list request.
-
 // handleUsers dispatches /users/{assetId} requests.
 func (d *Deps) HandleUsers(w http.ResponseWriter, r *http.Request) {
 	// Extract assetID from path: /users/{assetId}
@@ -46,43 +44,24 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 	}
 
 	requestID := generateRequestID()
-
-	bridge := &UsersBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.UsersBridges.Store(requestID, bridge)
-	defer d.UsersBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.UsersListData{
-		RequestID: requestID,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgUsersList,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
-		d.writeAgentNotConnected(w, assetID)
+	msg, err := d.requestAgent(d.UsersReplies, agentConn, agentmgr.MsgUsersList, requestID,
+		agentmgr.UsersListData{RequestID: requestID}, assetID, usersRequestTimeout)
+	if err != nil {
+		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var listed agentmgr.UsersListedData
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if listed.Error != "" {
-			if !writeMissingCommand(w, listed.Error, "signed-in users can't be listed") {
-				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
-			}
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(d.agentReplyTimeout(usersRequestTimeout)):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	var listed agentmgr.UsersListedData
+	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if listed.Error != "" {
+		if !writeMissingCommand(w, listed.Error, "signed-in users can't be listed") {
+			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+		}
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, listed)
 }
 
 func (d *Deps) ProcessAgentUsersListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -91,17 +70,5 @@ func (d *Deps) ProcessAgentUsersListed(conn *agentmgr.AgentConn, msg agentmgr.Me
 		log.Printf("agentws: invalid users listed data: %v", err)
 		return
 	}
-	if raw, ok := d.UsersBridges.Load(data.RequestID); ok {
-		bridge, ok := raw.(*UsersBridge)
-		if !ok || bridge == nil {
-			return
-		}
-		if conn != nil && bridge.ExpectedAssetID != "" && !strings.EqualFold(strings.TrimSpace(conn.AssetID), strings.TrimSpace(bridge.ExpectedAssetID)) {
-			return
-		}
-		select {
-		case bridge.Ch <- msg:
-		default:
-		}
-	}
+	deliverAgentReply(d.UsersReplies, matchListAcceptsNoConn, conn, msg, data.RequestID)
 }

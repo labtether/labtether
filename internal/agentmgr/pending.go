@@ -101,6 +101,8 @@ type Reply[T any] struct {
 type Waiting struct {
 	Key    string
 	Device string
+	// Delivered reports whether a reply has been handed to the waiter.
+	Delivered bool
 }
 
 func (m Match) key(envelopeID, payloadID string) (string, bool) {
@@ -206,7 +208,7 @@ func (p *Pending[T]) Load(key string) (Waiting, bool) {
 	if !ok {
 		return Waiting{}, false
 	}
-	return Waiting{Key: key, Device: w.device}, true
+	return Waiting{Key: key, Device: w.device, Delivered: w.delivered.Load()}, true
 }
 
 // register admits one request and takes its reply key and reserved keys, or

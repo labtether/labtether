@@ -2,7 +2,6 @@ package desktop
 
 import (
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,23 +18,19 @@ import (
 type depsHandler func(*Deps, http.ResponseWriter, *http.Request)
 type depsDeliver func(*Deps, *agentmgr.AgentConn, agentmgr.Message)
 
-func bindDeps(site testutil.ReplySite, handle depsHandler, deliver depsDeliver, waiters func(*Deps) *sync.Map) testutil.ReplySite {
+func bindDeps(site testutil.ReplySite, handle depsHandler, deliver depsDeliver, waiters func(*Deps) interface{ Len() int }) testutil.ReplySite {
 	site.Bind = func(_ *testing.T, manager *agentmgr.AgentManager) testutil.ReplyHarness {
 		d := &Deps{
-			AgentMgr:                 manager,
-			DisplayBridges:           &sync.Map{},
-			DesktopDiagnosticWaiters: &sync.Map{},
-			ClipboardBridges:         &sync.Map{},
-			GenerateRequestID:        shared.GenerateRequestID,
+			AgentMgr:          manager,
+			DisplayReplies:    &DisplayReplies{},
+			DiagnosticReplies: &DiagnosticReplies{},
+			ClipboardReplies:  &ClipboardReplies{},
+			GenerateRequestID: shared.GenerateRequestID,
 		}
 		return testutil.ReplyHarness{
-			Handle:  func(w http.ResponseWriter, r *http.Request) { handle(d, w, r) },
-			Deliver: func(conn *agentmgr.AgentConn, msg agentmgr.Message) { deliver(d, conn, msg) },
-			Pending: func() int {
-				n := 0
-				waiters(d).Range(func(any, any) bool { n++; return true })
-				return n
-			},
+			Handle:     func(w http.ResponseWriter, r *http.Request) { handle(d, w, r) },
+			Deliver:    func(conn *agentmgr.AgentConn, msg agentmgr.Message) { deliver(d, conn, msg) },
+			Pending:    func() int { return waiters(d).Len() },
 			SetTimeout: func(pick func(time.Duration) time.Duration) { d.replyTimeout = pick },
 		}
 	}
@@ -74,21 +69,21 @@ func desktopReplySites() []testutil.ReplySite {
 			func(id, m string) any {
 				return agentmgr.DisplayListData{RequestID: id, Displays: []agentmgr.DisplayInfo{{Name: m, Width: 1920, Height: 1080}}}
 			}),
-			(*Deps).HandleNodeSubRoutes, (*Deps).ProcessAgentDesktopDisplays, func(d *Deps) *sync.Map { return d.DisplayBridges }),
+			(*Deps).HandleNodeSubRoutes, (*Deps).ProcessAgentDesktopDisplays, func(d *Deps) interface{ Len() int } { return d.DisplayReplies }),
 		bindDeps(site("desktop diagnostic", http.MethodPost, "/desktop/diagnose/nas01", "",
 			agentmgr.MsgDesktopDiagnose, agentmgr.MsgDesktopDiagnosed, 15*time.Second, diagnostic,
 			"TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent",
 			func(id, m string) any { return agentmgr.DesktopDiagnosticData{RequestID: id, DesktopUser: m} }),
 			(*Deps).HandleDesktopDiagnoseRequest, (*Deps).ProcessAgentDesktopDiagnosed,
-			func(d *Deps) *sync.Map { return d.DesktopDiagnosticWaiters }),
+			func(d *Deps) interface{ Len() int } { return d.DiagnosticReplies }),
 		bindDeps(site("clipboard get", http.MethodPost, "/api/v1/nodes/nas01/clipboard/get", `{}`,
 			agentmgr.MsgClipboardGet, agentmgr.MsgClipboardData, 10*time.Second, clipboard, offlineRemoteView,
 			func(id, m string) any { return agentmgr.ClipboardDataPayload{RequestID: id, Format: "text", Error: m} }),
-			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardData, func(d *Deps) *sync.Map { return d.ClipboardBridges }),
+			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardData, func(d *Deps) interface{ Len() int } { return d.ClipboardReplies }),
 		bindDeps(site("clipboard set", http.MethodPost, "/api/v1/nodes/nas01/clipboard/set", `{"format":"text","text":"x"}`,
 			agentmgr.MsgClipboardSet, agentmgr.MsgClipboardSetAck, 10*time.Second, clipboard, offlineRemoteView,
 			func(id, m string) any { return agentmgr.ClipboardSetAckData{RequestID: id, Error: m} }),
-			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardSetAck, func(d *Deps) *sync.Map { return d.ClipboardBridges }),
+			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardSetAck, func(d *Deps) interface{ Len() int } { return d.ClipboardReplies }),
 	}
 }
 

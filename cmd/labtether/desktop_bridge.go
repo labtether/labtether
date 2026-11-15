@@ -29,11 +29,11 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 		SecretsManager: s.secretsManager,
 		PolicyState:    s.policyState,
 
-		DesktopBridges:           &s.desktopBridges,
-		WebRTCBridges:            &s.webrtcBridges,
-		ClipboardBridges:         &s.clipboardBridges,
-		DisplayBridges:           &s.displayBridges,
-		DesktopDiagnosticWaiters: &s.desktopDiagnosticWaiters,
+		DesktopBridges:    &s.desktopBridges,
+		WebRTCBridges:     &s.webrtcBridges,
+		ClipboardReplies:  &s.clipboardReplies,
+		DisplayReplies:    &s.displayReplies,
+		DiagnosticReplies: &s.diagnosticReplies,
 
 		DesktopSessionMu:   &s.desktopSessionMu,
 		DesktopSessionOpts: &s.desktopSessionOpts,
@@ -355,8 +355,6 @@ type webrtcSignalingBridge = desktoppkg.WebRTCSignalingBridge
 type desktopSessionOptions = desktoppkg.DesktopSessionOptions
 type desktopSPICEProxyTarget = desktoppkg.DesktopSPICEProxyTarget
 type activeRecording = desktoppkg.ActiveRecording
-type clipboardBridge = desktoppkg.ClipboardBridge
-type displayBridge = desktoppkg.DisplayBridge
 type recordingMetadata = desktoppkg.RecordingMetadata
 
 // Function aliases for exported desktop package functions.

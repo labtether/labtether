@@ -65,16 +65,20 @@ type Deps struct {
 	// that skip raw SQL (e.g. tests).
 	ManualDeviceDB ManualDeviceExecer
 
-	// Agent bridge maps (shared with cmd/labtether for WS handler dispatch).
-	FileBridges    *sync.Map
-	ProcessBridges *sync.Map
-	ServiceBridges *sync.Map
-	JournalBridges *sync.Map
-	DiskBridges    *sync.Map
-	NetworkBridges *sync.Map
-	PackageBridges *sync.Map
-	CronBridges    *sync.Map
-	UsersBridges   *sync.Map
+	// FileBridges holds file transfer streams (shared with cmd/labtether for
+	// WS handler dispatch).
+	FileBridges *sync.Map
+	// Requests waiting for one agent reply, shared with cmd/labtether's
+	// router and metrics collectors. Process, service, network and package
+	// registries each serve several request and reply types.
+	ProcessReplies *AgentReplies
+	ServiceReplies *AgentReplies
+	JournalReplies *AgentReplies
+	DiskReplies    *AgentReplies
+	NetworkReplies *AgentReplies
+	PackageReplies *AgentReplies
+	CronReplies    *AgentReplies
+	UsersReplies   *AgentReplies
 	// WoLPending binds agent-assisted Wake-on-LAN results to the exact relay
 	// and request that the hub dispatched. The zero-value registry is ready to
 	// use; production wiring supplies a process-lifetime instance.

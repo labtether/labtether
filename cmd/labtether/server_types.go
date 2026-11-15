@@ -127,19 +127,19 @@ type apiServer struct {
 	dockerExecBridges             sync.Map // map[sessionID]*dockerExecBridge
 	desktopBridges                sync.Map // map[sessionID]*desktopBridge
 	webrtcBridges                 sync.Map // map[sessionID]*webrtcSignalingBridge
-	displayBridges                sync.Map // map[requestID]*displayBridge
+	displayReplies                desktoppkg.DisplayReplies
 	fileBridges                   sync.Map // map[requestID]*fileBridge
-	processBridges                sync.Map // map[requestID]*processBridge for process.list and process.kill
-	serviceBridges                sync.Map // map[requestID]*serviceBridge
-	journalBridges                sync.Map // map[requestID]*journalBridge
-	diskBridges                   sync.Map // map[requestID]*diskBridge
-	networkBridges                sync.Map // map[requestID]*networkBridge
+	processReplies                respkg.AgentReplies
+	serviceReplies                respkg.AgentReplies
+	journalReplies                respkg.AgentReplies
+	diskReplies                   respkg.AgentReplies
+	networkReplies                respkg.AgentReplies
 	wolPending                    respkg.WoLPendingRegistry
-	packageBridges                sync.Map // map[requestID]*packageBridge
-	cronBridges                   sync.Map // map[requestID]*cronBridge
-	usersBridges                  sync.Map // map[requestID]*usersBridge
-	clipboardBridges              sync.Map // map[requestID]*clipboardBridge
-	desktopDiagnosticWaiters      sync.Map // map[requestID]chan agentmgr.DesktopDiagnosticData
+	packageReplies                respkg.AgentReplies
+	cronReplies                   respkg.AgentReplies
+	usersReplies                  respkg.AgentReplies
+	clipboardReplies              desktoppkg.ClipboardReplies
+	diagnosticReplies             desktoppkg.DiagnosticReplies
 	agentSettingsState            sync.Map // map[assetID]agentSettingsRuntimeState
 	rateLimiter                   RateLimiter
 	streamTicketStore             StreamTicketStore
