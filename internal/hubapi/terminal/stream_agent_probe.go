@@ -96,22 +96,11 @@ func (d *Deps) ProcessAgentTerminalProbed(conn *agentmgr.AgentConn, msg agentmgr
 		log.Printf("terminal: failed to unmarshal tmux probe response: %v", err)
 		return
 	}
-	if conn != nil {
-		log.Printf("terminal: tmux probe result for %s: has_tmux=%t path=%q", conn.AssetID, resp.HasTmux, resp.TmuxPath)
-		conn.SetMeta("terminal.tmux.has", strconv.FormatBool(resp.HasTmux))
-		conn.SetMeta("terminal.tmux.path", strings.TrimSpace(resp.TmuxPath))
-		conn.SetMeta("terminal.tmux.probe_pending", "false")
-	} else {
+	if conn == nil {
 		return
 	}
-
-	probeKey := "probe:" + conn.AssetID
-	if ch, ok := d.TerminalBridges.Load(probeKey); ok {
-		if probeCh, ok := ch.(chan agentmgr.TerminalProbeResponse); ok {
-			select {
-			case probeCh <- resp:
-			default:
-			}
-		}
-	}
+	log.Printf("terminal: tmux probe result for %s: has_tmux=%t path=%q", conn.AssetID, resp.HasTmux, resp.TmuxPath)
+	conn.SetMeta("terminal.tmux.has", strconv.FormatBool(resp.HasTmux))
+	conn.SetMeta("terminal.tmux.path", strings.TrimSpace(resp.TmuxPath))
+	conn.SetMeta("terminal.tmux.probe_pending", "false")
 }

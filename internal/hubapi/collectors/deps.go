@@ -112,11 +112,3 @@ func RegisterRoutes(mux *http.ServeMux, d *Deps) {
 	mux.HandleFunc("/api/v1/services/web/grouping-settings", d.WrapAuth(d.HandleWebServiceGroupingSettings))
 	mux.HandleFunc("/api/v1/services/web/grouping-suggestions/", d.WrapAuth(d.HandleWebServiceGroupingSuggestionResponse))
 }
-
-// RegisterWSHandlers registers WebSocket message handlers for collector-related
-// agent messages.
-func RegisterWSHandlers(router map[string]func(*agentmgr.AgentConn, agentmgr.Message), d *Deps) {
-	router[agentmgr.MsgWebServiceReport] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentWebServiceReport(conn, msg)
-	}
-}

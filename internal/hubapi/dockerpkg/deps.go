@@ -176,38 +176,3 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/api/v1/docker/containers/"] = d.WrapAuth(d.HandleDockerContainerActions)
 	handlers["/api/v1/docker/stacks/"] = d.WrapAuth(d.HandleDockerStackActions)
 }
-
-// RegisterWSHandlers registers WebSocket message handlers for docker-related
-// agent messages into the shared router.
-func RegisterWSHandlers(router map[string]func(*agentmgr.AgentConn, agentmgr.Message), d *Deps) {
-	router[agentmgr.MsgDockerDiscovery] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerDiscovery(conn, msg)
-	}
-	router[agentmgr.MsgDockerDiscoveryDelta] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerDiscoveryDelta(conn, msg)
-	}
-	router[agentmgr.MsgDockerStats] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerStats(conn, msg)
-	}
-	router[agentmgr.MsgDockerEvents] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerEvents(conn, msg)
-	}
-	router[agentmgr.MsgDockerActionResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerActionResult(conn, msg)
-	}
-	router[agentmgr.MsgDockerExecStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerExecStartedMessage(conn, msg)
-	}
-	router[agentmgr.MsgDockerExecData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerExecDataMessage(conn, msg)
-	}
-	router[agentmgr.MsgDockerExecClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerExecClosedMessage(conn, msg)
-	}
-	router[agentmgr.MsgDockerLogsStream] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerLogsStreamMessage(conn, msg)
-	}
-	router[agentmgr.MsgDockerComposeResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentDockerComposeResult(conn, msg)
-	}
-}
