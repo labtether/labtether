@@ -111,7 +111,7 @@ func (d *Deps) handleServiceList(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(serviceListTimeout):
+	case <-time.After(d.agentReplyTimeout(serviceListTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

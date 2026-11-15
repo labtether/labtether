@@ -168,6 +168,19 @@ type Deps struct {
 	// OnRelayPushDeviceRegistered runs after an iOS device registers a push
 	// relay id, so the Hub can create its default relay channel and route.
 	OnRelayPushDeviceRegistered func(ctx context.Context)
+
+	// replyTimeout, when set, picks how long a request waits for its agent's
+	// reply, given that request's default. Production leaves it nil.
+	replyTimeout func(defaultTimeout time.Duration) time.Duration
+}
+
+// agentReplyTimeout is how long a request waits for its agent's reply: the
+// given default, unless replyTimeout is set.
+func (d *Deps) agentReplyTimeout(defaultTimeout time.Duration) time.Duration {
+	if d.replyTimeout != nil {
+		return d.replyTimeout(defaultTimeout)
+	}
+	return defaultTimeout
 }
 
 // PushDeviceStore is a minimal interface for push device registration.

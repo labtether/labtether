@@ -55,7 +55,7 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 	select {
 	case result := <-resultCh:
 		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(desktopDiagnoseTimeout):
+	case <-time.After(d.agentReplyTimeout(desktopDiagnoseTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

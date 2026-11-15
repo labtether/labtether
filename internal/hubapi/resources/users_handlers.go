@@ -80,7 +80,7 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(usersRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(usersRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

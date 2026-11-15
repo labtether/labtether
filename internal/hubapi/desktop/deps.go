@@ -114,6 +114,19 @@ type Deps struct {
 	RecordingsDir string
 	// LookupRecording loads one recording's metadata; nil uses DBPool.
 	LookupRecording func(ctx context.Context, recordingID string) (RecordingMetadata, bool, error)
+
+	// replyTimeout, when set, picks how long a request waits for its agent's
+	// reply, given that request's default. Production leaves it nil.
+	replyTimeout func(defaultTimeout time.Duration) time.Duration
+}
+
+// agentReplyTimeout is how long a request waits for its agent's reply: the
+// given default, unless replyTimeout is set.
+func (d *Deps) agentReplyTimeout(defaultTimeout time.Duration) time.Duration {
+	if d.replyTimeout != nil {
+		return d.replyTimeout(defaultTimeout)
+	}
+	return defaultTimeout
 }
 
 // RegisterRoutes registers all desktop-related HTTP routes on the given handler map.

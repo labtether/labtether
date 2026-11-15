@@ -119,7 +119,7 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, payload)
-	case <-time.After(clipboardRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(clipboardRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
@@ -175,7 +175,7 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, ack)
-	case <-time.After(clipboardRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(clipboardRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

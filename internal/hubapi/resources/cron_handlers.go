@@ -80,7 +80,7 @@ func (d *Deps) handleCronList(w http.ResponseWriter, r *http.Request, assetID st
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(cronRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(cronRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

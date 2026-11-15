@@ -78,7 +78,7 @@ func (d *Deps) handleDiskList(w http.ResponseWriter, r *http.Request, assetID st
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(diskRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(diskRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

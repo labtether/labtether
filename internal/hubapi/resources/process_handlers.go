@@ -128,7 +128,7 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 			listed.Processes = []agentmgr.ProcessInfo{}
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(processRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(processRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
@@ -195,7 +195,7 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(processActionTimeout):
+	case <-time.After(d.agentReplyTimeout(processActionTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
