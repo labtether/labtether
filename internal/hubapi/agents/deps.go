@@ -56,7 +56,7 @@ type Deps struct {
 	// Pending typed Docker endpoint probes. The expected connection and asset
 	// are retained with each request so an authenticated peer cannot satisfy a
 	// probe routed to another agent.
-	DockerEndpointTestBridges sync.Map // map[requestID]pendingDockerEndpointTest
+	DockerEndpointTestBridges agentmgr.Pending[agentmgr.DockerEndpointTestResultData]
 	DockerEndpointTestTimeout time.Duration
 
 	// Hub identity for SSH key provisioning.
