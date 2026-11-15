@@ -107,7 +107,7 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 			"displays":    result.Displays,
 			"rdp_gateway": <-rdpGateway,
 		})
-	case <-time.After(displayRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(displayRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

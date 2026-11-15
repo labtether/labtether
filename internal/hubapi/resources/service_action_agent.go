@@ -54,7 +54,7 @@ func (d *Deps) RunServiceAction(assetID, service, action string) (agentmgr.Servi
 			return agentmgr.ServiceResultData{}, ErrServiceAgentBadAnswer
 		}
 		return result, nil
-	case <-time.After(serviceActionTimeout):
+	case <-time.After(d.agentReplyTimeout(serviceActionTimeout)):
 		return agentmgr.ServiceResultData{}, ErrServiceAgentTimeout
 	}
 }

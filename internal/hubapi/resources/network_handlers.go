@@ -104,7 +104,7 @@ func (d *Deps) handleNetworkList(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(networkRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(networkRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
@@ -170,7 +170,7 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(networkActionTimeout):
+	case <-time.After(d.agentReplyTimeout(networkActionTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

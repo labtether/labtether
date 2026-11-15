@@ -142,7 +142,7 @@ func (d *Deps) handlePackageList(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
-	case <-time.After(packageRequestTimeout):
+	case <-time.After(d.agentReplyTimeout(packageRequestTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
@@ -368,7 +368,7 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(packageActionTimeout):
+	case <-time.After(d.agentReplyTimeout(packageActionTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }

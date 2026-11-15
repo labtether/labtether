@@ -79,7 +79,7 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"entries": listed.Entries,
 		})
-	case <-time.After(journalQueryTimeout):
+	case <-time.After(d.agentReplyTimeout(journalQueryTimeout)):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	}
 }
