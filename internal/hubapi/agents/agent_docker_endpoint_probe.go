@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -22,13 +21,10 @@ var (
 	ErrDockerEndpointTestUnavailable = errors.New("agent unavailable for Docker endpoint test")
 )
 
-type pendingDockerEndpointTest struct {
-	ExpectedConn     *agentmgr.AgentConn
-	ExpectedAgentID  string
-	ExpectedAssetID  string
-	ExpectedEndpoint string
-	ResultCh         chan agentmgr.DockerEndpointTestResultData
-}
+// dockerEndpointTestMatch is the reply rule for Docker endpoint test results:
+// the envelope ID must equal the payload request ID and the reply must come
+// from the exact device ID the probe was sent to.
+var dockerEndpointTestMatch = agentmgr.Match{Key: agentmgr.KeyBoth, Device: agentmgr.DeviceExact}
 
 // RunDockerEndpointTest sends the dedicated typed probe to an agent and waits
 // for a strictly correlated result. The pending entry is registered before the
@@ -52,30 +48,8 @@ func (d *Deps) RunDockerEndpointTest(
 	if err := request.Validate(); err != nil {
 		return agentmgr.DockerEndpointTestResultData{}, fmt.Errorf("invalid Docker endpoint test request: %w", err)
 	}
-	data, err := json.Marshal(request)
-	if err != nil {
-		return agentmgr.DockerEndpointTestResultData{}, fmt.Errorf("marshal Docker endpoint test request: %w", err)
-	}
 	conn, ok := d.AgentMgr.Get(assetID)
 	if !ok || conn == nil {
-		return agentmgr.DockerEndpointTestResultData{}, ErrDockerEndpointTestUnavailable
-	}
-
-	resultCh := make(chan agentmgr.DockerEndpointTestResultData, 1)
-	d.DockerEndpointTestBridges.Store(requestID, pendingDockerEndpointTest{
-		ExpectedConn:     conn,
-		ExpectedAgentID:  assetID,
-		ExpectedAssetID:  assetID,
-		ExpectedEndpoint: endpoint,
-		ResultCh:         resultCh,
-	})
-	defer d.DockerEndpointTestBridges.Delete(requestID)
-
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDockerEndpointTest,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
 		return agentmgr.DockerEndpointTestResultData{}, ErrDockerEndpointTestUnavailable
 	}
 
@@ -83,15 +57,30 @@ func (d *Deps) RunDockerEndpointTest(
 	if timeout <= 0 {
 		timeout = defaultDockerEndpointTestTimeout
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case result := <-resultCh:
+	result, err := agentmgr.Request(ctx, &d.DockerEndpointTestBridges, agentmgr.Call[agentmgr.DockerEndpointTestData, agentmgr.DockerEndpointTestResultData]{
+		Type:      agentmgr.MsgDockerEndpointTest,
+		ID:        requestID,
+		Payload:   request,
+		Send:      conn.Send,
+		Device:    assetID,
+		ExactConn: conn,
+		Accept: func(result agentmgr.DockerEndpointTestResultData) bool {
+			return result.AssetID == assetID && result.Endpoint == endpoint
+		},
+		Timeout: timeout,
+	})
+	if err == nil {
 		return result, nil
-	case <-ctx.Done():
-		return agentmgr.DockerEndpointTestResultData{}, ctx.Err()
-	case <-timer.C:
+	}
+	switch agentmgr.RequestKind(err) {
+	case agentmgr.RequestInvalid:
+		return agentmgr.DockerEndpointTestResultData{}, fmt.Errorf("marshal Docker endpoint test request: %w", errors.Unwrap(err))
+	case agentmgr.RequestCanceled:
+		return agentmgr.DockerEndpointTestResultData{}, errors.Unwrap(err)
+	case agentmgr.RequestTimedOut:
 		return agentmgr.DockerEndpointTestResultData{}, ErrDockerEndpointTestTimeout
+	default:
+		return agentmgr.DockerEndpointTestResultData{}, ErrDockerEndpointTestUnavailable
 	}
 }
 
@@ -103,28 +92,13 @@ func (d *Deps) ProcessAgentDockerEndpointTestResult(conn *agentmgr.AgentConn, ms
 		return
 	}
 	var result agentmgr.DockerEndpointTestResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil || result.Validate() != nil {
+	if err := agentmgr.DecodeData(msg.Data, &result, agentmgr.DecodeLenient); err != nil || result.Validate() != nil {
 		return
 	}
-	if msg.ID == "" || msg.ID != result.RequestID {
-		return
-	}
-	raw, ok := d.DockerEndpointTestBridges.Load(result.RequestID)
-	if !ok {
-		return
-	}
-	pending, ok := raw.(pendingDockerEndpointTest)
-	if !ok || pending.ResultCh == nil {
-		return
-	}
-	if conn != pending.ExpectedConn ||
-		conn.AssetID != pending.ExpectedAgentID ||
-		result.AssetID != pending.ExpectedAssetID ||
-		result.Endpoint != pending.ExpectedEndpoint {
-		return
-	}
-	select {
-	case pending.ResultCh <- result:
-	default:
-	}
+	d.DockerEndpointTestBridges.Deliver(dockerEndpointTestMatch, agentmgr.Reply[agentmgr.DockerEndpointTestResultData]{
+		EnvelopeID: msg.ID,
+		PayloadID:  result.RequestID,
+		Conn:       conn,
+		Value:      result,
+	})
 }

@@ -1,15 +1,9 @@
 package powercontrol
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -69,19 +63,12 @@ func KindOf(err error) ErrorKind {
 	return ErrorExecutionFail
 }
 
-type pendingAction struct {
-	requestID string
-	assetID   string
-	action    agentmgr.PowerAction
-	resultCh  chan agentmgr.PowerResultData
-	delivered atomic.Bool
-}
-
 type Coordinator struct {
-	sender    Sender
-	timeout   time.Duration
-	admission chan struct{}
-	pending   sync.Map // request ID -> *pendingAction; bounded by admission
+	sender  Sender
+	timeout time.Duration
+	// pending admits at most maxConcurrent actions, so one broad principal
+	// cannot accumulate unbounded waiters by targeting many assets at once.
+	pending *agentmgr.Pending[agentmgr.PowerResultData]
 }
 
 func New(sender Sender, timeout time.Duration) *Coordinator {
@@ -100,9 +87,9 @@ func NewWithLimit(sender Sender, timeout time.Duration, maxConcurrent int) *Coor
 		maxConcurrent = DefaultMaxConcurrentActions
 	}
 	return &Coordinator{
-		sender:    sender,
-		timeout:   timeout,
-		admission: make(chan struct{}, maxConcurrent),
+		sender:  sender,
+		timeout: timeout,
+		pending: agentmgr.NewPending[agentmgr.PowerResultData](maxConcurrent),
 	}
 }
 
@@ -119,81 +106,71 @@ func (c *Coordinator) Execute(ctx context.Context, assetID string, action agentm
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	select {
-	case c.admission <- struct{}{}:
-		defer func() { <-c.admission }()
+	requestID := idgen.New("power")
+	result, err := agentmgr.Request(ctx, c.pending, agentmgr.Call[agentmgr.PowerActionData, agentmgr.PowerResultData]{
+		Type: agentmgr.MsgPowerAction,
+		ID:   requestID,
+		Payload: agentmgr.PowerActionData{
+			RequestID: requestID,
+			AssetID:   assetID,
+			Action:    action,
+		},
+		Send:   func(msg agentmgr.Message) error { return c.sender.SendToAgent(assetID, msg) },
+		Device: assetID,
+		Accept: func(result agentmgr.PowerResultData) bool {
+			return result.AssetID == assetID && result.Action == action
+		},
+		Timeout: c.timeout,
+	})
+	if err != nil {
+		return requestFailure(err, requestID, assetID, action)
+	}
+	switch result.Status {
+	case agentmgr.PowerResultAccepted:
+		return result, nil
+	case agentmgr.PowerResultUnsupported:
+		return result, &ActionError{Kind: ErrorUnsupported, RequestID: requestID, Code: result.Code, Message: result.Message}
+	case agentmgr.PowerResultRejected:
+		return result, &ActionError{Kind: ErrorRejected, RequestID: requestID, Code: result.Code, Message: result.Message}
+	case agentmgr.PowerResultFailed:
+		return result, &ActionError{Kind: ErrorExecutionFail, RequestID: requestID, Code: result.Code, Message: result.Message}
 	default:
+		// HandleResult validates the closed enum before delivery, so this is a
+		// defensive fail-closed guard rather than an expected path.
+		return result, &ActionError{Kind: ErrorExecutionFail, RequestID: requestID, Message: "agent returned an invalid power result"}
+	}
+}
+
+// requestFailure maps a shared request error to the power error contract.
+func requestFailure(err error, requestID, assetID string, action agentmgr.PowerAction) (agentmgr.PowerResultData, error) {
+	pendingResult := agentmgr.PowerResultData{RequestID: requestID, AssetID: assetID, Action: action}
+	switch agentmgr.RequestKind(err) {
+	case agentmgr.RequestBusy:
 		return agentmgr.PowerResultData{AssetID: assetID, Action: action}, &ActionError{
 			Kind:    ErrorBusy,
 			Message: "too many power actions are already in progress",
 		}
-	}
-
-	requestID := idgen.New("power")
-	pending := &pendingAction{
-		requestID: requestID,
-		assetID:   assetID,
-		action:    action,
-		resultCh:  make(chan agentmgr.PowerResultData, 1),
-	}
-	c.pending.Store(requestID, pending)
-	defer c.pending.Delete(requestID)
-
-	payload := agentmgr.PowerActionData{
-		RequestID: requestID,
-		AssetID:   assetID,
-		Action:    action,
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
+	case agentmgr.RequestInvalid:
 		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorInvalid, RequestID: requestID, Message: "failed to encode power action"}
-	}
-	if err := c.sender.SendToAgent(assetID, agentmgr.Message{
-		Type: agentmgr.MsgPowerAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	case agentmgr.RequestSendFailed:
 		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorSendFailed, RequestID: requestID, Message: "failed to deliver power action to agent"}
-	}
-
-	timer := time.NewTimer(c.timeout)
-	defer timer.Stop()
-	select {
-	case result := <-pending.resultCh:
-		switch result.Status {
-		case agentmgr.PowerResultAccepted:
-			return result, nil
-		case agentmgr.PowerResultUnsupported:
-			return result, &ActionError{Kind: ErrorUnsupported, RequestID: requestID, Code: result.Code, Message: result.Message}
-		case agentmgr.PowerResultRejected:
-			return result, &ActionError{Kind: ErrorRejected, RequestID: requestID, Code: result.Code, Message: result.Message}
-		case agentmgr.PowerResultFailed:
-			return result, &ActionError{Kind: ErrorExecutionFail, RequestID: requestID, Code: result.Code, Message: result.Message}
-		default:
-			// HandleResult validates the closed enum before delivery, so this is a
-			// defensive fail-closed guard rather than an expected path.
-			return result, &ActionError{Kind: ErrorExecutionFail, RequestID: requestID, Message: "agent returned an invalid power result"}
+	case agentmgr.RequestCanceled:
+		if errors.Is(err, context.DeadlineExceeded) {
+			return pendingResult, &ActionError{Kind: ErrorTimedOut, RequestID: requestID, Message: "timed out waiting for the agent power result"}
 		}
-	case <-ctx.Done():
-		kind := ErrorCanceled
-		message := "power action request canceled"
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			kind = ErrorTimedOut
-			message = "timed out waiting for the agent power result"
-		}
-		return agentmgr.PowerResultData{RequestID: requestID, AssetID: assetID, Action: action}, &ActionError{
-			Kind:      kind,
-			RequestID: requestID,
-			Message:   message,
-		}
-	case <-timer.C:
-		return agentmgr.PowerResultData{RequestID: requestID, AssetID: assetID, Action: action}, &ActionError{
-			Kind:      ErrorTimedOut,
-			RequestID: requestID,
-			Message:   "timed out waiting for the agent power result",
-		}
+		return pendingResult, &ActionError{Kind: ErrorCanceled, RequestID: requestID, Message: "power action request canceled"}
+	case agentmgr.RequestTimedOut:
+		return pendingResult, &ActionError{Kind: ErrorTimedOut, RequestID: requestID, Message: "timed out waiting for the agent power result"}
+	default:
+		// A duplicate ID or a disconnect cannot happen here: power IDs are
+		// unique and the coordinator does not watch the connection.
+		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorExecutionFail, RequestID: requestID, Message: "power action failed"}
 	}
 }
+
+// powerResultMatch is the reply rule for power.result: the envelope ID must
+// equal the payload request ID and the result must come from the exact asset.
+var powerResultMatch = agentmgr.Match{Key: agentmgr.KeyBoth, Device: agentmgr.DeviceExact}
 
 // HandleResult validates and delivers an agent result. It returns false for
 // malformed, stale, duplicate, or cross-asset results; those never unblock an
@@ -204,39 +181,15 @@ func (c *Coordinator) HandleResult(connAssetID string, msg agentmgr.Message) boo
 	}
 
 	var result agentmgr.PowerResultData
-	if err := decodeStrict(msg.Data, &result); err != nil || result.Validate() != nil {
+	if err := agentmgr.DecodeData(msg.Data, &result, agentmgr.DecodeStrict); err != nil || result.Validate() != nil {
 		return false
 	}
-	if msg.ID == "" || msg.ID != result.RequestID {
-		return false
-	}
-
-	raw, ok := c.pending.Load(result.RequestID)
-	if !ok {
-		return false
-	}
-	pending, ok := raw.(*pendingAction)
-	if !ok || pending == nil {
-		return false
-	}
-	if connAssetID != pending.assetID || result.AssetID != pending.assetID || result.Action != pending.action || result.RequestID != pending.requestID {
-		return false
-	}
-	if !pending.delivered.CompareAndSwap(false, true) {
-		return false
-	}
-	pending.resultCh <- result
-	return true
-}
-
-func decodeStrict(raw []byte, dst any) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return fmt.Errorf("power payload must contain exactly one object")
-	}
-	return nil
+	// The router passes only the asset ID; the coordinator never checks the
+	// connection value, so a connection carrying that ID stands in for it.
+	return c.pending.Deliver(powerResultMatch, agentmgr.Reply[agentmgr.PowerResultData]{
+		EnvelopeID: msg.ID,
+		PayloadID:  result.RequestID,
+		Conn:       &agentmgr.AgentConn{AssetID: connAssetID},
+		Value:      result,
+	})
 }
