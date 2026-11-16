@@ -37,7 +37,7 @@ func TestAssetMetricsLongWindows(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			sut.handleAssetMetrics(rec, httptest.NewRequest(http.MethodGet, "/metrics/assets/lab-host-long?"+tc.query, nil))
+			sut.ensureResourcesDeps().HandleAssetMetrics(rec, httptest.NewRequest(http.MethodGet, "/metrics/assets/lab-host-long?"+tc.query, nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 			}

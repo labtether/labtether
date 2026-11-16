@@ -29,7 +29,7 @@ func (s *apiServer) handleV2MetricsOverview(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.URL.Path = "/metrics/overview"
-	s.handleMetricsOverview(w, r)
+	s.ensureResourcesDeps().HandleMetricsOverview(w, r)
 }
 
 // handleV2MetricsQuery serves GET /api/v2/metrics/query.

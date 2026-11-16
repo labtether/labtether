@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
@@ -160,54 +159,6 @@ func (s *apiServer) ensureResourcesDeps() *respkg.Deps {
 // Forwarding methods from apiServer to resources.Deps so that existing
 // cmd/labtether callers keep compiling.
 
-func (s *apiServer) handleFiles(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFiles(w, r)
-}
-
-func (s *apiServer) handleProcesses(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleProcesses(w, r)
-}
-
-func (s *apiServer) handleServices(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleServices(w, r)
-}
-
-func (s *apiServer) handleDisks(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleDisks(w, r)
-}
-
-func (s *apiServer) handleNetworks(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleNetworks(w, r)
-}
-
-func (s *apiServer) handlePackages(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandlePackages(w, r)
-}
-
-func (s *apiServer) handleCrons(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleCrons(w, r)
-}
-
-func (s *apiServer) handleUsers(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleUsers(w, r)
-}
-
-func (s *apiServer) handleJournalLogs(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleJournalLogs(w, r)
-}
-
-func (s *apiServer) handleFrontendPerfTelemetry(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFrontendPerfTelemetry(w, r)
-}
-
-func (s *apiServer) handleMobileClientTelemetry(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleMobileClientTelemetry(w, r)
-}
-
-func (s *apiServer) handleRemoteBookmarks(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleRemoteBookmarks(w, r)
-}
-
 // WS handler forwarding.
 
 func (s *apiServer) processAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -310,67 +261,14 @@ func relayFileUploadChunks(body io.Reader, requestID, filePath string, chunkSize
 	return respkg.RelayFileUploadChunks(body, requestID, filePath, chunkSize, send)
 }
 
-// Forwarding for test-referenced internal methods.
-func (s *apiServer) handleFileList(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileList(w, r, assetID)
-}
-func (s *apiServer) handleFileDownload(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileDownload(w, r, assetID)
-}
-func (s *apiServer) handleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Request, assetID string, timeout time.Duration) {
-	s.ensureResourcesDeps().HandleFileDownloadWithTimeout(w, r, assetID, timeout)
-}
-func (s *apiServer) handleFileUpload(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileUpload(w, r, assetID)
-}
-func (s *apiServer) handleFileMkdir(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileMkdir(w, r, assetID)
-}
-func (s *apiServer) handleFileDelete(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileDelete(w, r, assetID)
-}
-func (s *apiServer) handleFileRename(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileRename(w, r, assetID)
-}
-func (s *apiServer) handleFileCopy(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleFileCopy(w, r, assetID)
-}
-
 func (s *apiServer) deliverFileResponse(requestID string, msg agentmgr.Message) {
 	s.ensureResourcesDeps().DeliverFileResponse(requestID, msg)
 }
 
 // --- Forwarding for extracted handler methods ---
 
-func (s *apiServer) handleMetricsOverview(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleMetricsOverview(w, r)
-}
-func (s *apiServer) handleAssetMetrics(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleAssetMetrics(w, r)
-}
-func (s *apiServer) handleDependencies(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleDependencies(w, r)
-}
-func (s *apiServer) handleDependencyActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleDependencyActions(w, r)
-}
-func (s *apiServer) handleAssetDependencies(w http.ResponseWriter, r *http.Request, assetID string, subParts []string) {
-	s.ensureResourcesDeps().HandleAssetDependencies(w, r, assetID, subParts)
-}
-func (s *apiServer) handleAssetBlastRadius(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleAssetBlastRadius(w, r, assetID)
-}
-func (s *apiServer) handleAssetUpstream(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleAssetUpstream(w, r, assetID)
-}
-func (s *apiServer) handleWakeOnLAN(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().HandleWakeOnLAN(w, r, assetID)
-}
 func (s *apiServer) processAgentWoLResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	s.ensureResourcesDeps().ProcessAgentWoLResult(conn, msg)
-}
-func (s *apiServer) handleGroups(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleGroups(w, r)
 }
 
 // handleGroupActions routes group sub-paths. Simple CRUD and move/reorder
@@ -432,49 +330,6 @@ func (s *apiServer) handleGroupActions(w http.ResponseWriter, r *http.Request) {
 	// Everything else (CRUD, move, reorder) goes to resources.
 	s.ensureResourcesDeps().HandleGroupActions(w, r)
 }
-func (s *apiServer) handleGroupProfiles(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleGroupProfiles(w, r)
-}
-func (s *apiServer) handleGroupProfileActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleGroupProfileActions(w, r)
-}
-func (s *apiServer) handleFailoverPairs(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFailoverPairs(w, r)
-}
-func (s *apiServer) handleFailoverPairActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFailoverPairActions(w, r)
-}
-func (s *apiServer) handleSyntheticChecks(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleSyntheticChecks(w, r)
-}
-func (s *apiServer) handleSyntheticCheckActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleSyntheticCheckActions(w, r)
-}
-func (s *apiServer) handleLinkSuggestions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleLinkSuggestions(w, r)
-}
-func (s *apiServer) handleLinkSuggestionActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleLinkSuggestionActions(w, r)
-}
-func (s *apiServer) handleManualLink(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleManualLink(w, r)
-}
-
-// Edge handlers (graph model)
-func (s *apiServer) handleEdges(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleEdges(w, r)
-}
-func (s *apiServer) handleEdgeByID(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleEdgeByID(w, r)
-}
-
-// Composite handlers
-func (s *apiServer) handleComposites(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleComposites(w, r)
-}
-func (s *apiServer) handleCompositeActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleCompositeActions(w, r)
-}
 
 // Discovery run handler
 func (s *apiServer) handleDiscoveryRun(w http.ResponseWriter, r *http.Request) {
@@ -490,36 +345,6 @@ func (s *apiServer) handleDiscoveryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "completed"})
-}
-
-// Discovery proposal handlers
-func (s *apiServer) handleProposals(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleProposals(w, r)
-}
-func (s *apiServer) handleProposalActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleProposalActions(w, r)
-}
-
-func (s *apiServer) handleAssetBulkMove(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleAssetBulkMove(w, r)
-}
-func (s *apiServer) handleDeviceRegister(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleDeviceRegister(w, r)
-}
-func (s *apiServer) handleDeviceDeregister(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleDeviceDeregister(w, r)
-}
-func (s *apiServer) handleRestartSettings(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleRestartSettings(w, r)
-}
-func (s *apiServer) handleRetentionSettings(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleRetentionSettings(w, r)
-}
-func (s *apiServer) handleAssetTerminalConfig(w http.ResponseWriter, r *http.Request, assetEntry assets.Asset) {
-	s.ensureResourcesDeps().HandleAssetTerminalConfig(w, r, assetEntry)
-}
-func (s *apiServer) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleAuditEvents(w, r)
 }
 
 // hubRestartSelf and restartSettingsRoute aliases for test compatibility.
@@ -559,19 +384,4 @@ func listAssetDependenciesBatch(store dependencySingleLister, assetIDs []string,
 }
 func validateDependencyRequest(req dependencies.CreateDependencyRequest) error {
 	return respkg.ValidateDependencyRequest(req)
-}
-
-// File connection CRUD handlers
-func (s *apiServer) handleFileConnections(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFileConnections(w, r)
-}
-
-// File transfer handlers
-func (s *apiServer) handleFileTransfers(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleFileTransfers(w, r)
-}
-
-// Manual device handler.
-func (s *apiServer) handleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().HandleManualDeviceRoutes(w, r)
 }

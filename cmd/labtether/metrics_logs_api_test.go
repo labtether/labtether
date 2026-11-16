@@ -29,7 +29,7 @@ func TestMetricsOverview(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics/overview?window=15m", nil)
 	rec := httptest.NewRecorder()
-	sut.handleMetricsOverview(rec, req)
+	sut.ensureResourcesDeps().HandleMetricsOverview(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -50,7 +50,7 @@ func TestAssetMetricsSeries(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics/assets/lab-host-01?window=15m&step=30s", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetMetrics(rec, req)
+	sut.ensureResourcesDeps().HandleAssetMetrics(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -375,7 +375,7 @@ func TestMetricsOverviewGroupFilterReturnsServiceUnavailableWithoutGroupStore(t 
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics/overview?group_id=group-1", nil)
 	rec := httptest.NewRecorder()
-	sut.handleMetricsOverview(rec, req)
+	sut.ensureResourcesDeps().HandleMetricsOverview(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when group store is unavailable, got %d", rec.Code)
@@ -423,7 +423,7 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	sut.assetStore = nil
 	req := httptest.NewRequest(http.MethodGet, "/metrics/overview?window=15m", nil)
 	rec := httptest.NewRecorder()
-	sut.handleMetricsOverview(rec, req)
+	sut.ensureResourcesDeps().HandleMetricsOverview(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when asset store is unavailable, got %d", rec.Code)
 	}
@@ -435,7 +435,7 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	sut.telemetryStore = nil
 	req = httptest.NewRequest(http.MethodGet, "/metrics/overview?window=15m", nil)
 	rec = httptest.NewRecorder()
-	sut.handleMetricsOverview(rec, req)
+	sut.ensureResourcesDeps().HandleMetricsOverview(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when telemetry store is unavailable, got %d", rec.Code)
 	}
@@ -447,7 +447,7 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	sut.assetStore = nil
 	req = httptest.NewRequest(http.MethodGet, "/metrics/assets/lab-host-01?window=15m&step=30s", nil)
 	rec = httptest.NewRecorder()
-	sut.handleAssetMetrics(rec, req)
+	sut.ensureResourcesDeps().HandleAssetMetrics(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when asset store is unavailable, got %d", rec.Code)
 	}
@@ -459,7 +459,7 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	sut.telemetryStore = nil
 	req = httptest.NewRequest(http.MethodGet, "/metrics/assets/lab-host-01?window=15m&step=30s", nil)
 	rec = httptest.NewRecorder()
-	sut.handleAssetMetrics(rec, req)
+	sut.ensureResourcesDeps().HandleAssetMetrics(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when telemetry store is unavailable, got %d", rec.Code)
 	}

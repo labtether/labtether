@@ -101,7 +101,7 @@ func TestGroupsCreateListAndAssignAsset(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/groups", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleGroups(listRec, listReq)
+	sut.ensureResourcesDeps().HandleGroups(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
 	}
@@ -350,7 +350,7 @@ func TestGroupGeoFieldsPersist(t *testing.T) {
 	payload := []byte(`{"name":"Geo Lab","slug":"geo","location":"Austin","latitude":30.2672,"longitude":-97.7431}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleGroups(createRec, createReq)
+	sut.ensureResourcesDeps().HandleGroups(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createRec.Code)
 	}
@@ -415,7 +415,7 @@ func TestAssetsAndMetricsFilterByGroup(t *testing.T) {
 
 	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics/overview?group_id="+groupOneID+"&window=15m", nil)
 	metricsRec := httptest.NewRecorder()
-	sut.handleMetricsOverview(metricsRec, metricsReq)
+	sut.ensureResourcesDeps().HandleMetricsOverview(metricsRec, metricsReq)
 	if metricsRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", metricsRec.Code)
 	}

@@ -30,21 +30,21 @@ func (s *apiServer) handleV2AssetFiles(w http.ResponseWriter, r *http.Request, a
 	// be updated to use the v2 envelope.
 	switch {
 	case subPath == "" && r.Method == http.MethodGet:
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileList(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileList(w, r, assetID) })(w, r)
 	case subPath == "read":
 		// File download is binary/streaming — bypass WrapV1Handler to avoid
 		// buffering the entire response in memory (can be up to 512 MiB).
-		s.handleFileDownload(w, r, assetID)
+		s.ensureResourcesDeps().HandleFileDownload(w, r, assetID)
 	case subPath == "write":
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileUpload(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileUpload(w, r, assetID) })(w, r)
 	case subPath == "mkdir":
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileMkdir(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileMkdir(w, r, assetID) })(w, r)
 	case subPath == "rename":
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileRename(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileRename(w, r, assetID) })(w, r)
 	case subPath == "copy":
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileCopy(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileCopy(w, r, assetID) })(w, r)
 	case subPath == "" && r.Method == http.MethodDelete:
-		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleFileDelete(w, r, assetID) })(w, r)
+		apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFileDelete(w, r, assetID) })(w, r)
 	default:
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown files sub-path: "+subPath)
 	}
@@ -63,7 +63,7 @@ func (s *apiServer) handleV2AssetProcesses(w http.ResponseWriter, r *http.Reques
 	// Delegate to existing process list handler via the resources bridge.
 	// Rewrite the URL path so the existing handler can parse the asset ID.
 	r.URL.Path = "/processes/" + assetID
-	apiv2.WrapV1Handler(s.handleProcesses)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleProcesses)(w, r)
 }
 
 // handleV2AssetProcessActions routes POST /api/v2/assets/{id}/processes/kill
@@ -74,7 +74,7 @@ func (s *apiServer) handleV2AssetProcessActions(w http.ResponseWriter, r *http.R
 			return
 		}
 		r.URL.Path = "/processes/" + assetID + "/kill"
-		apiv2.WrapV1Handler(s.handleProcesses)(w, r)
+		apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleProcesses)(w, r)
 		return
 	}
 	apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown process action: "+subPath)
@@ -91,7 +91,7 @@ func (s *apiServer) handleV2AssetServices(w http.ResponseWriter, r *http.Request
 		return
 	}
 	r.URL.Path = "/services/" + assetID
-	apiv2.WrapV1Handler(s.handleServices)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleServices)(w, r)
 }
 
 // handleV2AssetServiceActions routes POST /api/v2/assets/{id}/services/{name}/{action}
@@ -126,5 +126,5 @@ func (s *apiServer) handleV2AssetServiceActions(w http.ResponseWriter, r *http.R
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	r.URL.Path = "/services/" + assetID + "/" + action
-	apiv2.WrapV1Handler(s.handleServices)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleServices)(w, r)
 }

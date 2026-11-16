@@ -68,7 +68,7 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 		{"usr-new", "viewer", ""},
 	}
 	for _, tc := range cases {
-		if got := strings.Join(read(s.handleAuditEvents, "/audit/events", tc.actor, tc.role), " "); got != tc.want {
+		if got := strings.Join(read(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAuditEvents(w, r) }, "/audit/events", tc.actor, tc.role), " "); got != tc.want {
 			t.Errorf("/audit/events as %s (%s) shows rows by [%s], want [%s]", tc.actor, tc.role, got, tc.want)
 		}
 		if got := strings.Join(read(s.handleV2AuditEvents, "/api/v2/audit/events", tc.actor, tc.role), " "); got != tc.want {
@@ -84,7 +84,7 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 		t.Errorf("status recentAudit as an admin shows rows by [%s], want everyone's", got)
 	}
 	// Paging counts the reader's own rows: the viewer's second row is on page 2.
-	if got := read(s.handleAuditEvents, "/audit/events?limit=1&offset=1", "usr-viewer", "viewer"); len(got) != 1 || got[0] != "usr-viewer" {
+	if got := read(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAuditEvents(w, r) }, "/audit/events?limit=1&offset=1", "usr-viewer", "viewer"); len(got) != 1 || got[0] != "usr-viewer" {
 		t.Errorf("viewer page 2 of own rows = %v, want one own row", got)
 	}
 }

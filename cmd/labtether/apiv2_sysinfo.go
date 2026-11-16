@@ -17,7 +17,7 @@ func (s *apiServer) handleV2AssetNetwork(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	r.URL.Path = "/network/" + assetID
-	apiv2.WrapV1Handler(s.handleNetworks)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleNetworks)(w, r)
 }
 
 // handleV2AssetDisks handles GET /api/v2/assets/{id}/disks
@@ -27,7 +27,7 @@ func (s *apiServer) handleV2AssetDisks(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	r.URL.Path = "/disks/" + assetID
-	apiv2.WrapV1Handler(s.handleDisks)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleDisks)(w, r)
 }
 
 // handleV2AssetPackages handles GET/POST /api/v2/assets/{id}/packages[/subPath]
@@ -65,7 +65,7 @@ func (s *apiServer) handleV2AssetPackages(w http.ResponseWriter, r *http.Request
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
-	apiv2.WrapV1Handler(s.handlePackages)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandlePackages)(w, r)
 }
 
 // handleV2AssetCron handles GET /api/v2/assets/{id}/cron
@@ -75,7 +75,7 @@ func (s *apiServer) handleV2AssetCron(w http.ResponseWriter, r *http.Request, as
 		return
 	}
 	r.URL.Path = "/cron/" + assetID
-	apiv2.WrapV1Handler(s.handleCrons)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleCrons)(w, r)
 }
 
 // handleV2AssetUsers handles GET /api/v2/assets/{id}/users
@@ -85,7 +85,7 @@ func (s *apiServer) handleV2AssetUsers(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	r.URL.Path = "/users/" + assetID
-	apiv2.WrapV1Handler(s.handleUsers)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleUsers)(w, r)
 }
 
 // handleV2AssetLogs handles GET /api/v2/assets/{id}/logs
@@ -95,7 +95,7 @@ func (s *apiServer) handleV2AssetLogs(w http.ResponseWriter, r *http.Request, as
 		return
 	}
 	r.URL.Path = "/logs/journal/" + assetID
-	apiv2.WrapV1Handler(s.handleJournalLogs)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleJournalLogs)(w, r)
 }
 
 // handleV2AssetMetrics handles GET /api/v2/assets/{id}/metrics
@@ -105,7 +105,7 @@ func (s *apiServer) handleV2AssetMetrics(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	r.URL.Path = "/metrics/assets/" + assetID
-	apiv2.WrapV1Handler(s.handleAssetMetrics)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleAssetMetrics)(w, r)
 }
 
 // handleV2AssetMetricsLatest handles GET /api/v2/assets/{id}/metrics/latest.
@@ -164,7 +164,7 @@ func (s *apiServer) handleV2AssetWake(w http.ResponseWriter, r *http.Request, as
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}
-	apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.handleWakeOnLAN(w, r, assetID) })(w, r)
+	apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleWakeOnLAN(w, r, assetID) })(w, r)
 }
 
 // handleV2AssetReboot handles POST /api/v2/assets/{id}/reboot

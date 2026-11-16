@@ -18,7 +18,7 @@ func TestRetentionSettingsGetAndUpdate(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/settings/retention", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleRetentionSettings(getRec, getReq)
+	sut.ensureResourcesDeps().HandleRetentionSettings(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -26,7 +26,7 @@ func TestRetentionSettingsGetAndUpdate(t *testing.T) {
 	updatePayload := []byte(`{"preset":"compact"}`)
 	updateReq := httptest.NewRequest(http.MethodPost, "/settings/retention", bytes.NewReader(updatePayload))
 	updateRec := httptest.NewRecorder()
-	sut.handleRetentionSettings(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleRetentionSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -384,7 +384,7 @@ func TestRetentionSettingsReturnServiceUnavailableWithoutRetentionStore(t *testi
 
 	getReq := httptest.NewRequest(http.MethodGet, "/settings/retention", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleRetentionSettings(getRec, getReq)
+	sut.ensureResourcesDeps().HandleRetentionSettings(getRec, getReq)
 	if getRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", getRec.Code)
 	}
@@ -394,7 +394,7 @@ func TestRetentionSettingsReturnServiceUnavailableWithoutRetentionStore(t *testi
 
 	updateReq := httptest.NewRequest(http.MethodPost, "/settings/retention", bytes.NewReader([]byte(`{"preset":"compact"}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleRetentionSettings(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleRetentionSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", updateRec.Code)
 	}
