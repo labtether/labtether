@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIAccessAdministrationPaths documents this domain of the v2 API.
 const v2OpenAPIAccessAdministrationPaths = `    "/api/v2/credentials/profiles": {

@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIOperatorSettingsPaths documents this domain of the v2 API.
 const v2OpenAPIOperatorSettingsPaths = `    "/api/v2/dead-letters": {

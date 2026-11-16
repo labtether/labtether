@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"github.com/gorilla/websocket"

@@ -1,0 +1,199 @@
+package openapi
+
+import (
+	"encoding/json"
+	"sort"
+	"strings"
+	"testing"
+)
+
+func TestHandleV2OpenAPIAdvertisesImplementedAssetSubpaths(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(Document), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	expected := map[string][]string{
+		"/api/v2/assets/{id}/exec":                    {"post"},
+		"/api/v2/assets/{id}/hub-ssh-key":             {"get", "put"},
+		"/api/v2/assets/{id}/files":                   {"get", "delete"},
+		"/api/v2/assets/{id}/files/read":              {"get"},
+		"/api/v2/assets/{id}/files/write":             {"post"},
+		"/api/v2/assets/{id}/files/mkdir":             {"post"},
+		"/api/v2/assets/{id}/files/rename":            {"post"},
+		"/api/v2/assets/{id}/files/copy":              {"post"},
+		"/api/v2/assets/{id}/processes":               {"get"},
+		"/api/v2/assets/{id}/processes/kill":          {"post"},
+		"/api/v2/assets/{id}/services":                {"get"},
+		"/api/v2/assets/{id}/services/{name}/start":   {"post"},
+		"/api/v2/assets/{id}/services/{name}/stop":    {"post"},
+		"/api/v2/assets/{id}/services/{name}/restart": {"post"},
+		"/api/v2/assets/{id}/network":                 {"get"},
+		"/api/v2/assets/{id}/disks":                   {"get"},
+		"/api/v2/assets/{id}/packages":                {"get"},
+		"/api/v2/assets/{id}/packages/upgradable":     {"get"},
+		"/api/v2/assets/{id}/packages/install":        {"post"},
+		"/api/v2/assets/{id}/packages/update":         {"post"},
+		"/api/v2/assets/{id}/packages/upgrade":        {"post"},
+		"/api/v2/assets/{id}/cron":                    {"get"},
+		"/api/v2/assets/{id}/users":                   {"get"},
+		"/api/v2/assets/{id}/logs":                    {"get"},
+	}
+	for path, methods := range expected {
+		pathItem, ok := doc.Paths[path]
+		if !ok {
+			t.Errorf("implemented asset path %q is absent from OpenAPI", path)
+			continue
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method]; !ok {
+				t.Errorf("implemented asset operation %s %s is absent from OpenAPI", method, path)
+			}
+		}
+	}
+}
+
+func TestHandleV2OpenAPIMatchesImplementedAdvancedMethods(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(Document), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	expected := map[string][]string{
+		"/api/v2/assets/{id}":                       {"delete", "get", "patch", "put"},
+		"/api/v2/groups/{id}":                       {"delete", "get", "patch", "put"},
+		"/api/v2/docker/hosts":                      {"get"},
+		"/api/v2/docker/hosts/{id}":                 {"get"},
+		"/api/v2/docker/containers/{id}/action":     {"post"},
+		"/api/v2/docker/stacks/{id}/action":         {"post"},
+		"/api/v2/updates/plans/{id}":                {"delete", "get"},
+		"/api/v2/updates/plans/{id}/execute":        {"post"},
+		"/api/v2/updates/runs/{id}":                 {"delete", "get"},
+		"/api/v2/alerts/{id}":                       {"delete", "get"},
+		"/api/v2/alerts/{id}/ack":                   {"post"},
+		"/api/v2/alerts/{id}/resolve":               {"post"},
+		"/api/v2/alerts/rules/{id}":                 {"delete", "get", "patch", "put"},
+		"/api/v2/incidents/{id}":                    {"delete", "get", "patch", "put"},
+		"/api/v2/connectors/{id}/test":              {"post"},
+		"/api/v2/connectors/{id}/discover":          {"get"},
+		"/api/v2/connectors/{id}/health":            {"get"},
+		"/api/v2/connectors/{id}/actions":           {"get"},
+		"/api/v2/credentials/profiles/{id}":         {"delete", "get"},
+		"/api/v2/credentials/profiles/{id}/rotate":  {"post"},
+		"/api/v2/terminal/snippets/{id}":            {"delete", "get", "put"},
+		"/api/v2/agents/{id}/settings":              {"get", "patch"},
+		"/api/v2/hub/tailscale":                     {"get", "post"},
+		"/api/v2/web-services":                      {"get", "post"},
+		"/api/v2/web-services/{id}":                 {"delete", "patch", "put"},
+		"/api/v2/collectors/{id}":                   {"delete", "get", "patch", "put"},
+		"/api/v2/collectors/{id}/run":               {"post"},
+		"/api/v2/notifications/channels":            {"get", "post"},
+		"/api/v2/synthetic-checks/{id}":             {"delete", "get", "patch", "put"},
+		"/api/v2/discovery/proposals/{id}/accept":   {"post"},
+		"/api/v2/discovery/proposals/{id}/dismiss":  {"post"},
+		"/api/v2/dependencies/{id}":                 {"delete", "get"},
+		"/api/v2/dependencies/batch":                {"get"},
+		"/api/v2/dependencies/graph":                {"get"},
+		"/api/v2/edges":                             {"get", "post"},
+		"/api/v2/edges/{id}":                        {"delete", "get", "patch"},
+		"/api/v2/edges/tree":                        {"get"},
+		"/api/v2/edges/ancestors":                   {"get"},
+		"/api/v2/composites":                        {"post"},
+		"/api/v2/composites/{id}":                   {"get", "patch"},
+		"/api/v2/composites/{id}/members/{assetId}": {"delete"},
+		"/api/v2/topology/zones":                    {"post"},
+		"/api/v2/topology/zones/{id}":               {"delete", "put"},
+		"/api/v2/topology/zones/{id}/members":       {"put"},
+		"/api/v2/topology/zones/reorder":            {"put"},
+		"/api/v2/topology/connections":              {"post"},
+		"/api/v2/topology/connections/{id}":         {"delete", "put"},
+		"/api/v2/topology/viewport":                 {"put"},
+		"/api/v2/failover-pairs/{id}":               {"delete", "get", "patch", "put"},
+		"/api/v2/logs/views/{id}":                   {"delete", "get", "patch", "put"},
+		"/api/v2/settings/prometheus":               {"get", "patch"},
+		"/api/v2/keys/{id}":                         {"delete", "get", "patch"},
+	}
+
+	for path, want := range expected {
+		pathItem, ok := doc.Paths[path]
+		if !ok {
+			t.Errorf("implemented path %q is absent from OpenAPI", path)
+			continue
+		}
+		got := make([]string, 0, len(pathItem))
+		for key := range pathItem {
+			if key != "parameters" {
+				got = append(got, key)
+			}
+		}
+		sort.Strings(got)
+		sort.Strings(want)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("OpenAPI methods for %s = %v, want %v", path, got, want)
+		}
+	}
+
+	for _, path := range []string{
+		"/api/v2/agents/{id}",
+		"/api/v2/connectors/{id}",
+		"/api/v2/discovery/proposals/{id}",
+		"/api/v2/docker/stacks/{id}",
+	} {
+		if _, ok := doc.Paths[path]; ok {
+			t.Errorf("OpenAPI still advertises unimplemented path %q", path)
+		}
+	}
+}
+
+// These GET routes answer 400 without a query parameter, and the spec listed
+// none, so a reader or generated client could not call them. Each route must
+// declare the parameters its handler insists on. A name ending in "?" has an
+// alternative on the same route: it must be declared but not marked required.
+func TestV2OpenAPIDeclaresQueryParametersHandlersInsistOn(t *testing.T) {
+	var doc struct {
+		Paths map[string]struct {
+			Get struct {
+				Parameters []struct {
+					Name     string `json:"name"`
+					In       string `json:"in"`
+					Required bool   `json:"required"`
+				} `json:"parameters"`
+			} `json:"get"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(Document), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	for path, names := range map[string][]string{
+		"/api/v2/dependencies":       {"asset_id"},
+		"/api/v2/dependencies/batch": {"asset_ids?", "asset_id?"},
+		"/api/v2/dependencies/graph": {"root"},
+		"/api/v2/edges":              {"asset_id?", "asset_ids?"},
+		"/api/v2/edges/ancestors":    {"id"},
+		"/api/v2/edges/tree":         {"root"},
+		"/api/v2/metrics/query":      {"asset_ids", "metric"},
+		"/api/v2/search":             {"q"},
+	} {
+		declared := map[string]bool{}
+		for _, param := range doc.Paths[path].Get.Parameters {
+			if param.In == "query" {
+				declared[param.Name] = param.Required
+			}
+		}
+		for _, name := range names {
+			wantRequired := !strings.HasSuffix(name, "?")
+			name = strings.TrimSuffix(name, "?")
+			required, ok := declared[name]
+			if !ok {
+				t.Errorf("GET %s does not declare query parameter %q", path, name)
+			} else if required != wantRequired {
+				t.Errorf("GET %s query parameter %q required = %v, want %v", path, name, required, wantRequired)
+			}
+		}
+	}
+}

@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIOperationPaths documents this domain of the v2 API.
 const v2OpenAPIOperationPaths = `    "/api/v2/metrics/overview": {

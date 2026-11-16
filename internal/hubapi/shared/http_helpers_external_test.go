@@ -1,4 +1,4 @@
-package main
+package shared_test
 
 import (
 	"net/http"
