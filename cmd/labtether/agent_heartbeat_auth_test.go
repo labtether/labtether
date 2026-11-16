@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/persistence"
@@ -231,8 +232,8 @@ func TestHeartbeatHonorsAuthenticatedAssetAllowlist(t *testing.T) {
 	sut := newTestAPIServer(t)
 	payload := []byte(`{"asset_id":"node-other","type":"host","name":"Other node","source":"agent"}`)
 	req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
-	ctx := contextWithScopes(req.Context(), []string{"assets:write"})
-	ctx = contextWithAllowedAssets(ctx, []string{"node-allowed"})
+	ctx := apiv2.ContextWithScopes(req.Context(), []string{"assets:write"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"node-allowed"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)

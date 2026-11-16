@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
@@ -34,7 +36,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 
@@ -59,7 +61,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 
@@ -82,7 +84,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 
@@ -108,7 +110,7 @@ func TestPersistentSessionCreateAppliesInteractivePolicy(t *testing.T) {
 	sut.policyState = newPolicyRuntimeState(cfg)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 
@@ -130,7 +132,7 @@ func TestCreatePersistentSessionRejectsConnectedAgentWithoutTmux(t *testing.T) {
 	sut.resetTerminalDepsForTest()
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 
@@ -151,7 +153,7 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -171,7 +173,7 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	sut.resetTerminalDepsForTest() // reset cached deps to pick up new policyState
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 
@@ -184,7 +186,7 @@ func TestAttachPersistentSessionRejectsConnectedAgentWithoutTmuxAndStaysDetached
 	sut := newTestAPIServer(t)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -207,7 +209,7 @@ func TestAttachPersistentSessionRejectsConnectedAgentWithoutTmuxAndStaysDetached
 	sut.resetTerminalDepsForTest()
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusConflict {
@@ -236,7 +238,7 @@ func TestAttachPersistentSessionReturnsUpdatedAttachedState(t *testing.T) {
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -251,7 +253,7 @@ func TestAttachPersistentSessionReturnsUpdatedAttachedState(t *testing.T) {
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -281,7 +283,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenSessionCreateFails(t *tes
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -302,7 +304,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenSessionCreateFails(t *tes
 	sut.resetTerminalDepsForTest() // reset cached deps to pick up new terminalStore
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusInternalServerError {
@@ -330,7 +332,7 @@ func TestPersistentSessionListFiltersByAuthenticatedActor(t *testing.T) {
 	createAs := func(actor, target string) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"`+target+`","title":"Shell"}`)))
-		req = req.WithContext(contextWithUserID(req.Context(), actor))
+		req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actor))
 		rec := httptest.NewRecorder()
 		sut.handlePersistentSessions(rec, req)
 		if rec.Code != http.StatusCreated {
@@ -341,7 +343,7 @@ func TestPersistentSessionListFiltersByAuthenticatedActor(t *testing.T) {
 	createAs("actor-b", "lab-host-02")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/persistent-sessions", nil)
-	listReq = listReq.WithContext(contextWithUserID(listReq.Context(), "actor-a"))
+	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(listRec, listReq)
 

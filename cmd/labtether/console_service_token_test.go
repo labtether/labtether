@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 )
 
@@ -30,7 +31,7 @@ func TestConsoleServiceTokenOnlyReadsRuntimeSettings(t *testing.T) {
 		called := false
 		handler := sut.withAuth(func(w http.ResponseWriter, r *http.Request) {
 			called = true
-			if userRoleFromContext(r.Context()) == auth.RoleOwner {
+			if apiv2.UserRoleFromContext(r.Context()) == auth.RoleOwner {
 				t.Fatal("console token reached a handler as owner")
 			}
 			w.WriteHeader(http.StatusNoContent)

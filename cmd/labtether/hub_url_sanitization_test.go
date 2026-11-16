@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // Tests cover the local aliases and the sanitizedExternalHubURL server method
@@ -30,7 +32,7 @@ func TestHubURLHTTPURLToWS(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
-			if got := httpURLToWS(tc.input); got != tc.want {
+			if got := shared.HTTPURLToWS(tc.input); got != tc.want {
 				t.Fatalf("httpURLToWS(%q): expected %q, got %q", tc.input, tc.want, got)
 			}
 		})
@@ -67,7 +69,7 @@ func TestHubURLSanitizeHostPort(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := sanitizeHostPort(tc.input)
+			got, ok := shared.SanitizeHostPort(tc.input)
 			if ok != tc.wantOK {
 				t.Fatalf("sanitizeHostPort(%q): expected ok=%v, got ok=%v (result=%q)", tc.input, tc.wantOK, ok, got)
 			}
@@ -149,7 +151,7 @@ func TestHubURLSanitizeExternalBaseURL(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := sanitizeExternalBaseURL(tc.input)
+			got, ok := shared.SanitizeExternalBaseURL(tc.input)
 			if ok != tc.wantOK {
 				t.Fatalf("sanitizeExternalBaseURL(%q): expected ok=%v, got ok=%v (result=%q)", tc.input, tc.wantOK, ok, got)
 			}

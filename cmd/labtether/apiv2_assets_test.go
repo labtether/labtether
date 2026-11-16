@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 )
 
@@ -82,7 +83,7 @@ func TestHandleV2Assets_ScopeDenied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"docker:read"}) // no assets:read
+	ctx = apiv2.ContextWithScopes(ctx, []string{"docker:read"}) // no assets:read
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -105,8 +106,8 @@ func TestHandleV2Assets_AssetDenied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
-	ctx = contextWithAllowedAssets(ctx, []string{"other-server"}) // srv1 not allowed
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"other-server"}) // srv1 not allowed
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

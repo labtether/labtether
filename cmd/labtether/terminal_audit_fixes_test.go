@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -167,7 +168,7 @@ func mustCreateBookmark(t *testing.T, sut *apiServer, actorID string, body strin
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/bookmarks", bytes.NewBufferString(body))
-	req = req.WithContext(contextWithUserID(req.Context(), actorID))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actorID))
 	rec := httptest.NewRecorder()
 	sut.handleBookmarks(rec, req)
 
@@ -188,7 +189,7 @@ func mustCreatePersistentSession(t *testing.T, sut *apiServer, actorID, target s
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewBufferString(`{"target":"`+target+`","title":"Shell"}`))
-	req = req.WithContext(contextWithUserID(req.Context(), actorID))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actorID))
 	rec := httptest.NewRecorder()
 	sut.handlePersistentSessions(rec, req)
 
@@ -214,7 +215,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenStreamTicketIssueFails(t 
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 
@@ -253,7 +254,7 @@ func TestConnectBookmarkDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing
 	}
 
 	connectReq := httptest.NewRequest(http.MethodPost, "/terminal/bookmarks/"+bookmark.ID+"/connect", bytes.NewBufferString(`{}`))
-	connectReq = connectReq.WithContext(contextWithUserID(connectReq.Context(), "actor-a"))
+	connectReq = connectReq.WithContext(apiv2.ContextWithUserID(connectReq.Context(), "actor-a"))
 	connectRec := httptest.NewRecorder()
 	sut.handleBookmarkActions(connectRec, connectReq)
 
@@ -288,7 +289,7 @@ func TestUpdateBookmarkRejectsEmptyResolvedTarget(t *testing.T) {
 	bookmark := mustCreateBookmark(t, sut, "actor-a", `{"title":"Lab Host","host":"lab-host-01","port":22}`)
 
 	updateReq := httptest.NewRequest(http.MethodPut, "/terminal/bookmarks/"+bookmark.ID, bytes.NewBufferString(`{"asset_id":"","host":""}`))
-	updateReq = updateReq.WithContext(contextWithUserID(updateReq.Context(), "actor-a"))
+	updateReq = updateReq.WithContext(apiv2.ContextWithUserID(updateReq.Context(), "actor-a"))
 	updateRec := httptest.NewRecorder()
 	sut.handleBookmarkActions(updateRec, updateReq)
 
@@ -318,7 +319,7 @@ func TestPersistentSessionListUsesActorScopedStoreWhenAvailable(t *testing.T) {
 	mustCreatePersistentSession(t, sut, "actor-b", "lab-host-02")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/persistent-sessions", nil)
-	listReq = listReq.WithContext(contextWithUserID(listReq.Context(), "actor-a"))
+	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(listRec, listReq)
 

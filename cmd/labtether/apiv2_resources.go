@@ -18,7 +18,7 @@ func (s *apiServer) handleV2AssetFiles(w http.ResponseWriter, r *http.Request, a
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
 		requiredScope = "files:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), requiredScope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), requiredScope) {
 		apiv2.WriteScopeForbidden(w, requiredScope)
 		return
 	}
@@ -56,7 +56,7 @@ func (s *apiServer) handleV2AssetProcesses(w http.ResponseWriter, r *http.Reques
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "processes:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "processes:read") {
 		apiv2.WriteScopeForbidden(w, "processes:read")
 		return
 	}
@@ -69,7 +69,7 @@ func (s *apiServer) handleV2AssetProcesses(w http.ResponseWriter, r *http.Reques
 // handleV2AssetProcessActions routes POST /api/v2/assets/{id}/processes/kill
 func (s *apiServer) handleV2AssetProcessActions(w http.ResponseWriter, r *http.Request, assetID, subPath string) {
 	if subPath == "kill" {
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "processes:kill") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "processes:kill") {
 			apiv2.WriteScopeForbidden(w, "processes:kill")
 			return
 		}
@@ -86,7 +86,7 @@ func (s *apiServer) handleV2AssetServices(w http.ResponseWriter, r *http.Request
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "services:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "services:read") {
 		apiv2.WriteScopeForbidden(w, "services:read")
 		return
 	}
@@ -106,7 +106,7 @@ func (s *apiServer) handleV2AssetServiceActions(w http.ResponseWriter, r *http.R
 	action := parts[1]
 	switch action {
 	case "start", "stop", "restart":
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "services:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "services:write") {
 			apiv2.WriteScopeForbidden(w, "services:write")
 			return
 		}

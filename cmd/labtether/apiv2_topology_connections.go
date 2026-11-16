@@ -6,6 +6,8 @@ import (
 	"github.com/labtether/labtether/internal/topology"
 	"net/http"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // ---------------------------------------------------------------------------
@@ -17,13 +19,13 @@ func (s *apiServer) handleV2TopologyConnections(w http.ResponseWriter, r *http.R
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
 
 	var req topology.Connection
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -82,7 +84,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 
 	switch r.Method {
 	case http.MethodPut:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 			apiv2.WriteScopeForbidden(w, "topology:write")
 			return
 		}
@@ -92,7 +94,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 			// relationship); "" clears it.
 			Label *string `json:"label"`
 		}
-		if err := decodeJSONBody(w, r, &req); err != nil {
+		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 			apiv2.WriteJSONBodyError(w, err)
 			return
 		}
@@ -112,7 +114,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 			apiv2.WriteScopeForbidden(w, "topology:write")
 			return
 		}
@@ -140,13 +142,13 @@ func (s *apiServer) handleV2TopologyViewport(w http.ResponseWriter, r *http.Requ
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "PUT required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
 
 	var req topology.Viewport
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}

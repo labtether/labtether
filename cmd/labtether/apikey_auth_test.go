@@ -9,33 +9,34 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 )
 
 func TestScopesFromContext(t *testing.T) {
-	ctx := contextWithScopes(context.Background(), []string{"assets:read", "files:*"})
-	scopes := scopesFromContext(ctx)
+	ctx := apiv2.ContextWithScopes(context.Background(), []string{"assets:read", "files:*"})
+	scopes := apiv2.ScopesFromContext(ctx)
 	if len(scopes) != 2 {
 		t.Errorf("expected 2 scopes, got %d", len(scopes))
 	}
 }
 
 func TestAllowedAssetsFromContext(t *testing.T) {
-	ctx := contextWithAllowedAssets(context.Background(), []string{"server1"})
-	assets := allowedAssetsFromContext(ctx)
+	ctx := apiv2.ContextWithAllowedAssets(context.Background(), []string{"server1"})
+	assets := apiv2.AllowedAssetsFromContext(ctx)
 	if len(assets) != 1 || assets[0] != "server1" {
 		t.Errorf("expected [server1], got %v", assets)
 	}
 
-	ctx2 := contextWithAllowedAssets(context.Background(), nil)
-	if allowedAssetsFromContext(ctx2) != nil {
+	ctx2 := apiv2.ContextWithAllowedAssets(context.Background(), nil)
+	if apiv2.AllowedAssetsFromContext(ctx2) != nil {
 		t.Error("nil allowed_assets should return nil")
 	}
 }
 
 func TestAPIKeyIDFromContext(t *testing.T) {
-	ctx := contextWithAPIKeyID(context.Background(), "key_abc123")
-	if apiKeyIDFromContext(ctx) != "key_abc123" {
+	ctx := apiv2.ContextWithAPIKeyID(context.Background(), "key_abc123")
+	if apiv2.APIKeyIDFromContext(ctx) != "key_abc123" {
 		t.Error("should return stored key ID")
 	}
 }
@@ -175,7 +176,7 @@ func TestWithAuthAPIKeyFollowsCreatorAccount(t *testing.T) {
 	call := func() (int, string) {
 		var role string
 		handler := s.withAuth(func(w http.ResponseWriter, r *http.Request) {
-			role = userRoleFromContext(r.Context())
+			role = apiv2.UserRoleFromContext(r.Context())
 			w.WriteHeader(http.StatusNoContent)
 		})
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)

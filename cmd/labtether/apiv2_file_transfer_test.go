@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 // ─── POST/GET /api/v2/file-transfers ──────────────────────────────────────
@@ -73,7 +75,7 @@ func TestHandleV2FileTransfers_GetScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/file-transfers", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2FileTransfers(rec, req)
@@ -189,7 +191,7 @@ func TestHandleV2FileTransfers_PostScopeDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/file-transfers", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"files:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"files:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2FileTransfers(rec, req)
@@ -226,7 +228,7 @@ func TestHandleV2FileTransferActions_GetScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/file-transfers/ft_abc", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2FileTransferActions(rec, req)
@@ -254,7 +256,7 @@ func TestHandleV2BulkFilePush_ScopeDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/file-push", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"files:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"files:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2BulkFilePush(rec, req)
@@ -294,7 +296,7 @@ func TestHandleV2BulkFilePush_RejectsTooManyTargets(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/file-push", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"files:write"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"files:write"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 

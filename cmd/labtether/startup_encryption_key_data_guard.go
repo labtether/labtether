@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -54,7 +55,7 @@ func checkEncryptionKeyPresentForData(ctx context.Context, store *installstate.S
 	if !state.Credentials && !(state.TOTP && totpDependsOnKey) {
 		return nil
 	}
-	if envOrDefaultBool(encryptionKeyReplaceEnv, false) {
+	if shared.EnvOrDefaultBool(encryptionKeyReplaceEnv, false) {
 		log.Printf("labtether: WARNING: %s=true — starting with a new encryption key although the database holds secrets "+
 			"encrypted with a key that is not in %s/secrets.json. Saved credentials, webhook secrets and 2FA enrolments "+
 			"can no longer be decrypted and must be entered again. Remove %s after this start.",

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	sharedpkg "github.com/labtether/labtether/internal/hubapi/shared"
 )
@@ -67,7 +68,7 @@ func (s *apiServer) streamTicketPrincipalActive(ctx context.Context, actorID, ro
 // streamTicketRequestActive applies streamTicketPrincipalActive to a request
 // authenticated by a redeemed ticket.
 func (s *apiServer) streamTicketRequestActive(ctx context.Context) bool {
-	return s.streamTicketPrincipalActive(ctx, userIDFromContext(ctx), userRoleFromContext(ctx), apiKeyIDFromContext(ctx), sharedpkg.AuthSessionIDFromContext(ctx))
+	return s.streamTicketPrincipalActive(ctx, apiv2.UserIDFromContext(ctx), apiv2.UserRoleFromContext(ctx), apiv2.APIKeyIDFromContext(ctx), sharedpkg.AuthSessionIDFromContext(ctx))
 }
 
 // dropStreamTickets removes unredeemed tickets issued to any of keys, so a

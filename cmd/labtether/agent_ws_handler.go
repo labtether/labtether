@@ -35,11 +35,11 @@ const (
 )
 
 func boundedAgentWSEnvInt(key string, fallback, hardMax int) int {
-	return enrollment.BoundedLimit(envOrDefaultInt(key, fallback), fallback, hardMax)
+	return enrollment.BoundedLimit(shared.EnvOrDefaultInt(key, fallback), fallback, hardMax)
 }
 
 func configuredAgentWSCredentialLease() time.Duration {
-	lease := envOrDefaultDuration("LABTETHER_AGENT_WS_CREDENTIAL_LEASE", defaultAgentWSCredentialLease)
+	lease := shared.EnvOrDefaultDuration("LABTETHER_AGENT_WS_CREDENTIAL_LEASE", defaultAgentWSCredentialLease)
 	if lease < minAgentWSCredentialLease {
 		return minAgentWSCredentialLease
 	}

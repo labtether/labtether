@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // checkSameOrigin validates that the Origin header exactly matches the public
@@ -183,7 +185,7 @@ func forwardedHeaderProto(raw string) string {
 }
 
 func isTrustedForwardedHostSource(r *http.Request) bool {
-	clientHost := requestClientKey(r)
+	clientHost := shared.RequestClientKey(r)
 	if clientHost == "" {
 		return false
 	}
@@ -226,7 +228,7 @@ func isTrustedForwardedHostSource(r *http.Request) bool {
 // then only the entry that proxy appended (the right-most X-Forwarded-For
 // value); anything a client wrote further left is spoofable.
 func trustedRequestClientIP(r *http.Request) string {
-	direct := requestClientKey(r)
+	direct := shared.RequestClientKey(r)
 	if r == nil || !isTrustedForwardedHostSource(r) {
 		return direct
 	}
@@ -258,7 +260,7 @@ func discoverClientIP(r *http.Request) string {
 			return ""
 		}
 	}
-	return requestClientKey(r)
+	return shared.RequestClientKey(r)
 }
 
 // browserRequestIsSecure decides the session cookie's Secure flag. It drops

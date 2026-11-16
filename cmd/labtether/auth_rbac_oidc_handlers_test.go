@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 )
@@ -45,7 +46,7 @@ func TestSelfServiceAuthAllowsViewerMutationButRejectsNonSessionCredentials(t *t
 	called := false
 	handler := sut.withSelfServiceAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if got := userIDFromContext(r.Context()); got != viewer.ID {
+		if got := apiv2.UserIDFromContext(r.Context()); got != viewer.ID {
 			t.Fatalf("principal = %q, want %q", got, viewer.ID)
 		}
 		w.WriteHeader(http.StatusNoContent)

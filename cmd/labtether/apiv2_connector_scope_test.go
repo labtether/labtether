@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestV2ProviderMutationsRequireConnectorWriteScope(t *testing.T) {
@@ -24,7 +26,7 @@ func TestV2ProviderMutationsRequireConnectorWriteScope(t *testing.T) {
 		{name: "portainer asset", path: "/api/v2/portainer/assets/a/containers/c/start", handler: s.handleV2PortainerAssets},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := contextWithScopes(context.Background(), []string{"connectors:read"})
+			ctx := apiv2.ContextWithScopes(context.Background(), []string{"connectors:read"})
 			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(`{}`)).WithContext(ctx)
 			rec := httptest.NewRecorder()
 			tc.handler(rec, req)

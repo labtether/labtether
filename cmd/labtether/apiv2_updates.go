@@ -12,7 +12,7 @@ func (s *apiServer) handleV2UpdatePlans(w http.ResponseWriter, r *http.Request) 
 	if r.Method == http.MethodPost {
 		scope = "updates:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -25,7 +25,7 @@ func (s *apiServer) handleV2UpdatePlanActions(w http.ResponseWriter, r *http.Req
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "updates:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -34,7 +34,7 @@ func (s *apiServer) handleV2UpdatePlanActions(w http.ResponseWriter, r *http.Req
 }
 
 func (s *apiServer) handleV2UpdateRuns(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "updates:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "updates:read") {
 		apiv2.WriteScopeForbidden(w, "updates:read")
 		return
 	}
@@ -47,7 +47,7 @@ func (s *apiServer) handleV2UpdateRunActions(w http.ResponseWriter, r *http.Requ
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "updates:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

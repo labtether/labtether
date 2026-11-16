@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 // testV2ScopeDenied is a helper that asserts a handler returns 403 when the
@@ -13,7 +15,7 @@ func testV2ScopeDenied(t *testing.T, s *apiServer, method, path string, handler 
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"nonexistent:scope"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"nonexistent:scope"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -256,7 +258,7 @@ func TestHandleV2HAEntities_ScopeWriteDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/homeassistant/entities", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"homeassistant:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"homeassistant:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2HAEntities(rec, req)
@@ -271,7 +273,7 @@ func TestHandleV2HAEntities_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/homeassistant/entities", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"homeassistant:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"homeassistant:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2HAEntities(rec, req)
@@ -286,7 +288,7 @@ func TestHandleV2HubStatus_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/hub/status", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"hub:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"hub:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2HubStatus(rec, req)
@@ -301,7 +303,7 @@ func TestHandleV2Credentials_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/credentials/profiles", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"credentials:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"credentials:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2Credentials(rec, req)
@@ -316,7 +318,7 @@ func TestHandleV2DeadLetters_WriteScope(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/dead-letters", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"dead-letters:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"dead-letters:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2DeadLetters(rec, req)
@@ -331,7 +333,7 @@ func TestHandleV2PrometheusSettings_WriteScope(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/prometheus", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"settings:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"settings:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2PrometheusSettings(rec, req)
@@ -344,7 +346,7 @@ func TestHandleV2NotificationChannelsRequiresWriteScopeForMutation(t *testing.T)
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/channels", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"notifications:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"notifications:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2NotificationChannels(rec, req)
@@ -371,7 +373,7 @@ func TestV2AdminSettingsRejectOperatorDespiteRecognizedScopes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-			ctx = contextWithScopes(ctx, tc.scopes)
+			ctx = apiv2.ContextWithScopes(ctx, tc.scopes)
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 

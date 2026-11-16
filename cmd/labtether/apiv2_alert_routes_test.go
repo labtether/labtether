@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestV2AlertRuleObjectRouteDispatchesToRuleHandler(t *testing.T) {
 	s := &apiServer{}
-	ctx := contextWithScopes(context.Background(), []string{"alerts:read"})
+	ctx := apiv2.ContextWithScopes(context.Background(), []string{"alerts:read"})
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/alerts/rules/rule-1", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 

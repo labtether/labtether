@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 )
 
@@ -12,7 +13,7 @@ func TestHandleV2AssetNetwork_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/network", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetNetwork(rec, req, "srv1")
@@ -25,7 +26,7 @@ func TestHandleV2AssetDisks_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/disks", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetDisks(rec, req, "srv1")
@@ -38,7 +39,7 @@ func TestHandleV2AssetPackages_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/packages", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetPackages(rec, req, "srv1", "")
@@ -71,7 +72,7 @@ func TestHandleV2AssetPackagesExactRoutesAndScopes(t *testing.T) {
 			seedOfflineTestAsset(t, s, "srv1")
 			req := httptest.NewRequest(test.method, "/api/v2/assets/srv1/packages"+test.subPath, nil)
 			ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-			ctx = contextWithScopes(ctx, test.scopes)
+			ctx = apiv2.ContextWithScopes(ctx, test.scopes)
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 			s.handleV2AssetPackages(rec, req, "srv1", test.subPath)
@@ -86,7 +87,7 @@ func TestHandleV2AssetLogs_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/logs", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetLogs(rec, req, "srv1")
@@ -99,7 +100,7 @@ func TestHandleV2AssetMetrics_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/metrics", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"metrics:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"metrics:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetMetrics(rec, req, "srv1")

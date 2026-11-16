@@ -7,7 +7,7 @@ import (
 )
 
 func (s *apiServer) handleV2EventStream(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "events:subscribe") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "events:subscribe") {
 		apiv2.WriteScopeForbidden(w, "events:subscribe")
 		return
 	}

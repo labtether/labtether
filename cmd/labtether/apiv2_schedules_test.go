@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/schedules"
 )
 
@@ -107,7 +108,7 @@ func TestHandleV2Schedules_DisabledAPIKeyDefinitionCannotBeEnabledWithoutActionS
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:key-1", "operator")
-	ctx = contextWithScopes(ctx, []string{"schedules:write"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"schedules:write"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2Schedules(rec, req)
@@ -125,7 +126,7 @@ func TestHandleV2Schedules_DisabledAPIKeyDefinitionCannotBeEnabledWithoutActionS
 	patch := httptest.NewRequest(http.MethodPatch, "/api/v2/schedules/"+created.Data.ID, strings.NewReader(`{"enabled":true}`))
 	patch.Header.Set("Content-Type", "application/json")
 	patchCtx := contextWithPrincipal(patch.Context(), "apikey:key-1", "operator")
-	patchCtx = contextWithScopes(patchCtx, []string{"schedules:write"})
+	patchCtx = apiv2.ContextWithScopes(patchCtx, []string{"schedules:write"})
 	patch = patch.WithContext(patchCtx)
 	patchRec := httptest.NewRecorder()
 	s.handleV2ScheduleActions(patchRec, patch)
@@ -141,7 +142,7 @@ func TestHandleV2Schedules_Create_ScopeDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"schedules:read"}) // no write scope
+	ctx = apiv2.ContextWithScopes(ctx, []string{"schedules:read"}) // no write scope
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

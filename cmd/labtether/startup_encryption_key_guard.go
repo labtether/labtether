@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // errEncryptionKeyMismatch marks a start refused because LABTETHER_ENCRYPTION_KEY
@@ -27,7 +29,7 @@ func checkEncryptionKeyChange(storedKey, envKey, stateRoot string) error {
 	if storedKey == "" || envKey == "" || sameEncryptionKey(storedKey, envKey) {
 		return nil
 	}
-	if envOrDefaultBool(encryptionKeyReplaceEnv, false) {
+	if shared.EnvOrDefaultBool(encryptionKeyReplaceEnv, false) {
 		log.Printf("labtether: WARNING: %s=true — replacing the stored encryption key in %s. "+
 			"Secrets encrypted with the previous key (saved credentials, webhook and notification secrets, "+
 			"file connection passwords, 2FA enrolments) can no longer be decrypted and must be re-entered. "+

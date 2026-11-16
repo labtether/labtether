@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -40,7 +41,7 @@ func TestPersistentSessionCreateRejectsOversizedTargetAndTitle(t *testing.T) {
 				t.Fatal(err)
 			}
 			request := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(body))
-			request = request.WithContext(contextWithUserID(request.Context(), "actor-a"))
+			request = request.WithContext(apiv2.ContextWithUserID(request.Context(), "actor-a"))
 			recorder := httptest.NewRecorder()
 
 			sut.handlePersistentSessions(recorder, request)
@@ -59,7 +60,7 @@ func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
 		"/terminal/persistent-sessions",
 		bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Shell"}`)),
 	)
-	createRequest = createRequest.WithContext(contextWithUserID(createRequest.Context(), "actor-a"))
+	createRequest = createRequest.WithContext(apiv2.ContextWithUserID(createRequest.Context(), "actor-a"))
 	createRecorder := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRecorder, createRequest)
 	if createRecorder.Code != http.StatusCreated {
@@ -81,7 +82,7 @@ func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
 		"/terminal/persistent-sessions/"+created.PersistentSession.ID,
 		bytes.NewReader(updateBody),
 	)
-	updateRequest = updateRequest.WithContext(contextWithUserID(updateRequest.Context(), "actor-a"))
+	updateRequest = updateRequest.WithContext(apiv2.ContextWithUserID(updateRequest.Context(), "actor-a"))
 	updateRecorder := httptest.NewRecorder()
 
 	sut.handlePersistentSessionActions(updateRecorder, updateRequest)

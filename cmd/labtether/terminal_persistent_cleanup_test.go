@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *testing.T) {
@@ -18,7 +20,7 @@ func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *test
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -33,7 +35,7 @@ func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *test
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 
@@ -54,7 +56,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	sut := newTestAPIServer(t)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Legacy Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -70,7 +72,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	// Reproduce the r6 legacy state: attach was accepted before a connected
 	// agent's explicit has_tmux=false result was enforced.
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -107,7 +109,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	}()
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 	<-closed
@@ -155,7 +157,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -170,7 +172,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -178,7 +180,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 	}
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 
@@ -215,7 +217,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -230,7 +232,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -249,7 +251,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 	}()
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusInternalServerError {
@@ -279,7 +281,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -294,7 +296,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -352,7 +354,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	}()
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 	<-done

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestHandleV2BulkServiceAction_AllTargetsDenied(t *testing.T) {
@@ -13,8 +15,8 @@ func TestHandleV2BulkServiceAction_AllTargetsDenied(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"bulk:*"})
-	ctx = contextWithAllowedAssets(ctx, []string{"other-server"}) // srv1,srv2 not allowed
+	ctx = apiv2.ContextWithScopes(ctx, []string{"bulk:*"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"other-server"}) // srv1,srv2 not allowed
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2BulkServiceAction(rec, req)

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // version is set at build time via ldflags: -X main.version=...
@@ -82,7 +84,7 @@ func (s *apiServer) handlePolicyCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req policy.CheckRequest
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid policy request payload")
 		return
 	}

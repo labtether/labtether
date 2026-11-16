@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 )
 
 func TestPersistCanonicalConnectorSnapshotWritesCanonicalStateByProvider(t *testing.T) {
@@ -142,7 +144,7 @@ func TestPersistCanonicalConnectorSnapshotWritesCanonicalStateByProvider(t *test
 
 			sut.persistCanonicalConnectorSnapshot(tc.providerID, "collector-1", connector.DisplayName(), "", connector, tc.discovered)
 
-			providerInstanceID := canonicalProviderInstanceID(model.ProviderKindConnector, tc.providerID, "collector-1")
+			providerInstanceID := respkg.CanonicalProviderInstanceID(model.ProviderKindConnector, tc.providerID, "collector-1")
 			if _, ok, err := sut.canonicalStore.GetProviderInstance(providerInstanceID); err != nil {
 				t.Fatalf("get provider instance: %v", err)
 			} else if !ok {
@@ -279,7 +281,7 @@ func TestHandleConnectorActionsDiscoverPersistsCanonicalSnapshot(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		providerInstanceID := canonicalProviderInstanceID(model.ProviderKindConnector, "proxmox", "")
+		providerInstanceID := respkg.CanonicalProviderInstanceID(model.ProviderKindConnector, "proxmox", "")
 		if _, ok, err := sut.canonicalStore.GetProviderInstance(providerInstanceID); err != nil {
 			t.Fatalf("get provider instance: %v", err)
 		} else if !ok {
@@ -334,7 +336,7 @@ func TestHandleConnectorActionsDiscoverPersistsCanonicalSnapshot(t *testing.T) {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
 
-		providerInstanceID := canonicalProviderInstanceID(model.ProviderKindConnector, "portainer", "")
+		providerInstanceID := respkg.CanonicalProviderInstanceID(model.ProviderKindConnector, "portainer", "")
 		if _, ok, err := sut.canonicalStore.GetProviderInstance(providerInstanceID); err != nil {
 			t.Fatalf("get provider instance: %v", err)
 		} else if !ok {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/assetstatus"
 	"github.com/labtether/labtether/internal/connectors/docker"
@@ -126,7 +127,7 @@ func (f *dockerActionOwnerFixture) queue(action, target string, want int) action
 	body, _ := json.Marshal(actions.ExecuteRequest{Type: actions.RunTypeConnectorAction, ConnectorID: "docker", ActionID: action, Target: target,
 		Params: map[string]string{"image": "fixture:tag", dockerpkg.ActionAgentBindingParam: "forged-owner", "docker_container_id": "forged-container", "docker_stack_name": "forged-stack", "docker_config_dir": "forged-directory", "docker_config_files": `["forged-file"]`, "docker_compose_endpoint_id": "forged-endpoint"}})
 	r := httptest.NewRequest(http.MethodPost, "/actions/execute", strings.NewReader(string(body)))
-	ctx := contextWithScopes(contextWithPrincipal(r.Context(), "owner", "owner"), []string{"actions:exec"})
+	ctx := apiv2.ContextWithScopes(contextWithPrincipal(r.Context(), "owner", "owner"), []string{"actions:exec"})
 	rec := httptest.NewRecorder()
 	d.HandleActionExecute(rec, r.WithContext(ctx))
 	f.response = rec.Body.String()

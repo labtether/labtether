@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -204,7 +205,7 @@ func TestBookmarkToHostPinsSSHHostKeyOnTheBookmark(t *testing.T) {
 	// The saved login is used at stream time, so a key without credentials:use is refused there too.
 	ticket := func(scopes []string) int {
 		req := httptest.NewRequest(http.MethodPost, "/terminal/sessions/"+session.ID+"/stream-ticket", bytes.NewBufferString(`{}`))
-		ctx := contextWithScopes(contextWithPrincipal(req.Context(), "usr-tofu", auth.RoleOperator), scopes)
+		ctx := apiv2.ContextWithScopes(contextWithPrincipal(req.Context(), "usr-tofu", auth.RoleOperator), scopes)
 		rec := httptest.NewRecorder()
 		deps.HandleSessionActions(rec, req.WithContext(ctx))
 		return rec.Code

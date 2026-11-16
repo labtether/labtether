@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubcollector"
@@ -67,7 +68,7 @@ func TestHomeAssistantRuntimeKeepsExactOwnerBeyondInventoryPage(t *testing.T) {
 		}
 		r := httptest.NewRequest(http.MethodPost, "/api/v2/homeassistant/entities/"+id, strings.NewReader(string(body)))
 		ctx := contextWithPrincipal(r.Context(), "ha-owner", "owner")
-		r = r.WithContext(contextWithScopes(ctx, []string{"homeassistant:write"}))
+		r = r.WithContext(apiv2.ContextWithScopes(ctx, []string{"homeassistant:write"}))
 		w := httptest.NewRecorder()
 		sut.handleV2HAEntityActions(w, r)
 		if w.Code != want || callsA.Load() != beforeA+aDelta || callsB.Load() != beforeB+bDelta {

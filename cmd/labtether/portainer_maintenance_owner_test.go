@@ -125,7 +125,7 @@ func (f *portainerOwnerFixture) call(method, path, body string, allowed []string
 	f.t.Helper()
 	req := httptest.NewRequest(method, "/portainer/assets/"+f.ids["loaded-a"]+"/"+path, strings.NewReader(body))
 	ctx := contextWithPrincipal(req.Context(), "owner", "owner")
-	ctx = contextWithScopes(ctx, []string{"connectors:read", "connectors:write"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"connectors:read", "connectors:write"})
 	if allowed != nil {
 		ctx = apiv2.ContextWithAllowedAssets(ctx, allowed)
 	}

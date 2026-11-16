@@ -24,7 +24,7 @@ const (
 )
 
 func (s *apiServer) handleV2MetricsOverview(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "metrics:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "metrics:read") {
 		apiv2.WriteScopeForbidden(w, "metrics:read")
 		return
 	}
@@ -46,7 +46,7 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "metrics:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "metrics:read") {
 		apiv2.WriteScopeForbidden(w, "metrics:read")
 		return
 	}
@@ -92,7 +92,7 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Filter by asset allowlist.
-	allowed := allowedAssetsFromContext(r.Context())
+	allowed := apiv2.AllowedAssetsFromContext(r.Context())
 	filtered := make([]string, 0, len(assetIDs))
 	for _, id := range assetIDs {
 		if apiv2.AssetCheck(allowed, id) {

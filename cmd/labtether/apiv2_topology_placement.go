@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // ---------------------------------------------------------------------------
@@ -19,7 +21,7 @@ func (s *apiServer) handleV2TopologyUnsorted(w http.ResponseWriter, r *http.Requ
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:read") {
 		apiv2.WriteScopeForbidden(w, "topology:read")
 		return
 	}
@@ -125,7 +127,7 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
@@ -139,7 +141,7 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 			ZoneID  string `json:"zone_id"`
 		} `json:"placements"`
 	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -327,7 +329,7 @@ func (s *apiServer) handleV2TopologyDismiss(w http.ResponseWriter, r *http.Reque
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
@@ -335,7 +337,7 @@ func (s *apiServer) handleV2TopologyDismiss(w http.ResponseWriter, r *http.Reque
 	var req struct {
 		AssetID string `json:"asset_id"`
 	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -363,7 +365,7 @@ func (s *apiServer) handleV2TopologyUndismiss(w http.ResponseWriter, r *http.Req
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}

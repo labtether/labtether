@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
@@ -42,7 +43,7 @@ func TestHomeAssistantV2ResponseContract(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			ctx := contextWithPrincipal(req.Context(), "apikey:ha-read", "operator")
-			req = req.WithContext(contextWithScopes(ctx, []string{"homeassistant:read"}))
+			req = req.WithContext(apiv2.ContextWithScopes(ctx, []string{"homeassistant:read"}))
 			rec := httptest.NewRecorder()
 			tc.handler(rec, req)
 			if rec.Code != http.StatusOK {
@@ -85,7 +86,7 @@ func TestHomeAssistantV2ResponseContract(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			ctx := contextWithPrincipal(req.Context(), "apikey:ha-read", "operator")
-			req = req.WithContext(contextWithScopes(ctx, []string{"homeassistant:read"}))
+			req = req.WithContext(apiv2.ContextWithScopes(ctx, []string{"homeassistant:read"}))
 			rec := httptest.NewRecorder()
 			tc.handler(rec, req)
 			var response struct {
@@ -141,7 +142,7 @@ func TestHomeAssistantV2ResponseContractActionFailure(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/homeassistant/entities/ha-light", strings.NewReader(`{"action":"turn_on"}`))
 	ctx := contextWithPrincipal(req.Context(), "apikey:ha-admin", "admin")
-	req = req.WithContext(contextWithScopes(ctx, []string{"homeassistant:write"}))
+	req = req.WithContext(apiv2.ContextWithScopes(ctx, []string{"homeassistant:write"}))
 	rec := httptest.NewRecorder()
 	s.handleV2HAEntityActions(rec, req)
 	var response struct {

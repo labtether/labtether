@@ -40,7 +40,7 @@ func (s *apiServer) handleV2AssetPowerAction(w http.ResponseWriter, r *http.Requ
 		apiv2.WriteError(w, http.StatusBadRequest, "invalid_power_action", "unsupported power action")
 		return
 	}
-	if !apiv2.AssetCheck(allowedAssetsFromContext(r.Context()), assetID) {
+	if !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), assetID) {
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to this device")
 		return
 	}
@@ -49,7 +49,7 @@ func (s *apiServer) handleV2AssetPowerAction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	actorID := principalActorID(r.Context())
+	actorID := apiv2.PrincipalActorID(r.Context())
 	bucket := fmt.Sprintf("assets.power:%s:%s:%s", actorID, assetID, action)
 	if !s.enforceRateLimit(w, r, bucket, powerActionRateLimit, time.Minute) {
 		s.auditPowerAction(r, assetID, action, agentmgr.PowerResultData{}, "rate_limited", "rate limit exceeded")
@@ -136,7 +136,7 @@ func (s *apiServer) auditPowerAction(
 	}
 	s.appendAuditEventBestEffort(audit.Event{
 		Type:      "asset.power",
-		ActorID:   principalActorID(r.Context()),
+		ActorID:   apiv2.PrincipalActorID(r.Context()),
 		Target:    assetID,
 		CommandID: result.RequestID,
 		Decision:  decision,

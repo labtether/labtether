@@ -96,11 +96,11 @@ func (s *apiServer) statusListRecentSourcesCached(
 
 // --- Endpoint probe forwarding methods used by tests ---
 
-func (s *apiServer) statusRoutingBaseURLs() (statusResolvedRoutingURL, statusResolvedRoutingURL) {
+func (s *apiServer) statusRoutingBaseURLs() (statusaggpkg.ResolvedRoutingURL, statusaggpkg.ResolvedRoutingURL) {
 	return s.buildStatusAggDeps().RoutingBaseURLs()
 }
 
-func (s *apiServer) statusProbeEndpointsCached(ctx context.Context, targets []statusEndpointTarget) []statusEndpointResult {
+func (s *apiServer) statusProbeEndpointsCached(ctx context.Context, targets []statusaggpkg.EndpointTarget) []statusaggpkg.EndpointResult {
 	// Use the local stub variable so that test overrides of statusProbeEndpointFunc
 	// take effect. Mirror the override to the canonical package variable, then
 	// delegate to the package implementation.

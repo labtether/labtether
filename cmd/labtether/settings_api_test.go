@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/installstate"
 )
 
@@ -42,22 +43,22 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
 
-	var getPayload runtimeSettingsPayload
+	var getPayload shared.RuntimeSettingsPayload
 	if err := json.Unmarshal(getRec.Body.Bytes(), &getPayload); err != nil {
 		t.Fatalf("failed to decode runtime settings payload: %v", err)
 	}
 
-	var pollEntry runtimeSettingEntry
+	var pollEntry shared.RuntimeSettingEntry
 	foundPoll := false
-	var discoveryEntry runtimeSettingEntry
+	var discoveryEntry shared.RuntimeSettingEntry
 	foundDiscovery := false
-	var dockerDiscoveryEntry runtimeSettingEntry
+	var dockerDiscoveryEntry shared.RuntimeSettingEntry
 	foundDockerDiscovery := false
-	var outboundEntry runtimeSettingEntry
+	var outboundEntry shared.RuntimeSettingEntry
 	foundOutbound := false
-	var remoteAccessEntry runtimeSettingEntry
+	var remoteAccessEntry shared.RuntimeSettingEntry
 	foundRemoteAccess := false
-	var tailscaleTargetEntry runtimeSettingEntry
+	var tailscaleTargetEntry shared.RuntimeSettingEntry
 	foundTailscaleTarget := false
 	for _, entry := range getPayload.Settings {
 		if entry.Key == "console.poll_interval_seconds" {
@@ -146,7 +147,7 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 		t.Fatalf("expected runtime update to invalidate web service url grouping cache timestamp")
 	}
 
-	var updatePayload runtimeSettingsPayload
+	var updatePayload shared.RuntimeSettingsPayload
 	if err := json.Unmarshal(updateRec.Body.Bytes(), &updatePayload); err != nil {
 		t.Fatalf("failed to decode updated runtime settings payload: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 		t.Fatalf("expected runtime reset to invalidate web service url grouping cache timestamp")
 	}
 
-	var resetPayload runtimeSettingsPayload
+	var resetPayload shared.RuntimeSettingsPayload
 	if err := json.Unmarshal(resetRec.Body.Bytes(), &resetPayload); err != nil {
 		t.Fatalf("failed to decode reset runtime settings payload: %v", err)
 	}

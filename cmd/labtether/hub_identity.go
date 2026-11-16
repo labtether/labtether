@@ -202,7 +202,7 @@ func ensureHubSSHIdentity(s *apiServer) (*hubSSHIdentity, error) {
 	}
 
 	// Generate new keypair using the configured key type.
-	keyType, err := normalizeHubSSHKeyType(envOrDefault("LABTETHER_SSH_KEY_TYPE", "ed25519"))
+	keyType, err := normalizeHubSSHKeyType(shared.EnvOrDefault("LABTETHER_SSH_KEY_TYPE", "ed25519"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid LABTETHER_SSH_KEY_TYPE: %w", err)
 	}

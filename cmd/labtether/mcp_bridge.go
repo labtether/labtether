@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 const maxMCPRequestBodyBytes = 128 * 1024
@@ -29,9 +31,9 @@ func (s *apiServer) buildMCPServer() *server.MCPServer {
 			return s.ensureAgentsDeps().ExecuteViaAgentContext(ctx, job)
 		},
 		ExecutePowerAction:    s.mcpExecutePowerAction(),
-		GetScopes:             func(ctx context.Context) []string { return scopesFromContext(ctx) },
-		GetAllowedAssets:      func(ctx context.Context) []string { return allowedAssetsFromContext(ctx) },
-		GetActorID:            func(ctx context.Context) string { return principalActorID(ctx) },
+		GetScopes:             func(ctx context.Context) []string { return apiv2.ScopesFromContext(ctx) },
+		GetAllowedAssets:      func(ctx context.Context) []string { return apiv2.AllowedAssetsFromContext(ctx) },
+		GetActorID:            func(ctx context.Context) string { return apiv2.PrincipalActorID(ctx) },
 		AuthorizeMutation:     s.mcpAuthorizeMutation(),
 		EvaluateCommandPolicy: s.evaluateStructuredCommandPolicy,
 		AuditMutation:         s.mcpAuditMutation(),

@@ -8,7 +8,7 @@ import (
 )
 
 func (s *apiServer) handleV2Connectors(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "connectors:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "connectors:read") {
 		apiv2.WriteScopeForbidden(w, "connectors:read")
 		return
 	}
@@ -21,7 +21,7 @@ func (s *apiServer) handleV2ConnectorActions(w http.ResponseWriter, r *http.Requ
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -32,7 +32,7 @@ func (s *apiServer) handleV2ConnectorActions(w http.ResponseWriter, r *http.Requ
 // Proxmox v2 wrappers
 
 func (s *apiServer) handleV2ProxmoxClusterStatus(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "connectors:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "connectors:read") {
 		apiv2.WriteScopeForbidden(w, "connectors:read")
 		return
 	}
@@ -41,7 +41,7 @@ func (s *apiServer) handleV2ProxmoxClusterStatus(w http.ResponseWriter, r *http.
 }
 
 func (s *apiServer) handleV2ProxmoxClusterResources(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "connectors:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "connectors:read") {
 		apiv2.WriteScopeForbidden(w, "connectors:read")
 		return
 	}
@@ -54,7 +54,7 @@ func (s *apiServer) handleV2ProxmoxAssets(w http.ResponseWriter, r *http.Request
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -67,7 +67,7 @@ func (s *apiServer) handleV2ProxmoxNodeRoutes(w http.ResponseWriter, r *http.Req
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -76,7 +76,7 @@ func (s *apiServer) handleV2ProxmoxNodeRoutes(w http.ResponseWriter, r *http.Req
 }
 
 func (s *apiServer) handleV2ProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "connectors:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "connectors:read") {
 		apiv2.WriteScopeForbidden(w, "connectors:read")
 		return
 	}
@@ -89,7 +89,7 @@ func (s *apiServer) handleV2ProxmoxTasks(w http.ResponseWriter, r *http.Request)
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -104,7 +104,7 @@ func (s *apiServer) handleV2TrueNASAssets(w http.ResponseWriter, r *http.Request
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -120,7 +120,7 @@ func (s *apiServer) handleV2PBSAssets(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -133,7 +133,7 @@ func (s *apiServer) handleV2PBSTasks(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -148,7 +148,7 @@ func (s *apiServer) handleV2PortainerAssets(w http.ResponseWriter, r *http.Reque
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "connectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

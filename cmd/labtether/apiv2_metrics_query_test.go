@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 // ─── GET /api/v2/assets/{id}/metrics/latest ───────────────────────────────
@@ -17,7 +19,7 @@ func TestHandleV2AssetMetricsLatest_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/assets/host-01/metrics/latest", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetMetricsLatest(rec, req, "host-01")
@@ -80,7 +82,7 @@ func TestHandleV2MetricsQuery_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/metrics/query?asset_ids=x&metric=cpu_percent", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2MetricsQuery(rec, req)

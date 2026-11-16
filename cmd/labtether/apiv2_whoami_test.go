@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 )
 
@@ -36,9 +37,9 @@ func TestHandleV2Whoami_WithAPIKey(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/whoami", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:key_test1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read", "assets:exec"})
-	ctx = contextWithAllowedAssets(ctx, []string{"server1"})
-	ctx = contextWithAPIKeyID(ctx, "key_test1")
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read", "assets:exec"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"server1"})
+	ctx = apiv2.ContextWithAPIKeyID(ctx, "key_test1")
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/groupmaintenance"
@@ -121,7 +122,7 @@ func TestHomeAssistantWritesHonorEntityAndCollectorMaintenance(t *testing.T) {
 			ctx = r.Context()
 		}
 		ctx = contextWithPrincipal(ctx, "ha-owner", "owner")
-		ctx = contextWithScopes(ctx, []string{"homeassistant:read", "homeassistant:write"})
+		ctx = apiv2.ContextWithScopes(ctx, []string{"homeassistant:read", "homeassistant:write"})
 		r = r.WithContext(ctx)
 		w := httptest.NewRecorder()
 		if collection {

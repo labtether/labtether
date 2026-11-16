@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *testing.T) {
@@ -46,7 +48,7 @@ func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *
 		t.Fatalf("creation-time protocol was overridden by stream query: got %q", got)
 	}
 	crossActorReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+first.ID, nil)
-	crossActorReq = crossActorReq.WithContext(contextWithUserID(crossActorReq.Context(), "actor-b"))
+	crossActorReq = crossActorReq.WithContext(apiv2.ContextWithUserID(crossActorReq.Context(), "actor-b"))
 	crossActorRec := httptest.NewRecorder()
 	sut.handleDesktopSessionActions(crossActorRec, crossActorReq)
 	if crossActorRec.Code != http.StatusForbidden {

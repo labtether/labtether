@@ -5,6 +5,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	portainerpkg "github.com/labtether/labtether/internal/hubapi/portainer"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // buildPortainerDeps constructs the portainerpkg.Deps from the apiServer's fields.
@@ -24,8 +25,8 @@ func (s *apiServer) buildPortainerDeps() *portainerpkg.Deps {
 		CheckSameOrigin: checkSameOrigin,
 
 		TerminalWebSocketUpgrader:         &terminalWebSocketUpgrader,
-		StartBrowserWebSocketKeepalive:    startBrowserWebSocketKeepalive,
-		TouchBrowserWebSocketReadDeadline: touchBrowserWebSocketReadDeadline,
+		StartBrowserWebSocketKeepalive:    shared.StartBrowserWebSocketKeepalive,
+		TouchBrowserWebSocketReadDeadline: shared.TouchBrowserWebSocketReadDeadline,
 	}
 }
 

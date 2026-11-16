@@ -8,17 +8,6 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
-// Thin aliases delegating to internal/hubapi/shared so that callers
-// inside cmd/labtether/ keep compiling without a mass rename.
-
-func httpURLToWS(httpURL string) string { return shared.HTTPURLToWS(httpURL) }
-
-func sanitizeExternalBaseURL(raw string) (string, bool) {
-	return shared.SanitizeExternalBaseURL(raw)
-}
-
-func sanitizeHostPort(raw string) (string, bool) { return shared.SanitizeHostPort(raw) }
-
 // apiServer methods that reference server state stay here.
 
 // resolveHubURL returns the hub's externally reachable HTTP base URL.
@@ -36,7 +25,7 @@ func (s *apiServer) sanitizedExternalHubURL() (string, bool) {
 	if s == nil {
 		return "", false
 	}
-	sanitized, ok := sanitizeExternalBaseURL(strings.TrimSpace(s.externalURL))
+	sanitized, ok := shared.SanitizeExternalBaseURL(strings.TrimSpace(s.externalURL))
 	if !ok {
 		return "", false
 	}

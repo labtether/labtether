@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 type failingTerminalStore struct {
@@ -88,9 +90,9 @@ func TestStreamTicketLifecycle(t *testing.T) {
 	sessionID := mustCreateSession(t, sut)
 
 	ctx := contextWithPrincipal(context.Background(), "usr-stream-01", auth.RoleAdmin)
-	ctx = contextWithScopes(ctx, []string{"terminal:read", "credentials:use"})
-	ctx = contextWithAllowedAssets(ctx, []string{"srv1"})
-	ctx = contextWithAPIKeyID(ctx, "key-stream-01")
+	ctx = apiv2.ContextWithScopes(ctx, []string{"terminal:read", "credentials:use"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"srv1"})
+	ctx = apiv2.ContextWithAPIKeyID(ctx, "key-stream-01")
 	ticket, _, err := sut.issueStreamTicket(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("failed to issue stream ticket: %v", err)
@@ -101,19 +103,19 @@ func TestStreamTicketLifecycle(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected stream ticket auth to pass")
 	}
-	if got := userIDFromContext(authReq.Context()); got != "usr-stream-01" {
+	if got := apiv2.UserIDFromContext(authReq.Context()); got != "usr-stream-01" {
 		t.Fatalf("expected ticket actor to be restored, got %q", got)
 	}
-	if got := userRoleFromContext(authReq.Context()); got != auth.RoleAdmin {
+	if got := apiv2.UserRoleFromContext(authReq.Context()); got != auth.RoleAdmin {
 		t.Fatalf("expected ticket role to be restored, got %q", got)
 	}
-	if got := scopesFromContext(authReq.Context()); len(got) != 2 || got[0] != "terminal:read" || got[1] != "credentials:use" {
+	if got := apiv2.ScopesFromContext(authReq.Context()); len(got) != 2 || got[0] != "terminal:read" || got[1] != "credentials:use" {
 		t.Fatalf("expected ticket scopes to be restored, got %#v", got)
 	}
-	if got := allowedAssetsFromContext(authReq.Context()); len(got) != 1 || got[0] != "srv1" {
+	if got := apiv2.AllowedAssetsFromContext(authReq.Context()); len(got) != 1 || got[0] != "srv1" {
 		t.Fatalf("expected ticket asset allowlist to be restored, got %#v", got)
 	}
-	if got := apiKeyIDFromContext(authReq.Context()); got != "key-stream-01" {
+	if got := apiv2.APIKeyIDFromContext(authReq.Context()); got != "key-stream-01" {
 		t.Fatalf("expected ticket API key id to be restored, got %q", got)
 	}
 
@@ -278,7 +280,7 @@ func TestCreateSessionUsesAuthenticatedActor(t *testing.T) {
 	payload, _ := json.Marshal(body)
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(payload))
-	req = req.WithContext(contextWithUserID(req.Context(), "usr-session-01"))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "usr-session-01"))
 	rec := httptest.NewRecorder()
 
 	sut.handleSessions(rec, req)
@@ -304,7 +306,7 @@ func TestCreateCommandUsesAuthenticatedActor(t *testing.T) {
 	sut := newTestAPIServer(t)
 	createPayload := []byte(`{"actor_id":"ignored","target":"lab-host-01","mode":"interactive"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "usr-command-01"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "usr-command-01"))
 	createRec := httptest.NewRecorder()
 	sut.handleSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -330,7 +332,7 @@ func TestCreateCommandUsesAuthenticatedActor(t *testing.T) {
 	payload, _ := json.Marshal(cmdPayload)
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions/"+sessionID+"/commands", bytes.NewReader(payload))
-	req = req.WithContext(contextWithUserID(req.Context(), "usr-command-01"))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "usr-command-01"))
 	rec := httptest.NewRecorder()
 
 	sut.handleSessionActions(rec, req)
@@ -355,7 +357,7 @@ func TestSessionActionsDenyNonOwnerCrossActorAccess(t *testing.T) {
 
 	createPayload := []byte(`{"actor_id":"ignored","target":"lab-host-01","mode":"interactive"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(createPayload))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handleSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -375,7 +377,7 @@ func TestSessionActionsDenyNonOwnerCrossActorAccess(t *testing.T) {
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions/"+created.Session.ID, nil)
-	getReq = getReq.WithContext(contextWithUserID(getReq.Context(), "actor-b"))
+	getReq = getReq.WithContext(apiv2.ContextWithUserID(getReq.Context(), "actor-b"))
 	getRec := httptest.NewRecorder()
 	sut.handleSessionActions(getRec, getReq)
 
@@ -390,7 +392,7 @@ func TestHandleSessionsFiltersListForNonOwnerActor(t *testing.T) {
 	createAs := func(actor string) {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","mode":"interactive"}`)))
-		req = req.WithContext(contextWithUserID(req.Context(), actor))
+		req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actor))
 		rec := httptest.NewRecorder()
 		sut.handleSessions(rec, req)
 		if rec.Code != http.StatusCreated {
@@ -401,7 +403,7 @@ func TestHandleSessionsFiltersListForNonOwnerActor(t *testing.T) {
 	createAs("actor-b")
 
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions", nil)
-	listReq = listReq.WithContext(contextWithUserID(listReq.Context(), "actor-a"))
+	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
 	sut.handleSessions(listRec, listReq)
 	if listRec.Code != http.StatusOK {

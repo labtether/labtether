@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 )
 
@@ -67,9 +68,9 @@ func TestV2Integration_CreateKeyAndUseIt(t *testing.T) {
 	// Step 3: Use the key context to call whoami
 	whoamiReq := httptest.NewRequest("GET", "/api/v2/whoami", nil)
 	whoamiCtx := contextWithPrincipal(whoamiReq.Context(), "apikey:"+keyID, "operator")
-	whoamiCtx = contextWithScopes(whoamiCtx, key.Scopes)
-	whoamiCtx = contextWithAllowedAssets(whoamiCtx, key.AllowedAssets)
-	whoamiCtx = contextWithAPIKeyID(whoamiCtx, keyID)
+	whoamiCtx = apiv2.ContextWithScopes(whoamiCtx, key.Scopes)
+	whoamiCtx = apiv2.ContextWithAllowedAssets(whoamiCtx, key.AllowedAssets)
+	whoamiCtx = apiv2.ContextWithAPIKeyID(whoamiCtx, keyID)
 	whoamiReq = whoamiReq.WithContext(whoamiCtx)
 	whoamiRec := httptest.NewRecorder()
 	s.handleV2Whoami(whoamiRec, whoamiReq)

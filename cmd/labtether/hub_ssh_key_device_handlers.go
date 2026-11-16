@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -63,7 +64,7 @@ func (s *apiServer) updateAssetHubSSHKey(w http.ResponseWriter, r *http.Request,
 	if !apiv2.RequireScope(w, r, "hub:admin") {
 		return
 	}
-	if !auth.HasAdminPrivileges(userRoleFromContext(r.Context())) {
+	if !auth.HasAdminPrivileges(apiv2.UserRoleFromContext(r.Context())) {
 		servicehttp.WriteError(w, http.StatusForbidden, "only an admin or owner can change the Hub SSH key")
 		return
 	}
@@ -71,7 +72,7 @@ func (s *apiServer) updateAssetHubSSHKey(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var req hubSSHKeySettingRequest
-	if err := decodeJSONBody(w, r, &req); err != nil || req.Enabled == nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil || req.Enabled == nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "enabled must be true or false")
 		return
 	}
@@ -111,7 +112,7 @@ func (s *apiServer) hubSSHKeySettingPayload(setting persistence.HubSSHKeySetting
 
 func (s *apiServer) auditHubSSHKeySetting(r *http.Request, assetID string, change hubSSHKeyChange) {
 	event := audit.NewEvent(hubSSHKeySettingAuditType)
-	event.ActorID = principalActorID(r.Context())
+	event.ActorID = apiv2.PrincipalActorID(r.Context())
 	event.Target = assetID
 	event.Decision = "applied"
 	event.Details = map[string]any{

@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 type oidcClientSecretMigrator interface {
@@ -45,7 +47,7 @@ func runHub(ctx context.Context) error {
 		return newStartupFailure(startupFailureAuthConfiguration, err)
 	}
 
-	databaseURL := envOrDefault("DATABASE_URL", persistence.DefaultDatabaseURL("localhost"))
+	databaseURL := shared.EnvOrDefault("DATABASE_URL", persistence.DefaultDatabaseURL("localhost"))
 	pgStore, err := persistence.NewPostgresStore(ctx, databaseURL)
 	if err != nil {
 		return newDatabaseStartupFailure(err)
@@ -81,7 +83,7 @@ func runHub(ctx context.Context) error {
 	}()
 	ctx = leaseCtx
 
-	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
+	dataDir := shared.EnvOrDefault("LABTETHER_DATA_DIR", "data")
 	if err := checkEncryptionKeyPresentForData(ctx, newInstallStateStore(dataDir), pgStore); err != nil {
 		return newStartupFailure(startupFailureEncryptionConfig, err)
 	}
@@ -118,9 +120,9 @@ func runHub(ctx context.Context) error {
 		return err
 	}
 
-	demoMode := envOrDefaultBool("LABTETHER_DEMO_MODE", false)
+	demoMode := shared.EnvOrDefaultBool("LABTETHER_DEMO_MODE", false)
 	if demoMode {
-		demoConfirm := envOrDefault("LABTETHER_DEMO_CONFIRM", "")
+		demoConfirm := shared.EnvOrDefault("LABTETHER_DEMO_CONFIRM", "")
 		if demoConfirm != "yes-this-is-a-demo-instance" {
 			return newStartupFailure(startupFailureDemoConfiguration, errors.New("demo mode confirmation is not configured"))
 		}
@@ -216,11 +218,11 @@ func runHub(ctx context.Context) error {
 	startRuntimeLoops(runtimeCtx, srv, pgStore, worker.state, worker.retentionTracker)
 
 	// --- TLS mode resolution ---
-	tlsMode := resolveTLSModeSetting(envOrDefault("LABTETHER_TLS_MODE", "auto"))
-	tlsCertFile := envOrDefault("LABTETHER_TLS_CERT", "")
-	tlsKeyFile := envOrDefault("LABTETHER_TLS_KEY", "")
-	httpsPort := envOrDefault("LABTETHER_HTTPS_PORT", "8443")
-	httpPort := envOrDefault("LABTETHER_HTTP_PORT", envOrDefault("API_PORT", "8080"))
+	tlsMode := resolveTLSModeSetting(shared.EnvOrDefault("LABTETHER_TLS_MODE", "auto"))
+	tlsCertFile := shared.EnvOrDefault("LABTETHER_TLS_CERT", "")
+	tlsKeyFile := shared.EnvOrDefault("LABTETHER_TLS_KEY", "")
+	httpsPort := shared.EnvOrDefault("LABTETHER_HTTPS_PORT", "8443")
+	httpPort := shared.EnvOrDefault("LABTETHER_HTTP_PORT", shared.EnvOrDefault("API_PORT", "8080"))
 
 	// External cert env vars override mode to "external"
 	if tlsCertFile != "" && tlsKeyFile != "" && tlsMode == "auto" {
@@ -407,7 +409,7 @@ func runHub(ctx context.Context) error {
 	// display the prompt and auto-denies it, which cascades to block ALL
 	// local network access for the entire process. Disable mDNS when
 	// LABTETHER_DISABLE_MDNS=true to avoid this.
-	if !envOrDefaultBool("LABTETHER_DISABLE_MDNS", false) {
+	if !shared.EnvOrDefaultBool("LABTETHER_DISABLE_MDNS", false) {
 		startMDNSAdvertiser(ctx, portInt)
 	} else {
 		log.Printf("labtether: mDNS advertiser disabled (LABTETHER_DISABLE_MDNS=true)")

@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
+	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/runtimesettings"
 	"github.com/labtether/labtether/internal/terminal"
@@ -77,12 +79,12 @@ func TestStatusAggregateSummaryUsesWebServices(t *testing.T) {
 }
 
 func TestStatusEndpointTargetsOmitsNodeAgentForDefaultSource(t *testing.T) {
-	targets := statusEndpointTargets(
-		statusResolvedRoutingURL{
+	targets := statusaggpkg.BuildEndpointTargets(
+		statusaggpkg.ResolvedRoutingURL{
 			URL:    "http://localhost:8080",
 			Source: runtimesettings.SourceDefault,
 		},
-		statusResolvedRoutingURL{
+		statusaggpkg.ResolvedRoutingURL{
 			URL:    "http://localhost:8090",
 			Source: runtimesettings.SourceDefault,
 		},
@@ -101,12 +103,12 @@ func TestStatusEndpointTargetsOmitsNodeAgentForDefaultSource(t *testing.T) {
 }
 
 func TestStatusEndpointTargetsOmitsNodeAgentWhenHubNotDockerHosted(t *testing.T) {
-	targets := statusEndpointTargets(
-		statusResolvedRoutingURL{
+	targets := statusaggpkg.BuildEndpointTargets(
+		statusaggpkg.ResolvedRoutingURL{
 			URL:    "https://localhost:8443",
 			Source: runtimesettings.SourceDefault,
 		},
-		statusResolvedRoutingURL{
+		statusaggpkg.ResolvedRoutingURL{
 			URL:    "https://labtether-agent:8090",
 			Source: runtimesettings.SourceUI,
 		},
@@ -132,12 +134,12 @@ func TestStatusEndpointTargetsIncludesNodeAgentForConfiguredSourceWhenHubDockerH
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			targets := statusEndpointTargets(
-				statusResolvedRoutingURL{
+			targets := statusaggpkg.BuildEndpointTargets(
+				statusaggpkg.ResolvedRoutingURL{
 					URL:    "https://labtether:8443",
 					Source: runtimesettings.SourceDocker,
 				},
-				statusResolvedRoutingURL{
+				statusaggpkg.ResolvedRoutingURL{
 					URL:    "https://labtether-agent:8090",
 					Source: tc.source,
 				},
@@ -210,7 +212,7 @@ func TestHandleStatusAggregateScopesTerminalDataAndETagsByActor(t *testing.T) {
 
 	actorReq := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil)
 	actorReq.Header.Set("If-None-Match", ownerETag)
-	actorReq = actorReq.WithContext(contextWithUserID(actorReq.Context(), "actor-a"))
+	actorReq = actorReq.WithContext(apiv2.ContextWithUserID(actorReq.Context(), "actor-a"))
 	actorRec := httptest.NewRecorder()
 	handler(actorRec, actorReq)
 	if actorRec.Code != http.StatusOK {
@@ -245,7 +247,7 @@ func TestHandleStatusAggregateScopesTerminalDataAndETagsByActor(t *testing.T) {
 
 	actorCachedReq := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil)
 	actorCachedReq.Header.Set("If-None-Match", actorETag)
-	actorCachedReq = actorCachedReq.WithContext(contextWithUserID(actorCachedReq.Context(), "actor-a"))
+	actorCachedReq = actorCachedReq.WithContext(apiv2.ContextWithUserID(actorCachedReq.Context(), "actor-a"))
 	actorCachedRec := httptest.NewRecorder()
 	handler(actorCachedRec, actorCachedReq)
 	if actorCachedRec.Code != http.StatusNotModified {
@@ -286,8 +288,8 @@ func TestHandleStatusAggregateEnforcesScopesAndAssetAllowlist(t *testing.T) {
 	}
 
 	fullCtx := contextWithPrincipal(context.Background(), actorID, "operator")
-	fullCtx = contextWithScopes(fullCtx, []string{"hub:read", "assets:read", "logs:read", "terminal:read"})
-	fullCtx = contextWithAllowedAssets(fullCtx, []string{"asset-a"})
+	fullCtx = apiv2.ContextWithScopes(fullCtx, []string{"hub:read", "assets:read", "logs:read", "terminal:read"})
+	fullCtx = apiv2.ContextWithAllowedAssets(fullCtx, []string{"asset-a"})
 
 	handler := sut.handleStatusAggregate(nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil).WithContext(fullCtx)
@@ -325,8 +327,8 @@ func TestHandleStatusAggregateEnforcesScopesAndAssetAllowlist(t *testing.T) {
 	}
 
 	hubOnlyCtx := contextWithPrincipal(context.Background(), actorID, "operator")
-	hubOnlyCtx = contextWithScopes(hubOnlyCtx, []string{"hub:read"})
-	hubOnlyCtx = contextWithAllowedAssets(hubOnlyCtx, []string{"asset-a"})
+	hubOnlyCtx = apiv2.ContextWithScopes(hubOnlyCtx, []string{"hub:read"})
+	hubOnlyCtx = apiv2.ContextWithAllowedAssets(hubOnlyCtx, []string{"asset-a"})
 	hubOnlyReq := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil).WithContext(hubOnlyCtx)
 	hubOnlyRec := httptest.NewRecorder()
 	handler(hubOnlyRec, hubOnlyReq)

@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // Tests exercise the local aliases defined in env_helpers.go, which delegate to
@@ -13,21 +15,21 @@ import (
 func TestEnvHelperEnvOrDefault(t *testing.T) {
 	t.Run("returns value when env set", func(t *testing.T) {
 		t.Setenv("LT_TEST_ENVORDEFAULT", "hello")
-		if got := envOrDefault("LT_TEST_ENVORDEFAULT", "fallback"); got != "hello" {
+		if got := shared.EnvOrDefault("LT_TEST_ENVORDEFAULT", "fallback"); got != "hello" {
 			t.Fatalf("expected hello, got %q", got)
 		}
 	})
 
 	t.Run("returns fallback when env unset", func(t *testing.T) {
 		t.Setenv("LT_TEST_ENVORDEFAULT_UNSET", "")
-		if got := envOrDefault("LT_TEST_ENVORDEFAULT_UNSET", "fallback"); got != "fallback" {
+		if got := shared.EnvOrDefault("LT_TEST_ENVORDEFAULT_UNSET", "fallback"); got != "fallback" {
 			t.Fatalf("expected fallback, got %q", got)
 		}
 	})
 
 	t.Run("returns fallback when env missing", func(t *testing.T) {
 		// Key deliberately not set in this subtest.
-		if got := envOrDefault("LT_TEST_ENVORDEFAULT_MISSING_KEY_XYZ", "default"); got != "default" {
+		if got := shared.EnvOrDefault("LT_TEST_ENVORDEFAULT_MISSING_KEY_XYZ", "default"); got != "default" {
 			t.Fatalf("expected default, got %q", got)
 		}
 	})
@@ -51,7 +53,7 @@ func TestEnvHelperEnvOrDefaultInt(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("LT_TEST_INT", tc.envValue)
-			if got := envOrDefaultInt("LT_TEST_INT", tc.fallback); got != tc.want {
+			if got := shared.EnvOrDefaultInt("LT_TEST_INT", tc.fallback); got != tc.want {
 				t.Fatalf("expected %d, got %d", tc.want, got)
 			}
 		})
@@ -76,7 +78,7 @@ func TestEnvHelperEnvOrDefaultUint64(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("LT_TEST_UINT64", tc.envValue)
-			if got := envOrDefaultUint64("LT_TEST_UINT64", tc.fallback); got != tc.want {
+			if got := shared.EnvOrDefaultUint64("LT_TEST_UINT64", tc.fallback); got != tc.want {
 				t.Fatalf("expected %d, got %d", tc.want, got)
 			}
 		})
@@ -101,7 +103,7 @@ func TestEnvHelperEnvOrDefaultDuration(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("LT_TEST_DUR", tc.envValue)
-			if got := envOrDefaultDuration("LT_TEST_DUR", tc.fallback); got != tc.want {
+			if got := shared.EnvOrDefaultDuration("LT_TEST_DUR", tc.fallback); got != tc.want {
 				t.Fatalf("expected %v, got %v", tc.want, got)
 			}
 		})
@@ -128,7 +130,7 @@ func TestEnvHelperEnvOrDefaultBool(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("LT_TEST_BOOL", tc.envValue)
-			if got := envOrDefaultBool("LT_TEST_BOOL", tc.fallback); got != tc.want {
+			if got := shared.EnvOrDefaultBool("LT_TEST_BOOL", tc.fallback); got != tc.want {
 				t.Fatalf("expected %v, got %v", tc.want, got)
 			}
 		})
@@ -149,7 +151,7 @@ func TestEnvHelperUint64ToIntClamp(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := uint64ToIntClamp(tc.input); got != tc.want {
+			if got := shared.Uint64ToIntClamp(tc.input); got != tc.want {
 				t.Fatalf("uint64ToIntClamp(%d): expected %d, got %d", tc.input, tc.want, got)
 			}
 		})
@@ -170,7 +172,7 @@ func TestEnvHelperIntToUint64NonNegative(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := intToUint64NonNegative(tc.input); got != tc.want {
+			if got := shared.IntToUint64NonNegative(tc.input); got != tc.want {
 				t.Fatalf("intToUint64NonNegative(%d): expected %d, got %d", tc.input, tc.want, got)
 			}
 		})

@@ -15,6 +15,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	dockerconnector "github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/credentials"
@@ -135,7 +136,7 @@ func TestMCPMetricsOverviewUsesProductionStoresAndAllowlist(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ctx := contextWithAllowedAssets(context.Background(), []string{"allowed"})
+	ctx := apiv2.ContextWithAllowedAssets(context.Background(), []string{"allowed"})
 	result, err := sut.mcpMetricsOverview()(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -225,8 +226,8 @@ func TestMCPDockerAuthorizationFiltersHostsAndHidesRestrictedContainerExistence(
 	sut := newTestAPIServer(t)
 	sut.dockerCoordinator = coord
 	ctx := contextWithPrincipal(context.Background(), "apikey:restricted", "operator")
-	ctx = contextWithScopes(ctx, []string{"*"})
-	ctx = contextWithAllowedAssets(ctx, []string{"host-allowed"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"*"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"host-allowed"})
 
 	mcpServer := sut.buildMCPServer()
 	hostsResult, err := mcpServer.GetTool("docker_hosts").Handler(ctx, mcpBridgeToolRequest(nil))
@@ -346,7 +347,7 @@ func TestMCPAlertReadAndAcknowledgeEnforceCurrentAssetAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := contextWithAllowedAssets(context.Background(), []string{"asset-a"})
+	ctx := apiv2.ContextWithAllowedAssets(context.Background(), []string{"asset-a"})
 	instances, err := sut.mcpListAlerts()(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -381,7 +382,7 @@ func TestMCPRestrictedOperationalCollectionsFilterEveryAssetReference(t *testing
 	sut := newTestAPIServer(t)
 	actorID := "apikey:restricted"
 	ctx := contextWithPrincipal(context.Background(), actorID, "operator")
-	ctx = contextWithAllowedAssets(ctx, []string{"asset-a", "asset-c"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"asset-a", "asset-c"})
 
 	parent, err := sut.groupStore.CreateGroup(groups.CreateRequest{Name: "mixed parent", Slug: "mixed-parent"})
 	if err != nil {

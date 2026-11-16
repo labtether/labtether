@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 type fakeNotificationAdapter struct {
@@ -28,8 +30,8 @@ func (a *fakeNotificationAdapter) Type() string { return a.typ }
 
 func (a *fakeNotificationAdapter) Send(_ context.Context, config map[string]any, payload map[string]any) error {
 	a.calls = append(a.calls, fakeNotificationCall{
-		Config:  cloneAnyMap(config),
-		Payload: cloneAnyMap(payload),
+		Config:  shared.CloneAnyMap(config),
+		Payload: shared.CloneAnyMap(payload),
 	})
 	return a.sendErr
 }

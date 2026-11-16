@@ -174,7 +174,7 @@ func TestHandleDesktopSessionsRejectsInvalidOptionsBeforeCreatingSession(t *test
 			}
 
 			req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(tc.body))
-			req = req.WithContext(contextWithUserID(req.Context(), "actor-options"))
+			req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "actor-options"))
 			rec := httptest.NewRecorder()
 			sut.handleDesktopSessions(rec, req)
 			if rec.Code != http.StatusBadRequest {
@@ -274,7 +274,7 @@ func TestHandleDesktopSessionActionsRejectCrossActorAccess(t *testing.T) {
 	}
 
 	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-authz"}`))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -292,7 +292,7 @@ func TestHandleDesktopSessionActionsRejectCrossActorAccess(t *testing.T) {
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+created.ID, nil)
-	getReq = getReq.WithContext(contextWithUserID(getReq.Context(), "actor-b"))
+	getReq = getReq.WithContext(apiv2.ContextWithUserID(getReq.Context(), "actor-b"))
 	getRec := httptest.NewRecorder()
 	sut.handleDesktopSessionActions(getRec, getReq)
 
@@ -327,7 +327,7 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	}
 
 	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-cleanup","protocol":"vnc"}`))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -363,7 +363,7 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	sut.webrtcBridges.Store(created.ID, webrtcBridge)
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/desktop/sessions/"+created.ID, nil)
-	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
 	sut.handleDesktopSessionActions(deleteRec, deleteReq)
 
