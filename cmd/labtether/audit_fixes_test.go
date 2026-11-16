@@ -92,7 +92,7 @@ func TestDeliverFileResponseFailsStalledBridgeCapacity(t *testing.T) {
 
 	delivered := make(chan struct{})
 	go func() {
-		sut.deliverFileResponse("req-1", second)
+		sut.ensureResourcesDeps().DeliverFileResponse("req-1", second)
 		close(delivered)
 	}()
 

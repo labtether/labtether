@@ -56,7 +56,7 @@ func TestMCPListServicesUsesCorrelatedTypedProtocol(t *testing.T) {
 			RequestID: request.RequestID,
 			Services:  []agentmgr.ServiceInfo{{Name: "sshd", ActiveState: "active"}},
 		})
-		sut.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
 			Type: agentmgr.MsgServiceListed,
 			ID:   request.RequestID,
 			Data: data,

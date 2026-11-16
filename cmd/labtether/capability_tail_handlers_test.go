@@ -54,7 +54,7 @@ func TestHandleCronListBridgesAgentInventory(t *testing.T) {
 				User:     "root",
 			}},
 		})
-		sut.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-cron"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentCronListed(&agentmgr.AgentConn{AssetID: "node-cron"}, agentmgr.Message{
 			Type: agentmgr.MsgCronListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -119,7 +119,7 @@ func TestHandleUsersListBridgesAgentInventory(t *testing.T) {
 				LoginTime:  "2026-03-08T14:30:00Z",
 			}},
 		})
-		sut.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-users"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-users"}, agentmgr.Message{
 			Type: agentmgr.MsgUsersListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -187,7 +187,7 @@ func TestHandleDiskListBridgesAgentInventory(t *testing.T) {
 				UsePct:     40,
 			}},
 		})
-		sut.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk"}, agentmgr.Message{
 			Type: agentmgr.MsgDiskListed,
 			ID:   req.RequestID,
 			Data: raw,

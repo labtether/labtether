@@ -28,14 +28,14 @@ func TestProcessAgentProcessListedRejectsMismatchedSender(t *testing.T) {
 		Processes: []agentmgr.ProcessInfo{{PID: 1, Name: "init"}},
 	})
 
-	srv.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender process payload to be ignored")
 	default:
 	}
 
-	srv.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -54,14 +54,14 @@ func TestProcessAgentProcessKillResultRejectsMismatchedSender(t *testing.T) {
 	payload.Type = agentmgr.MsgProcessKillResult
 	payload.ID = "req-kill-asset-bound"
 
-	srv.processAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender process kill payload to be ignored")
 	default:
 	}
 
-	srv.processAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -78,14 +78,14 @@ func TestProcessAgentCronListedRejectsMismatchedSender(t *testing.T) {
 		Entries:   []agentmgr.CronEntry{{Source: "crontab", Schedule: "* * * * *", Command: "true", User: "root"}},
 	})
 
-	srv.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentCronListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender cron payload to be ignored")
 	default:
 	}
 
-	srv.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentCronListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -102,14 +102,14 @@ func TestProcessAgentUsersListedRejectsMismatchedSender(t *testing.T) {
 		Sessions:  []agentmgr.UserSession{{Username: "alice", Terminal: "pts/0", LoginTime: "2026-03-08T14:30:00Z"}},
 	})
 
-	srv.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender users payload to be ignored")
 	default:
 	}
 
-	srv.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -126,14 +126,14 @@ func TestProcessAgentDiskListedRejectsMismatchedSender(t *testing.T) {
 		Mounts:    []agentmgr.MountInfo{{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4", Total: 100, Used: 40, Available: 60, UsePct: 40}},
 	})
 
-	srv.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender disk payload to be ignored")
 	default:
 	}
 
-	srv.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -150,14 +150,14 @@ func TestProcessAgentServiceListedRejectsMismatchedSender(t *testing.T) {
 		Services:  []agentmgr.ServiceInfo{{Name: "sshd"}},
 	})
 
-	srv.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender service list payload to be ignored")
 	default:
 	}
 
-	srv.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -174,14 +174,14 @@ func TestProcessAgentServiceResultRejectsMismatchedSender(t *testing.T) {
 		OK:        true,
 	})
 
-	srv.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender service result payload to be ignored")
 	default:
 	}
 
-	srv.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -200,14 +200,14 @@ func TestProcessAgentNetworkListedRejectsMismatchedSender(t *testing.T) {
 		}},
 	})
 
-	srv.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender network list payload to be ignored")
 	default:
 	}
 
-	srv.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -224,14 +224,14 @@ func TestProcessAgentNetworkResultRejectsMismatchedSender(t *testing.T) {
 		OK:        true,
 	})
 
-	srv.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender network result payload to be ignored")
 	default:
 	}
 
-	srv.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -248,7 +248,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 		Packages:  []agentmgr.PackageInfo{{Name: "jq"}},
 	})
 
-	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender package list payload to be ignored")
@@ -256,7 +256,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	}
 
 	payload.ID = "different-request"
-	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched envelope/package request id to be ignored")
@@ -264,7 +264,7 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	}
 
 	payload.ID = "req-pkg-asset-bound"
-	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -281,7 +281,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 		OK:        true,
 	})
 
-	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender package result payload to be ignored")
@@ -289,7 +289,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	}
 
 	payload.ID = "different-request"
-	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched envelope/package result id to be ignored")
@@ -297,7 +297,7 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	}
 
 	payload.ID = "req-pkg-result-asset-bound"
-	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -340,14 +340,14 @@ func TestProcessAgentFileDataRejectsMismatchedSender(t *testing.T) {
 		Data:      base64.StdEncoding.EncodeToString([]byte("chunk")),
 	})
 
-	srv.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-bridge.Ch:
 		t.Fatal("expected mismatched sender file payload to be ignored")
 	default:
 	}
 
-	srv.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-bridge.Ch:
 	case <-time.After(time.Second):
@@ -363,14 +363,14 @@ func TestProcessAgentJournalEntriesRejectsMismatchedSender(t *testing.T) {
 		RequestID: "req-journal-bound",
 	})
 
-	srv.processAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender journal payload to be ignored")
 	default:
 	}
 
-	srv.processAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureResourcesDeps().ProcessAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -399,64 +399,64 @@ func TestProcessAgentNodeOpsHandlersIgnoreNonBridgeEntries(t *testing.T) {
 	// no connection and must drop it without a panic.
 	t.Run("cron listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentCronListed(nil, marshalAgentMessage(t, agentmgr.CronListedData{RequestID: "req-cron"}))
+		srv.ensureResourcesDeps().ProcessAgentCronListed(nil, marshalAgentMessage(t, agentmgr.CronListedData{RequestID: "req-cron"}))
 	})
 
 	t.Run("process listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentProcessListed(nil, marshalAgentMessage(t, agentmgr.ProcessListedData{RequestID: "req-proc"}))
+		srv.ensureResourcesDeps().ProcessAgentProcessListed(nil, marshalAgentMessage(t, agentmgr.ProcessListedData{RequestID: "req-proc"}))
 	})
 
 	t.Run("process kill result", func(t *testing.T) {
 		var srv apiServer
 		msg := marshalAgentMessage(t, agentmgr.ProcessKillResultData{PID: 42, Success: true})
 		msg.ID = "req-proc-kill"
-		srv.processAgentProcessKillResult(nil, msg)
+		srv.ensureResourcesDeps().ProcessAgentProcessKillResult(nil, msg)
 	})
 
 	t.Run("service listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentServiceListed(nil, marshalAgentMessage(t, agentmgr.ServiceListedData{RequestID: "req-svc-list"}))
+		srv.ensureResourcesDeps().ProcessAgentServiceListed(nil, marshalAgentMessage(t, agentmgr.ServiceListedData{RequestID: "req-svc-list"}))
 	})
 
 	t.Run("service result", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentServiceResult(nil, marshalAgentMessage(t, agentmgr.ServiceResultData{RequestID: "req-svc-result"}))
+		srv.ensureResourcesDeps().ProcessAgentServiceResult(nil, marshalAgentMessage(t, agentmgr.ServiceResultData{RequestID: "req-svc-result"}))
 	})
 
 	t.Run("network listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentNetworkListed(nil, marshalAgentMessage(t, agentmgr.NetworkListedData{RequestID: "req-net-list"}))
+		srv.ensureResourcesDeps().ProcessAgentNetworkListed(nil, marshalAgentMessage(t, agentmgr.NetworkListedData{RequestID: "req-net-list"}))
 	})
 
 	t.Run("network result", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentNetworkResult(nil, marshalAgentMessage(t, agentmgr.NetworkResultData{RequestID: "req-net-result"}))
+		srv.ensureResourcesDeps().ProcessAgentNetworkResult(nil, marshalAgentMessage(t, agentmgr.NetworkResultData{RequestID: "req-net-result"}))
 	})
 
 	t.Run("disk listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentDiskListed(nil, marshalAgentMessage(t, agentmgr.DiskListedData{RequestID: "req-disk"}))
+		srv.ensureResourcesDeps().ProcessAgentDiskListed(nil, marshalAgentMessage(t, agentmgr.DiskListedData{RequestID: "req-disk"}))
 	})
 
 	t.Run("package listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentPackageListed(nil, marshalAgentMessage(t, agentmgr.PackageListedData{RequestID: "req-pkg-list"}))
+		srv.ensureResourcesDeps().ProcessAgentPackageListed(nil, marshalAgentMessage(t, agentmgr.PackageListedData{RequestID: "req-pkg-list"}))
 	})
 
 	t.Run("package result", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentPackageResult(nil, marshalAgentMessage(t, agentmgr.PackageResultData{RequestID: "req-pkg-result"}))
+		srv.ensureResourcesDeps().ProcessAgentPackageResult(nil, marshalAgentMessage(t, agentmgr.PackageResultData{RequestID: "req-pkg-result"}))
 	})
 
 	t.Run("users listed", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentUsersListed(nil, marshalAgentMessage(t, agentmgr.UsersListedData{RequestID: "req-users"}))
+		srv.ensureResourcesDeps().ProcessAgentUsersListed(nil, marshalAgentMessage(t, agentmgr.UsersListedData{RequestID: "req-users"}))
 	})
 
 	t.Run("journal entries", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentJournalEntries(nil, marshalAgentMessage(t, agentmgr.JournalEntriesData{RequestID: "req-journal"}))
+		srv.ensureResourcesDeps().ProcessAgentJournalEntries(nil, marshalAgentMessage(t, agentmgr.JournalEntriesData{RequestID: "req-journal"}))
 	})
 
 	t.Run("desktop displays", func(t *testing.T) {
@@ -469,11 +469,11 @@ func TestProcessAgentFileHandlersIgnoreNonBridgeEntries(t *testing.T) {
 	var srv apiServer
 	srv.fileBridges.Store("req-file", "ignore-me")
 
-	srv.processAgentFileListed(nil, marshalAgentMessage(t, agentmgr.FileListedData{RequestID: "req-file"}))
-	srv.processAgentFileData(nil, marshalAgentMessage(t, agentmgr.FileDataPayload{
+	srv.ensureResourcesDeps().ProcessAgentFileListed(nil, marshalAgentMessage(t, agentmgr.FileListedData{RequestID: "req-file"}))
+	srv.ensureResourcesDeps().ProcessAgentFileData(nil, marshalAgentMessage(t, agentmgr.FileDataPayload{
 		RequestID: "req-file",
 		Data:      base64.StdEncoding.EncodeToString([]byte("chunk")),
 	}))
-	srv.processAgentFileWritten(nil, marshalAgentMessage(t, agentmgr.FileWrittenData{RequestID: "req-file"}))
-	srv.processAgentFileResult(nil, marshalAgentMessage(t, agentmgr.FileResultData{RequestID: "req-file"}))
+	srv.ensureResourcesDeps().ProcessAgentFileWritten(nil, marshalAgentMessage(t, agentmgr.FileWrittenData{RequestID: "req-file"}))
+	srv.ensureResourcesDeps().ProcessAgentFileResult(nil, marshalAgentMessage(t, agentmgr.FileResultData{RequestID: "req-file"}))
 }

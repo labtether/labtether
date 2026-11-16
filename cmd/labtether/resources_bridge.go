@@ -159,72 +159,6 @@ func (s *apiServer) ensureResourcesDeps() *respkg.Deps {
 // Forwarding methods from apiServer to resources.Deps so that existing
 // cmd/labtether callers keep compiling.
 
-// WS handler forwarding.
-
-func (s *apiServer) processAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentFileListed(conn, msg)
-}
-
-func (s *apiServer) processAgentFileData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentFileData(conn, msg)
-}
-
-func (s *apiServer) processAgentFileWritten(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentFileWritten(conn, msg)
-}
-
-func (s *apiServer) processAgentFileResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentFileResult(conn, msg)
-}
-
-func (s *apiServer) processAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentProcessListed(conn, msg)
-}
-
-func (s *apiServer) processAgentProcessKillResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentProcessKillResult(conn, msg)
-}
-
-func (s *apiServer) processAgentServiceListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentServiceListed(conn, msg)
-}
-
-func (s *apiServer) processAgentServiceResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentServiceResult(conn, msg)
-}
-
-func (s *apiServer) processAgentDiskListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentDiskListed(conn, msg)
-}
-
-func (s *apiServer) processAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentNetworkListed(conn, msg)
-}
-
-func (s *apiServer) processAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentNetworkResult(conn, msg)
-}
-
-func (s *apiServer) processAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentPackageListed(conn, msg)
-}
-
-func (s *apiServer) processAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentPackageResult(conn, msg)
-}
-
-func (s *apiServer) processAgentCronListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentCronListed(conn, msg)
-}
-
-func (s *apiServer) processAgentUsersListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentUsersListed(conn, msg)
-}
-
-func (s *apiServer) processAgentJournalEntries(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentJournalEntries(conn, msg)
-}
-
 // Type aliases for bridge types used in cmd/labtether/.
 type uploadRelaySendError = respkg.UploadRelaySendError
 type fileBridge = respkg.FileBridge
@@ -259,16 +193,6 @@ func decodeFileDownloadChunk(payload agentmgr.FileDataPayload) ([]byte, error) {
 
 func relayFileUploadChunks(body io.Reader, requestID, filePath string, chunkSize int, send func(agentmgr.FileWriteData) error) (int64, error) {
 	return respkg.RelayFileUploadChunks(body, requestID, filePath, chunkSize, send)
-}
-
-func (s *apiServer) deliverFileResponse(requestID string, msg agentmgr.Message) {
-	s.ensureResourcesDeps().DeliverFileResponse(requestID, msg)
-}
-
-// --- Forwarding for extracted handler methods ---
-
-func (s *apiServer) processAgentWoLResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureResourcesDeps().ProcessAgentWoLResult(conn, msg)
 }
 
 // handleGroupActions routes group sub-paths. Simple CRUD and move/reorder

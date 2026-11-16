@@ -89,7 +89,7 @@ func TestProcessMetricsRequireDynamicOptInAndEnforceTopN(t *testing.T) {
 				{PID: 10, Name: "first", CPUPct: 30, MemPct: 3, MemRSS: 10},
 				{PID: 20, Name: "second", CPUPct: 20, MemPct: 2, MemRSS: 20},
 			}})
-			sut.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-process-metrics"}, agentmgr.Message{Type: agentmgr.MsgProcessListed, Data: payload})
+			sut.ensureResourcesDeps().ProcessAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-process-metrics"}, agentmgr.Message{Type: agentmgr.MsgProcessListed, Data: payload})
 		}()
 		return done
 	}
@@ -170,7 +170,7 @@ func TestNetworkMetricsDeriveRatesFromCumulativeCounters(t *testing.T) {
 			payload, _ := json.Marshal(agentmgr.NetworkListedData{RequestID: request.RequestID, Interfaces: []agentmgr.NetInterface{{
 				Name: "eth0", RXBytes: rx, TXBytes: tx, RXPackets: rxPackets, TXPackets: txPackets,
 			}}})
-			sut.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-network-metrics"}, agentmgr.Message{Type: agentmgr.MsgNetworkListed, Data: payload})
+			sut.ensureResourcesDeps().ProcessAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-network-metrics"}, agentmgr.Message{Type: agentmgr.MsgNetworkListed, Data: payload})
 		}()
 		return done
 	}
@@ -212,7 +212,7 @@ func TestDiskMetricsUseBoundedValidatedMountData(t *testing.T) {
 			{MountPoint: "/", Total: 100, Used: 40, Available: 60, UsePct: 40},
 			{MountPoint: "/invalid", Total: 100, Used: 60, Available: 60, UsePct: 60},
 		}})
-		sut.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk-metrics"}, agentmgr.Message{Type: agentmgr.MsgDiskListed, Data: payload})
+		sut.ensureResourcesDeps().ProcessAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk-metrics"}, agentmgr.Message{Type: agentmgr.MsgDiskListed, Data: payload})
 	}()
 	entries := adapter.AllDiskMounts()
 	<-done
