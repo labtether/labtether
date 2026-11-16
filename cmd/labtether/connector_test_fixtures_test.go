@@ -13,7 +13,10 @@ import (
 // Connector test fixtures that cmd tests still use after the Proxmox tests
 // moved to internal/hubapi/proxmox. The stub store stays here because about
 // 50 cmd struct literals set its unexported collectors field; testutil has
-// the exported copy (StubHubCollectorStore) for package tests.
+// the exported copy (StubHubCollectorStore) for package tests. The same
+// holds for errorHubCollectorStore (ErrorHubCollectorStore), which cmd kept
+// when the PBS and TrueNAS tests moved. configurePBSTaskRuntime is kept for
+// pbs_task_routes_test.go, which still needs cmd.
 
 type stubHubCollectorStore struct {
 	collectors []hubcollector.Collector
@@ -92,4 +95,74 @@ func configureProxmoxStreamCollector(t *testing.T, sut *apiServer, baseURL, coll
 func newWebSocketPair(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
 	t.Helper()
 	return testutil.NewWebSocketPair(t)
+}
+
+type errorHubCollectorStore struct {
+	collectors []hubcollector.Collector
+	listErr    error
+	getErr     error
+}
+
+func (s *errorHubCollectorStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
+	return hubcollector.Collector{}, fmt.Errorf("not implemented")
+}
+
+func (s *errorHubCollectorStore) GetHubCollector(id string) (hubcollector.Collector, bool, error) {
+	if s.getErr != nil {
+		return hubcollector.Collector{}, false, s.getErr
+	}
+	for _, collector := range s.collectors {
+		if collector.ID == id {
+			return collector, true, nil
+		}
+	}
+	return hubcollector.Collector{}, false, nil
+}
+
+func (s *errorHubCollectorStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcollector.Collector, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	out := make([]hubcollector.Collector, 0, len(s.collectors))
+	for _, collector := range s.collectors {
+		if enabledOnly && !collector.Enabled {
+			continue
+		}
+		out = append(out, collector)
+	}
+	return out, nil
+}
+
+func (s *errorHubCollectorStore) UpdateHubCollector(id string, req hubcollector.UpdateCollectorRequest) (hubcollector.Collector, error) {
+	return hubcollector.Collector{}, fmt.Errorf("not implemented")
+}
+
+func (s *errorHubCollectorStore) DeleteHubCollector(id string) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (s *errorHubCollectorStore) UpdateHubCollectorStatus(id, status, lastError string, collectedAt time.Time) error {
+	return nil
+}
+
+func configurePBSTaskRuntime(t *testing.T, sut *apiServer, collectorID, credentialID, tokenID, baseURL string) {
+	t.Helper()
+
+	createPBSCredentialProfile(t, sut, credentialID, tokenID, "secret-"+collectorID, baseURL)
+	sut.hubCollectorStore = &stubHubCollectorStore{
+		collectors: []hubcollector.Collector{
+			{
+				ID:            collectorID,
+				AssetID:       "pbs-server-" + collectorID,
+				CollectorType: hubcollector.CollectorTypePBS,
+				Enabled:       true,
+				Config: map[string]any{
+					"base_url":      baseURL,
+					"credential_id": credentialID,
+					"token_id":      tokenID,
+					"skip_verify":   true,
+				},
+			},
+		},
+	}
 }

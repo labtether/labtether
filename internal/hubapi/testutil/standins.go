@@ -126,13 +126,19 @@ func (s *StreamTickets) Issue(ctx context.Context, sessionID string) (string, ti
 	return ticket, time.Now().UTC().Add(60 * time.Second), nil
 }
 
+// CheckNoBrowserOrigin stands in for cmd's checkSameOrigin. It accepts only
+// requests with no Origin header (non-browser clients, which cmd also
+// accepts) and refuses every browser origin; cmd's same-origin policy is
+// tested in cmd.
+func CheckNoBrowserOrigin(r *http.Request) bool {
+	return strings.TrimSpace(r.Header.Get("Origin")) == ""
+}
+
 // NewStreamUpgrader returns a WebSocket upgrader with the subprotocol of
-// cmd's terminalWebSocketUpgrader. Its origin check accepts only requests
-// with no Origin header (non-browser clients, which cmd also accepts) and
-// refuses every browser origin; cmd's same-origin policy is tested in cmd.
+// cmd's terminalWebSocketUpgrader and the CheckNoBrowserOrigin check.
 func NewStreamUpgrader() *websocket.Upgrader {
 	return &websocket.Upgrader{
-		CheckOrigin:  func(r *http.Request) bool { return strings.TrimSpace(r.Header.Get("Origin")) == "" },
+		CheckOrigin:  CheckNoBrowserOrigin,
 		Subprotocols: []string{"binary"},
 	}
 }

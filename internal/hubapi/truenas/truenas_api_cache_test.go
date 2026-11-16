@@ -1,7 +1,9 @@
-package main
+package truenas_test
 
 import (
 	"errors"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -11,27 +13,27 @@ import (
 
 func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 	t.Run("events path clamps limit and handles query error", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events?limit=9999", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 for clamped events query, got %d", rec.Code)
 		}
 
-		sut.logStore = &failingTrueNASQueryLogStore{
-			LogStore: sut.logStore,
+		sut.LogStore = &failingTrueNASQueryLogStore{
+			LogStore: sut.LogStore,
 			err:      errors.New("query failed"),
 		}
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for log query failure, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("smart handler error and warning paths", func(t *testing.T) {
@@ -58,7 +60,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-smart-branches", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-smart-branches",
@@ -74,7 +76,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 smart response, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -96,7 +98,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-smart-error", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-smart-error",
@@ -112,7 +114,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for smart disk query error, got %d", rec.Code)
 		}
@@ -133,7 +135,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-fs-branches", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-fs-branches",
@@ -149,7 +151,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/filesystem?path=.&limit=2", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 filesystem response, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -176,7 +178,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 		seedTrueNASAsset(t, sut, "truenas-host-fs-error", "collector-truenas-fs-error")
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-fs-error/filesystem", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 filesystem error, got %d", rec.Code)
 		}
@@ -203,7 +205,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-cache-smart", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-cache-smart",
@@ -219,7 +221,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-cache-smart/smart", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected initial smart response 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -230,7 +232,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 		failQueries = true
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-cache-smart/smart", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected cached smart response 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -259,7 +261,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-cache-fs", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-cache-fs",
@@ -275,7 +277,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-cache-fs/filesystem?path=/mnt", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected initial filesystem response 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -286,7 +288,7 @@ func TestTrueNASAPIHandlersCacheFallback(t *testing.T) {
 		failListDir = true
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-cache-fs/filesystem?path=/mnt", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected cached filesystem response 200, got %d body=%s", rec.Code, rec.Body.String())
 		}

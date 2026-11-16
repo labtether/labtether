@@ -18,9 +18,11 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/pbs"
 	"github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/truenas"
 )
 
 // Hub stands in for cmd/labtether's apiServer in package tests. Tests change
@@ -36,6 +38,14 @@ type Hub struct {
 	// Proxmox, when set, is returned by ProxmoxDeps instead of a fresh
 	// build, as apiServer.proxmoxDeps is. Production sets it once at start.
 	Proxmox *proxmox.Deps
+
+	// The PBS and TrueNAS Deps are built once and kept, as cmd keeps
+	// apiServer.pbsDeps and truenasDeps, so their runtime and read caches
+	// last for the test. See PBSDeps and TrueNASDeps.
+	pbsOnce     sync.Once
+	pbsDeps     *pbs.Deps
+	truenasOnce sync.Once
+	truenasDeps *truenas.Deps
 
 	t            *testing.T
 	desktopSPICE struct {

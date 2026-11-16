@@ -1,10 +1,12 @@
-package main
+package pbs_test
 
 import (
 	"context"
 	"fmt"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/pbs"
+	pbspkg "github.com/labtether/labtether/internal/hubapi/pbs"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,11 +25,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-metadata-missing",
 		}
-		_, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		_, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-server-a",
 			Type:   "storage-pool",
 			Source: "pbs",
@@ -62,11 +64,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-datastore-success",
 		}
-		response, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		response, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-datastore-backup",
 			Type:   "storage-pool",
 			Source: "pbs",
@@ -110,11 +112,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-datastore-warnings",
 		}
-		response, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		response, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-datastore-backup",
 			Type:   "storage-pool",
 			Source: "pbs",
@@ -167,11 +169,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-server-warnings",
 		}
-		response, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		response, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-server-main",
 			Type:   "storage-controller",
 			Source: "pbs",
@@ -249,11 +251,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-server-success",
 		}
-		response, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		response, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-server-main",
 			Type:   "storage-controller",
 			Source: "pbs",
@@ -287,11 +289,11 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		runtime := &pbsRuntime{
+		runtime := &pbspkg.PBSRuntime{
 			Client:      mustNewPBSClient(t, server.URL),
 			CollectorID: "collector-pbs-server-error",
 		}
-		_, err := newTestAPIServer(t).loadPBSAssetDetails(context.Background(), assets.Asset{
+		_, err := hubdeps.New(t).PBSDeps().LoadPBSAssetDetails(context.Background(), assets.Asset{
 			ID:     "pbs-server-main",
 			Type:   "storage-controller",
 			Source: "pbs",
@@ -313,7 +315,7 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, _, err := loadPBSDatastoreSummary(context.Background(), mustNewPBSClient(t, server.URL), "backup", pbs.DatastoreUsage{})
+		_, _, err := pbspkg.LoadPBSDatastoreSummary(context.Background(), mustNewPBSClient(t, server.URL), "backup", pbs.DatastoreUsage{})
 		if err == nil {
 			t.Fatalf("expected datastore status error")
 		}
@@ -336,7 +338,7 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		summary, warnings, err := loadPBSDatastoreSummary(
+		summary, warnings, err := pbspkg.LoadPBSDatastoreSummary(
 			context.Background(),
 			mustNewPBSClient(t, server.URL),
 			"backup",
@@ -374,7 +376,7 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		summary, warnings, err := loadPBSDatastoreSummary(context.Background(), mustNewPBSClient(t, server.URL), "backup", pbs.DatastoreUsage{})
+		summary, warnings, err := pbspkg.LoadPBSDatastoreSummary(context.Background(), mustNewPBSClient(t, server.URL), "backup", pbs.DatastoreUsage{})
 		if err != nil {
 			t.Fatalf("loadPBSDatastoreSummary() error = %v", err)
 		}

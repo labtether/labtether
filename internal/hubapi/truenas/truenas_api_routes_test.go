@@ -1,9 +1,11 @@
-package main
+package truenas_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/connectors/truenas"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -14,28 +16,28 @@ import (
 
 func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 	t.Run("asset route rejects empty asset id segment", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets//events", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 for empty asset id segment, got %d", rec.Code)
 		}
 	})
 
 	t.Run("smart and filesystem handlers propagate resolve errors", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/missing/smart", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 for missing smart asset, got %d", rec.Code)
 		}
 
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/missing/filesystem", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 for missing filesystem asset, got %d", rec.Code)
 		}
@@ -58,7 +60,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 		})
 		defer warningServer.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-smart-warning", "api-key", warningServer.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-smart-warning",
@@ -74,7 +76,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas-warning/smart", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 smart response, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -116,7 +118,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 
 		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas-fallback/smart", nil)
 		rec = httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 smart fallback response, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -141,7 +143,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createTrueNASCredentialProfile(t, sut, "cred-truenas-fs-final", "api-key", server.URL)
 		configureTrueNASCollectors(t, sut, hubcollector.Collector{
 			ID:            "collector-truenas-fs-final",
@@ -157,7 +159,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-fs-final/filesystem?limit=999999", nil)
 		rec := httptest.NewRecorder()
-		sut.handleTrueNASAssets(rec, req)
+		sut.TrueNASDeps().HandleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 filesystem response, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -165,7 +167,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 			t.Fatalf("expected filesystem entries payload, got %s", rec.Body.String())
 		}
 
-		file := mapTrueNASFilesystemEntry(map[string]any{
+		file := truenaspkg.MapTrueNASFilesystemEntry(map[string]any{
 			"name":   "plain-file",
 			"path":   "/mnt/plain-file",
 			"type":   "",
@@ -192,7 +194,7 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
 		var out []map[string]any
-		if err := callTrueNASQueryCompat(context.Background(), client, "disk.query", &out); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		if err := truenaspkg.CallTrueNASQueryCompat(context.Background(), client, "disk.query", &out); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("expected non-method-call retry error, got %v", err)
 		}
 		if attempts != 2 {
@@ -201,10 +203,10 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 	})
 
 	t.Run("additional helper branches", func(t *testing.T) {
-		if got := deriveTrueNASDiskHealthStatus(trueNASDiskHealth{TemperatureCelsius: proxmoxpkg.Float64Ptr(60)}); got != "critical" {
+		if got := truenaspkg.DeriveTrueNASDiskHealthStatus(truenaspkg.TrueNASDiskHealth{TemperatureCelsius: proxmoxpkg.Float64Ptr(60)}); got != "critical" {
 			t.Fatalf("expected critical status at 60C, got %q", got)
 		}
-		if _, _, err := newTestAPIServer(t).resolveTrueNASAssetRuntime("missing"); err == nil {
+		if _, _, err := hubdeps.New(t).TrueNASDeps().ResolveTrueNASAssetRuntime("missing"); err == nil {
 			t.Fatalf("expected resolveTrueNASAssetRuntime to fail for missing asset")
 		}
 	})
