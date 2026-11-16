@@ -43,7 +43,7 @@ func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testin
 				"credential_id": credentialID,
 			},
 		}
-		store.statusByID[collector.ID] = collector
+		store.StatusByID[collector.ID] = collector
 		sut.executeCollector(context.Background(), collector)
 	}
 

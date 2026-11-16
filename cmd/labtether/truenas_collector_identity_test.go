@@ -44,7 +44,7 @@ func TestExecuteTwoTrueNASCollectorsKeepRepeatedMainPoolDistinct(t *testing.T) {
 				"skip_verify":   true,
 			},
 		}
-		store.statusByID[collector.ID] = collector
+		store.StatusByID[collector.ID] = collector
 		ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
 		sut.executeTrueNASCollector(ctx, collector)
 		cancel()
@@ -95,7 +95,7 @@ func TestExecuteTrueNASCollectorAssetMetadataEndpointIdentity(t *testing.T) {
 			"credential_id": "cred-truenas-meta",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -140,7 +140,7 @@ func TestExecuteTrueNASCollectorHandlesEndpointIdentityMetadata(t *testing.T) {
 			"credential_id": "cred-truenas-endpoint-meta",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -185,7 +185,7 @@ func TestExecuteTrueNASCollectorClusterHeartbeatMetadata(t *testing.T) {
 			"credential_id": "cred-truenas-cluster-meta",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -230,7 +230,7 @@ func TestExecuteTrueNASCollectorRefreshesCollectorAssetIDHeartbeat(t *testing.T)
 			"credential_id": "cred-truenas-cluster-heartbeat",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -274,7 +274,7 @@ func TestExecuteTrueNASCollectorClusterAssetOptionalWhenAssetIDEmpty(t *testing.
 			"credential_id": "cred-truenas-empty-asset-id",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -315,7 +315,7 @@ func TestExecuteTrueNASCollectorUsesAssetHeartbeatStatusNormalization(t *testing
 			"credential_id": "cred-truenas-status-normalization",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

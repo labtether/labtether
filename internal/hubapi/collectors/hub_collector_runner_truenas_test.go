@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"strings"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 )
 
 func TestNormalizeTrueNASStatus(t *testing.T) {
@@ -42,7 +43,7 @@ func TestNormalizeTrueNASStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeTrueNASStatus(tt.metadata)
+			got := collectorspkg.NormalizeTrueNASStatus(tt.metadata)
 			if got != tt.want {
 				t.Errorf("normalizeTrueNASStatus(%v) = %q, want %q", tt.metadata, got, tt.want)
 			}
@@ -66,7 +67,7 @@ func TestNormalizePortainerStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizePortainerStatus(tt.metadata)
+			got := collectorspkg.NormalizePortainerStatus(tt.metadata)
 			if got != tt.want {
 				t.Errorf("normalizePortainerStatus(%v) = %q, want %q", tt.metadata, got, tt.want)
 			}
@@ -90,7 +91,7 @@ func TestNormalizeDockerStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeDockerStatus(tt.metadata)
+			got := collectorspkg.NormalizeDockerStatus(tt.metadata)
 			if got != tt.want {
 				t.Errorf("normalizeDockerStatus(%v) = %q, want %q", tt.metadata, got, tt.want)
 			}
@@ -100,7 +101,7 @@ func TestNormalizeDockerStatus(t *testing.T) {
 
 func TestStableConnectorLogID(t *testing.T) {
 	key := "UPID:pve01:0001:0002:abcd:qmstart:101:root@pam:"
-	got := stableConnectorLogID("log_proxmox_task", key)
+	got := collectorspkg.StableConnectorLogID("log_proxmox_task", key)
 	if got == "" {
 		t.Fatalf("expected non-empty stable id")
 	}
@@ -110,7 +111,7 @@ func TestStableConnectorLogID(t *testing.T) {
 	if strings.Contains(got, ":") {
 		t.Fatalf("stable id must not contain raw separators, got %q", got)
 	}
-	if got2 := stableConnectorLogID("log_proxmox_task", key); got2 != got {
+	if got2 := collectorspkg.StableConnectorLogID("log_proxmox_task", key); got2 != got {
 		t.Fatalf("stable id must be deterministic: %q != %q", got2, got)
 	}
 }
@@ -153,7 +154,7 @@ func TestProxmoxTaskAssetID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := proxmoxTaskAssetID(tt.task, tt.fallback)
+			got := collectorspkg.ProxmoxTaskAssetID(tt.task, tt.fallback)
 			if got != tt.want {
 				t.Fatalf("proxmoxTaskAssetID() = %q, want %q", got, tt.want)
 			}
@@ -186,7 +187,7 @@ func TestProxmoxTaskLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := proxmoxTaskLevel(tt.task)
+			got := collectorspkg.ProxmoxTaskLevel(tt.task)
 			if got != tt.want {
 				t.Fatalf("proxmoxTaskLevel() = %q, want %q", got, tt.want)
 			}
@@ -224,7 +225,7 @@ func TestTrueNASAlertMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := trueNASAlertMessage(tt.alert)
+			got := collectorspkg.TrueNASAlertMessage(tt.alert)
 			if got != tt.want {
 				t.Fatalf("trueNASAlertMessage() = %q, want %q", got, tt.want)
 			}
@@ -234,7 +235,7 @@ func TestTrueNASAlertMessage(t *testing.T) {
 
 func TestCollectorAnyTime(t *testing.T) {
 	rfc := "2026-02-23T06:29:46Z"
-	gotRFC := collectorAnyTime(rfc)
+	gotRFC := collectorspkg.CollectorAnyTime(rfc)
 	if gotRFC.IsZero() {
 		t.Fatalf("collectorAnyTime must parse RFC3339")
 	}
@@ -242,7 +243,7 @@ func TestCollectorAnyTime(t *testing.T) {
 		t.Fatalf("collectorAnyTime(rfc) = %s, want %s", gotRFC.UTC().Format(time.RFC3339), rfc)
 	}
 
-	gotUnix := collectorAnyTime(float64(1771828186))
+	gotUnix := collectorspkg.CollectorAnyTime(float64(1771828186))
 	if gotUnix.IsZero() {
 		t.Fatalf("collectorAnyTime must parse unix float timestamp")
 	}
@@ -292,7 +293,7 @@ func TestCollectorEndpointIdentity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			host, ip := collectorEndpointIdentity(tt.raw)
+			host, ip := collectorspkg.CollectorEndpointIdentity(tt.raw)
 			if host != tt.wantHost || ip != tt.wantIP {
 				t.Fatalf("collectorEndpointIdentity(%q) = (%q, %q), want (%q, %q)", tt.raw, host, ip, tt.wantHost, tt.wantIP)
 			}
@@ -333,13 +334,13 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 		},
 	}
 
-	identities := map[string]collectorIdentity{
-		source.ID:  collectCollectorIdentity(source),
-		targetA.ID: collectCollectorIdentity(targetA),
-		targetB.ID: collectCollectorIdentity(targetB),
+	identities := map[string]collectorspkg.CollectorIdentity{
+		source.ID:  collectorspkg.CollectCollectorIdentity(source),
+		targetA.ID: collectorspkg.CollectCollectorIdentity(targetA),
+		targetB.ID: collectorspkg.CollectCollectorIdentity(targetB),
 	}
 
-	targetID, reason, ok := bestRunsOnIdentityTarget(source, []assets.Asset{targetA, targetB}, identities)
+	targetID, reason, ok := collectorspkg.BestRunsOnIdentityTarget(source, []assets.Asset{targetA, targetB}, identities)
 	if !ok {
 		t.Fatalf("expected identity match")
 	}
@@ -374,13 +375,13 @@ func TestBestRunsOnIdentityTargetAmbiguousHostname(t *testing.T) {
 		GroupID: "home",
 	}
 
-	identities := map[string]collectorIdentity{
-		source.ID:  collectCollectorIdentity(source),
-		targetA.ID: collectCollectorIdentity(targetA),
-		targetB.ID: collectCollectorIdentity(targetB),
+	identities := map[string]collectorspkg.CollectorIdentity{
+		source.ID:  collectorspkg.CollectCollectorIdentity(source),
+		targetA.ID: collectorspkg.CollectCollectorIdentity(targetA),
+		targetB.ID: collectorspkg.CollectCollectorIdentity(targetB),
 	}
 
-	if targetID, reason, ok := bestRunsOnIdentityTarget(source, []assets.Asset{targetA, targetB}, identities); ok {
+	if targetID, reason, ok := collectorspkg.BestRunsOnIdentityTarget(source, []assets.Asset{targetA, targetB}, identities); ok {
 		t.Fatalf("expected ambiguous hostname match to fail, got target=%q reason=%q", targetID, reason)
 	}
 }

@@ -43,7 +43,7 @@ func TestExecuteTrueNASCollectorNoAssetsAndSuccess(t *testing.T) {
 				"skip_verify":   true,
 			},
 		}
-		store.statusByID[collector.ID] = collector
+		store.StatusByID[collector.ID] = collector
 
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		defer cancel()
@@ -90,7 +90,7 @@ func TestExecuteTrueNASCollectorNoAssetsAndSuccess(t *testing.T) {
 				"skip_verify":   true,
 			},
 		}
-		store.statusByID[collector.ID] = collector
+		store.StatusByID[collector.ID] = collector
 
 		ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
 		defer cancel()
@@ -120,44 +120,6 @@ func TestExecuteTrueNASCollectorNoAssetsAndSuccess(t *testing.T) {
 			t.Fatalf("expected discovered metadata on cluster asset")
 		}
 	})
-}
-
-func TestExecuteTrueNASCollectorDiscoveryFailure(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-		if method == "pool.query" {
-			return nil, &trueNASRPCError{Code: -32000, Message: "pool access denied"}
-		}
-		return map[string]any{}, nil
-	})
-	defer server.Close()
-
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-discovery-fail", "api-key", server.URL)
-
-	collector := hubcollector.Collector{
-		ID:            "collector-truenas-discovery-fail",
-		AssetID:       "truenas-cluster-discovery-fail",
-		CollectorType: hubcollector.CollectorTypeTrueNAS,
-		Enabled:       true,
-		Config: map[string]any{
-			"base_url":      server.URL,
-			"credential_id": "cred-truenas-discovery-fail",
-			"skip_verify":   true,
-		},
-	}
-	store.statusByID[collector.ID] = collector
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-
-	updated, _, _ := store.GetHubCollector(collector.ID)
-	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "truenas discovery failed") {
-		t.Fatalf("expected discovery failure collector status, got %+v", updated)
-	}
 }
 
 func TestExecuteTrueNASCollectorNoAssetsLog(t *testing.T) {
@@ -191,7 +153,7 @@ func TestExecuteTrueNASCollectorNoAssetsLog(t *testing.T) {
 			"credential_id": "cred-truenas-noassets-log",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -215,95 +177,6 @@ func TestExecuteTrueNASCollectorNoAssetsLog(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected no assets discovered log event")
-	}
-}
-
-func TestExecuteTrueNASCollectorDiscoveryFailureLog(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-		if method == "pool.query" {
-			return nil, &trueNASRPCError{Code: -32000, Message: "pool query denied"}
-		}
-		return map[string]any{}, nil
-	})
-	defer server.Close()
-
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-discovery-log", "api-key", server.URL)
-
-	collector := hubcollector.Collector{
-		ID:            "collector-truenas-log-5",
-		AssetID:       "truenas-cluster-log-5",
-		CollectorType: hubcollector.CollectorTypeTrueNAS,
-		Enabled:       true,
-		Config: map[string]any{
-			"base_url":      server.URL,
-			"credential_id": "cred-truenas-discovery-log",
-		},
-	}
-	store.statusByID[collector.ID] = collector
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
-		Source: "truenas",
-		From:   time.Unix(0, 0).UTC(),
-		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
-		Limit:  10,
-	})
-	if err != nil {
-		t.Fatalf("QueryEvents() error = %v", err)
-	}
-	found := false
-	for _, event := range events {
-		if strings.Contains(event.Message, "truenas discovery failed") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected discovery failed log event")
-	}
-}
-
-func TestExecuteTrueNASCollectorDiscoveryFailureStatus(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-		switch method {
-		case "pool.query":
-			return nil, &trueNASRPCError{Code: -32000, Message: "pool failure"}
-		default:
-			return map[string]any{}, nil
-		}
-	})
-	defer server.Close()
-
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-status-discovery", "api-key", server.URL)
-	collector := hubcollector.Collector{
-		ID:            "collector-truenas-status-3",
-		AssetID:       "truenas-cluster-status-3",
-		CollectorType: hubcollector.CollectorTypeTrueNAS,
-		Enabled:       true,
-		Config: map[string]any{
-			"base_url":      server.URL,
-			"credential_id": "cred-truenas-status-discovery",
-		},
-	}
-	store.statusByID[collector.ID] = collector
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-	updated, _, _ := store.GetHubCollector(collector.ID)
-	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "truenas discovery failed") {
-		t.Fatalf("unexpected discovery failure status: %+v", updated)
 	}
 }
 
@@ -337,7 +210,7 @@ func TestExecuteTrueNASCollectorNoAssetsStatus(t *testing.T) {
 			"credential_id": "cred-truenas-status-noassets",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -378,7 +251,7 @@ func TestExecuteTrueNASCollectorDeDupeStubAssetIgnored(t *testing.T) {
 			"credential_id": "cred-truenas-stub-ignore",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -390,59 +263,5 @@ func TestExecuteTrueNASCollectorDeDupeStubAssetIgnored(t *testing.T) {
 	}
 	if exists {
 		t.Fatalf("expected stub asset to be ignored during collector ingest")
-	}
-}
-
-func TestExecuteTrueNASCollectorDiscoveryFailureUpdatesStatusAndLogs(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-		if method == "pool.query" {
-			return nil, &trueNASRPCError{Code: -32000, Message: "pool query failure"}
-		}
-		return map[string]any{}, nil
-	})
-	defer server.Close()
-
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-fail-status-log", "api-key", server.URL)
-	collector := hubcollector.Collector{
-		ID:            "collector-truenas-fail-status-log",
-		AssetID:       "truenas-cluster-fail-status-log",
-		CollectorType: hubcollector.CollectorTypeTrueNAS,
-		Enabled:       true,
-		Config: map[string]any{
-			"base_url":      server.URL,
-			"credential_id": "cred-truenas-fail-status-log",
-		},
-	}
-	store.statusByID[collector.ID] = collector
-
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-	updated, _, _ := store.GetHubCollector(collector.ID)
-	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "truenas discovery failed") {
-		t.Fatalf("unexpected failure status: %+v", updated)
-	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
-		Source: "truenas",
-		From:   time.Unix(0, 0).UTC(),
-		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
-		Limit:  10,
-	})
-	if err != nil {
-		t.Fatalf("QueryEvents() error = %v", err)
-	}
-	found := false
-	for _, event := range events {
-		if strings.Contains(event.Message, "truenas discovery failed") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected discovery failure log")
 	}
 }

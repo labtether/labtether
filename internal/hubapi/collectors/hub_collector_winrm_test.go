@@ -1,7 +1,9 @@
-package main
+package collectors_test
 
 import (
 	"context"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,7 +11,7 @@ import (
 )
 
 func TestExecuteWinRMCommandRejectsInvalidCAPEM(t *testing.T) {
-	_, err := executeWinRMCommand(
+	_, err := collectorspkg.ExecuteWinRMCommand(
 		context.Background(),
 		"https://127.0.0.1:5986/wsman",
 		"Administrator",
@@ -28,9 +30,9 @@ func TestExecuteWinRMCommandRejectsInvalidCAPEM(t *testing.T) {
 }
 
 func TestWinRMSOAPRequestRejectsOversizedResponse(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
-	oversizedBody := strings.Repeat("A", maxWinRMSOAPResponseBytes+1)
+	oversizedBody := strings.Repeat("A", collectorspkg.MaxWinRMSOAPResponseBytes+1)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -39,7 +41,7 @@ func TestWinRMSOAPRequestRejectsOversizedResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := winrmSOAPRequest(context.Background(), server.Client(), server.URL, "Administrator", "password", "<Envelope/>")
+	_, err := collectorspkg.WinRMSOAPRequest(context.Background(), server.Client(), server.URL, "Administrator", "password", "<Envelope/>")
 	if err == nil {
 		t.Fatal("expected oversized SOAP response error")
 	}
