@@ -1,8 +1,9 @@
-package main
+package collectors_test
 
 import (
 	"encoding/json"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestHandleWebServicesHiddenFilter(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	report := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -28,7 +29,7 @@ func TestHandleWebServicesHiddenFilter(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	overrideReq := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/overrides", strings.NewReader(`{
 		"host_asset_id":"host-1",
@@ -36,14 +37,14 @@ func TestHandleWebServicesHiddenFilter(t *testing.T) {
 		"hidden":true
 	}`))
 	overrideRec := httptest.NewRecorder()
-	sut.handleWebServiceOverrides(overrideRec, overrideReq)
+	sut.CollectorsDeps().HandleWebServiceOverrides(overrideRec, overrideReq)
 	if overrideRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on override save, got %d body=%s", overrideRec.Code, overrideRec.Body.String())
 	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleWebServices(listRec, listReq)
+	sut.CollectorsDeps().HandleWebServices(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on list, got %d", listRec.Code)
 	}
@@ -59,7 +60,7 @@ func TestHandleWebServicesHiddenFilter(t *testing.T) {
 
 	allReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web?include_hidden=true", nil)
 	allRec := httptest.NewRecorder()
-	sut.handleWebServices(allRec, allReq)
+	sut.CollectorsDeps().HandleWebServices(allRec, allReq)
 	if allRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on include_hidden list, got %d", allRec.Code)
 	}
@@ -75,7 +76,7 @@ func TestHandleWebServicesHiddenFilter(t *testing.T) {
 }
 
 func TestHandleWebServicesIncludesDiscoveryStats(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	report := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -108,14 +109,14 @@ func TestHandleWebServicesIncludesDiscoveryStats(t *testing.T) {
 	}
 
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{
 		Type: agentmgr.MsgWebServiceReport,
 		Data: raw,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web?host=host-1", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on list, got %d", rec.Code)
 	}
@@ -152,7 +153,7 @@ func TestHandleWebServicesIncludesDiscoveryStats(t *testing.T) {
 }
 
 func TestHandleWebServicesIncludesHealthSummary(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	reportUp := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -170,18 +171,18 @@ func TestHandleWebServicesIncludesHealthSummary(t *testing.T) {
 		},
 	}
 	rawUp, _ := json.Marshal(reportUp)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawUp})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawUp})
 
 	reportDown := reportUp
 	reportDown.Services = append([]agentmgr.DiscoveredWebService(nil), reportUp.Services...)
 	reportDown.Services[0].Status = "down"
 	reportDown.Services[0].ResponseMs = 0
 	rawDown, _ := json.Marshal(reportDown)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawDown})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawDown})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web?host=host-1", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on list, got %d", rec.Code)
 	}
@@ -217,7 +218,7 @@ func TestHandleWebServicesIncludesHealthSummary(t *testing.T) {
 }
 
 func TestHandleWebServicesCompactDetailOmitsExpandedFields(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	reportUp := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -245,18 +246,18 @@ func TestHandleWebServicesCompactDetailOmitsExpandedFields(t *testing.T) {
 		},
 	}
 	rawUp, _ := json.Marshal(reportUp)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawUp})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawUp})
 
 	reportDown := reportUp
 	reportDown.Services = append([]agentmgr.DiscoveredWebService(nil), reportUp.Services...)
 	reportDown.Services[0].Status = "down"
 	reportDown.Services[0].ResponseMs = 0
 	rawDown, _ := json.Marshal(reportDown)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawDown})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: rawDown})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web?host=host-1&service_id=svc-1&detail=compact", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on compact list, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -282,7 +283,7 @@ func TestHandleWebServicesCompactDetailOmitsExpandedFields(t *testing.T) {
 }
 
 func TestHandleWebServicesCompactDetailSkipsExpandedAltURLArrays(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	report := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -303,11 +304,11 @@ func TestHandleWebServicesCompactDetailSkipsExpandedAltURLArrays(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web?host=host-1&detail=compact", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on compact list, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -331,7 +332,7 @@ func TestHandleWebServicesCompactDetailSkipsExpandedAltURLArrays(t *testing.T) {
 }
 
 func TestHandleWebServiceAltURLsSynthesizesAutoAliasesWithoutPersistence(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	report := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -352,11 +353,11 @@ func TestHandleWebServiceAltURLsSynthesizesAutoAliasesWithoutPersistence(t *test
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/alt-urls?web_service_id=http://host-1:3000", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServiceAltURLs(rec, req)
+	sut.CollectorsDeps().HandleWebServiceAltURLs(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on alt url list, got %d body=%s", rec.Code, rec.Body.String())
 	}

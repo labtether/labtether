@@ -1,8 +1,10 @@
-package main
+package collectors_test
 
 import (
 	"encoding/json"
 	"github.com/labtether/labtether/internal/agentmgr"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,22 +12,22 @@ import (
 	"time"
 )
 
-func seedGroupingConfig(sut *apiServer, cfg webServiceURLGroupingConfig) {
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgMu.Lock()
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfg = cfg
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgAt = time.Now().UTC()
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgTTL = time.Hour
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgMu.Unlock()
+func seedGroupingConfig(sut *hubdeps.Hub, cfg collectorspkg.WebServiceURLGroupingConfig) {
+	sut.CollectorsDeps().WebServiceURLGroupingCfgMu.Lock()
+	sut.CollectorsDeps().WebServiceURLGroupingCfg = cfg
+	sut.CollectorsDeps().WebServiceURLGroupingCfgAt = time.Now().UTC()
+	sut.CollectorsDeps().WebServiceURLGroupingCfgTTL = time.Hour
+	sut.CollectorsDeps().WebServiceURLGroupingCfgMu.Unlock()
 }
 
 func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
+		AliasRules:          collectorspkg.ParseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -60,11 +62,11 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -101,13 +103,13 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 }
 
 func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              true,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
+		AliasRules:          collectorspkg.ParseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -136,11 +138,11 @@ func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -157,14 +159,14 @@ func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
 }
 
 func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
-		NeverGroupRules:     parseWebServicePairRules("https://xyz.tail.example.com => https://xyz.example.com"),
+		AliasRules:          collectorspkg.ParseWebServiceAliasRules("*.*.example.com => *.example.com"),
+		NeverGroupRules:     collectorspkg.ParseWebServicePairRules("https://xyz.tail.example.com => https://xyz.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -193,11 +195,11 @@ func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -214,13 +216,13 @@ func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
 }
 
 func TestHandleWebServicesForceGroupRuleGroupsServices(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		ForceGroupRules:     parseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
+		ForceGroupRules:     collectorspkg.ParseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -249,11 +251,11 @@ func TestHandleWebServicesForceGroupRuleGroupsServices(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -270,13 +272,13 @@ func TestHandleWebServicesForceGroupRuleGroupsServices(t *testing.T) {
 }
 
 func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 96,
-		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
+		AliasRules:          collectorspkg.ParseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -305,11 +307,11 @@ func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -326,14 +328,14 @@ func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
 }
 
 func TestHandleWebServicesNeverGroupRuleOverridesForceGroupRule(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	seedGroupingConfig(sut, webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	seedGroupingConfig(sut, collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		ForceGroupRules:     parseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
-		NeverGroupRules:     parseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
+		ForceGroupRules:     collectorspkg.ParseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
+		NeverGroupRules:     collectorspkg.ParseWebServicePairRules("https://alpha.internal:8443 => https://beta.internal:8443"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -362,11 +364,11 @@ func TestHandleWebServicesNeverGroupRuleOverridesForceGroupRule(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServices(rec, req)
+	sut.CollectorsDeps().HandleWebServices(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -383,33 +385,33 @@ func TestHandleWebServicesNeverGroupRuleOverridesForceGroupRule(t *testing.T) {
 }
 
 func TestResolveWebServiceURLGroupingConfigCachesBetweenCalls(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgTTL = time.Hour
+	sut := hubdeps.New(t)
+	sut.CollectorsDeps().WebServiceURLGroupingCfgTTL = time.Hour
 
 	// First resolve should produce defaults (no db, no runtime overrides with definitions).
-	cfg := sut.resolveWebServiceURLGroupingConfig()
-	if cfg.Mode != webServiceURLGroupingModeConservative {
-		t.Fatalf("url grouping mode = %q, want %q", cfg.Mode, webServiceURLGroupingModeConservative)
+	cfg := sut.CollectorsDeps().ResolveWebServiceURLGroupingConfig()
+	if cfg.Mode != collectorspkg.WebServiceURLGroupingModeConservative {
+		t.Fatalf("url grouping mode = %q, want %q", cfg.Mode, collectorspkg.WebServiceURLGroupingModeConservative)
 	}
 
 	// Directly inject a different config into the cache to verify caching works.
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgMu.Lock()
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfg = webServiceURLGroupingConfig{
-		Mode:                webServiceURLGroupingModeBalanced,
+	sut.CollectorsDeps().WebServiceURLGroupingCfgMu.Lock()
+	sut.CollectorsDeps().WebServiceURLGroupingCfg = collectorspkg.WebServiceURLGroupingConfig{
+		Mode:                collectorspkg.WebServiceURLGroupingModeBalanced,
 		ConfidenceThreshold: 85,
 	}
-	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgMu.Unlock()
+	sut.CollectorsDeps().WebServiceURLGroupingCfgMu.Unlock()
 
 	// Second resolve should return cached value (balanced) without re-resolving.
-	cfg = sut.resolveWebServiceURLGroupingConfig()
-	if cfg.Mode != webServiceURLGroupingModeBalanced {
-		t.Fatalf("url grouping mode = %q, want %q (cached)", cfg.Mode, webServiceURLGroupingModeBalanced)
+	cfg = sut.CollectorsDeps().ResolveWebServiceURLGroupingConfig()
+	if cfg.Mode != collectorspkg.WebServiceURLGroupingModeBalanced {
+		t.Fatalf("url grouping mode = %q, want %q (cached)", cfg.Mode, collectorspkg.WebServiceURLGroupingModeBalanced)
 	}
 
 	// After invalidation, resolve should recompute and return defaults again.
-	sut.invalidateWebServiceURLGroupingConfigCache()
-	cfg = sut.resolveWebServiceURLGroupingConfig()
-	if cfg.Mode != webServiceURLGroupingModeConservative {
-		t.Fatalf("url grouping mode = %q, want %q (after invalidation)", cfg.Mode, webServiceURLGroupingModeConservative)
+	sut.CollectorsDeps().InvalidateWebServiceURLGroupingConfigCache()
+	cfg = sut.CollectorsDeps().ResolveWebServiceURLGroupingConfig()
+	if cfg.Mode != collectorspkg.WebServiceURLGroupingModeConservative {
+		t.Fatalf("url grouping mode = %q, want %q (after invalidation)", cfg.Mode, collectorspkg.WebServiceURLGroupingModeConservative)
 	}
 }

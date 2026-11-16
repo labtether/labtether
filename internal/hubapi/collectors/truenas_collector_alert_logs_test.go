@@ -1,8 +1,10 @@
-package main
+package collectors_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/connectors/truenas"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/logs"
 	"strings"
 	"testing"
@@ -10,16 +12,16 @@ import (
 )
 
 func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	t.Run("method not found is ignored", func(t *testing.T) {
-		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+		server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-		count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1")
+		count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1")
 		if err != nil {
 			t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 		}
@@ -29,23 +31,23 @@ func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
 	})
 
 	t.Run("upstream error surfaces", func(t *testing.T) {
-		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
-			return nil, &trueNASRPCError{Code: -32000, Message: "permission denied"}
+		server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
+			return nil, &testutil.TrueNASRPCError{Code: -32000, Message: "permission denied"}
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-		if _, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1"); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		if _, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1"); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("expected permission denied error, got %v", err)
 		}
 	})
 
 	t.Run("alerts ingested with hostname routing and stable ids", func(t *testing.T) {
 		now := time.Now().UTC()
-		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+		server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 			if method != "alert.list" {
-				return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+				return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 			}
 			return []map[string]any{
 				{
@@ -71,9 +73,9 @@ func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
 		})
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-		count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1")
+		count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-1")
 		if err != nil {
 			t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 		}
@@ -81,7 +83,7 @@ func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
 			t.Fatalf("ingestTrueNASAlertLogs() count = %d, want 2", count)
 		}
 
-		events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+		events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 			Source: "truenas",
 			From:   time.Now().UTC().Add(-24 * time.Hour),
 			To:     time.Now().UTC().Add(24 * time.Hour),
@@ -100,10 +102,10 @@ func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsKeyFallback(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{
 			{
@@ -114,9 +116,9 @@ func TestIngestTrueNASAlertLogsKeyFallback(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fallback")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fallback")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -124,7 +126,7 @@ func TestIngestTrueNASAlertLogsKeyFallback(t *testing.T) {
 		t.Fatalf("ingestTrueNASAlertLogs() count = %d, want 1", count)
 	}
 
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -139,18 +141,18 @@ func TestIngestTrueNASAlertLogsKeyFallback(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsSkipsEmptyFallbackKey(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{"formatted": "", "datetime": ""}}, nil
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-empty-key")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-empty-key")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -160,10 +162,10 @@ func TestIngestTrueNASAlertLogsSkipsEmptyFallbackKey(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsFallbackAssetIDWithoutHostname(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-no-host",
@@ -173,13 +175,13 @@ func TestIngestTrueNASAlertLogsFallbackAssetIDWithoutHostname(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	_, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fallback-asset")
+	_, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fallback-asset")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -194,10 +196,10 @@ func TestIngestTrueNASAlertLogsFallbackAssetIDWithoutHostname(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsHostnameAssetOverride(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-host-override",
@@ -208,13 +210,13 @@ func TestIngestTrueNASAlertLogsHostnameAssetOverride(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	_, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-source")
+	_, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-source")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -229,10 +231,10 @@ func TestIngestTrueNASAlertLogsHostnameAssetOverride(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsTimestampFallbackNow(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-no-timestamp",
@@ -242,9 +244,9 @@ func TestIngestTrueNASAlertLogsTimestampFallbackNow(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-now")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-now")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -254,10 +256,10 @@ func TestIngestTrueNASAlertLogsTimestampFallbackNow(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsLevelNormalization(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-level-1",
@@ -268,13 +270,13 @@ func TestIngestTrueNASAlertLogsLevelNormalization(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	_, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-level")
+	_, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-level")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -289,10 +291,10 @@ func TestIngestTrueNASAlertLogsLevelNormalization(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsIncludesNodeAndClassFields(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-fields-1",
@@ -305,13 +307,13 @@ func TestIngestTrueNASAlertLogsIncludesNodeAndClassFields(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	_, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fields")
+	_, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-fields")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -329,10 +331,10 @@ func TestIngestTrueNASAlertLogsIncludesNodeAndClassFields(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsUsesIDWhenUUIDMissing(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"id":        "alert-id-only",
@@ -342,9 +344,9 @@ func TestIngestTrueNASAlertLogsUsesIDWhenUUIDMissing(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-id-only")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-id-only")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -354,18 +356,18 @@ func TestIngestTrueNASAlertLogsUsesIDWhenUUIDMissing(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsZeroOnEmptyAlertList(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{}, nil
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-empty-alerts")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-empty-alerts")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -375,10 +377,10 @@ func TestIngestTrueNASAlertLogsZeroOnEmptyAlertList(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsHandlesNumericLevelAndTimestamp(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-numeric",
@@ -389,9 +391,9 @@ func TestIngestTrueNASAlertLogsHandlesNumericLevelAndTimestamp(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-numeric")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-numeric")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -401,18 +403,18 @@ func TestIngestTrueNASAlertLogsHandlesNumericLevelAndTimestamp(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsIgnoresPipeOnlyFallbackKey(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{"formatted": "", "datetime": ""}}, nil
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	count, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-pipe")
+	count, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-pipe")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
@@ -422,10 +424,10 @@ func TestIngestTrueNASAlertLogsIgnoresPipeOnlyFallbackKey(t *testing.T) {
 }
 
 func TestIngestTrueNASAlertLogsNormalizesHostnameToAssetKey(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		if method != "alert.list" {
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 		return []map[string]any{{
 			"uuid":      "alert-hostname-normalized",
@@ -436,13 +438,13 @@ func TestIngestTrueNASAlertLogsNormalizesHostnameToAssetKey(t *testing.T) {
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-	_, err := sut.ingestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-hostname-normalized")
+	_, err := sut.CollectorsDeps().IngestTrueNASAlertLogs(context.Background(), client, "truenas-cluster-hostname-normalized")
 	if err != nil {
 		t.Fatalf("ingestTrueNASAlertLogs() error = %v", err)
 	}
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),

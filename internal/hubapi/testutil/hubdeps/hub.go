@@ -21,6 +21,7 @@ import (
 	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/hubapi/agents"
 	"github.com/labtether/labtether/internal/hubapi/alerting"
+	"github.com/labtether/labtether/internal/hubapi/collectors"
 	"github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
@@ -144,6 +145,14 @@ type Hub struct {
 	agentsOnce    sync.Once
 	agentsDeps    *agents.Deps
 
+	// State cmd's apiServer holds for the collectors Deps. New sets
+	// CollectorDispatchSem as newTestAPIServer does. The collectors Deps is
+	// built once and kept, as cmd keeps apiServer.collectorsDeps; see
+	// CollectorsDeps.
+	CollectorDispatchSem chan struct{}
+	collectorsOnce       sync.Once
+	collectorsDeps       *collectors.Deps
+
 	t            *testing.T
 	desktopSPICE struct {
 		mu      sync.RWMutex
@@ -160,6 +169,7 @@ func New(t *testing.T) *Hub {
 	h.NotificationDispatcher.DispatchSem = make(chan struct{}, 32)
 	h.WebServiceCoordinator = webservice.NewCoordinator(persistence.NewMemoryWebServiceStore())
 	h.PendingAgents = agents.NewPendingAgents()
+	h.CollectorDispatchSem = make(chan struct{}, 4)
 	return h
 }
 

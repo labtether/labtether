@@ -1,15 +1,17 @@
-package main
+package collectors_test
 
 import (
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"testing"
 )
 
 func TestTrueNASAutoLinkWrappers(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
 	assetsToUpsert := []assets.HeartbeatRequest{
 		{
@@ -42,15 +44,15 @@ func TestTrueNASAutoLinkWrappers(t *testing.T) {
 		},
 	}
 	for _, req := range assetsToUpsert {
-		if _, err := sut.assetStore.UpsertAssetHeartbeat(req); err != nil {
+		if _, err := sut.AssetStore.UpsertAssetHeartbeat(req); err != nil {
 			t.Fatalf("failed to upsert %s: %v", req.AssetID, err)
 		}
 	}
 
-	if err := sut.autoLinkPortainerHostsToTrueNASHosts(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkPortainerHostsToTrueNASHosts(); err != nil {
 		t.Fatalf("autoLinkPortainerHostsToTrueNASHosts() error = %v", err)
 	}
-	if err := sut.autoLinkTrueNASHostsToProxmoxGuests(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkTrueNASHostsToProxmoxGuests(); err != nil {
 		t.Fatalf("autoLinkTrueNASHostsToProxmoxGuests() error = %v", err)
 	}
 
