@@ -926,5 +926,9 @@
     "reject": "Ablehnen",
     "approveFailed": "{name} konnte nicht freigegeben werden. Erneut versuchen.",
     "rejectFailed": "{name} konnte nicht abgelehnt werden. Erneut versuchen."
+  },
+  "agentOffers": {
+    "monitoringOnly": "Nur Überwachung",
+    "notOffered": "Vom Agent dieses Geräts nicht angeboten"
   }
 }

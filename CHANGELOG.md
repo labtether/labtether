@@ -37,6 +37,13 @@ setting.
   Tailscale, so Finish is available without picking it by hand.
 - Health: with `LABTETHER_TLS_MODE=disabled` the hub's own API is no longer
   shown as down.
+- A device whose agent lists what it can do shows only that: tabs, header
+  buttons, the ⋯ menu (Restart and Shut down too), the Devices list menu, the
+  command palette, the device lists in Terminal, Files and Remote View, Remote
+  View protocols, the Hub SSH key card and the service and package actions. A
+  page opened by its address for anything else says "Not offered by this
+  device's agent", and so does a request the hub refuses for that reason. The Mac App Store edition is labelled "Monitoring only".
+  Devices with the Go agent look as before.
 
 ### Demo mode
 

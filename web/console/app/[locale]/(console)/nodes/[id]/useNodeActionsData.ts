@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { isAgentUnsupported } from "../../../../console/agentOffers";
 import type { ActionRun } from "../../../../console/models";
 
 type UseNodeActionsDataArgs = {
@@ -11,6 +12,7 @@ type UseNodeActionsDataArgs = {
 
 export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs) {
   const tMenu = useTranslations("devices.page.menu");
+  const tOffers = useTranslations("devices.agentOffers");
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
@@ -65,7 +67,10 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
       });
       const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
       if (!response.ok) {
-        const reason = (payload.message || payload.error || response.statusText || String(response.status)).trim();
+        // 422 agent_unsupported reads as one plain line, as "agent is not connected" (409) does.
+        const reason = isAgentUnsupported(payload)
+          ? tOffers("notOffered")
+          : (payload.message || payload.error || response.statusText || String(response.status)).trim();
         setNodeActionError(tMenu(failed, { name, reason }));
         return;
       }
@@ -75,7 +80,7 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
     } finally {
       setNodeActionRunning(false);
     }
-  }, [nodeId, tMenu]);
+  }, [nodeId, tMenu, tOffers]);
 
   const runNodeNetworkAction = useCallback(async (
     action: "snapshot" | "apply" | "rollback",

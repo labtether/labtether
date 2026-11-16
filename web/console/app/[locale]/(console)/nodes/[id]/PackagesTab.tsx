@@ -4,12 +4,15 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../../../components/ui/Button";
 import { ConfirmDialog } from "../../../../components/ui/ConfirmDialog";
+import { isAgentUnsupported } from "../../../../console/agentOffers";
 import { usePackages } from "../../../../hooks/usePackages";
 import { copyText, FilterField, FilterFoot, ListState, plainError, RefreshButton, RowMenu } from "./systemViewParts";
 
 type PackagesTabProps = {
   nodeId: string;
   backend?: string;
+  /** false: the agent lists packages but does not install, remove or upgrade them; the list stays, the controls go. */
+  canAct?: boolean;
 };
 
 type PackageAction = "install" | "remove" | "upgrade";
@@ -18,8 +21,9 @@ type Ask = { action: PackageAction; names: string[] } | null;
 const parseNames = (input: string) => input.split(/[,\s]+/).map((value) => value.trim()).filter((value) => value.length > 0);
 
 /** Installed packages with install, remove and upgrade through the device's package manager. */
-export function PackagesTab({ nodeId, backend = "" }: PackagesTabProps) {
+export function PackagesTab({ nodeId, backend = "", canAct = true }: PackagesTabProps) {
   const t = useTranslations("devices.system");
+  const tOffers = useTranslations("devices.agentOffers");
   const { packages, loading, error, refresh, performAction } = usePackages(nodeId);
   const [filter, setFilter] = useState("");
   const [action, setAction] = useState<PackageAction>("install");
@@ -59,7 +63,7 @@ export function PackagesTab({ nodeId, backend = "" }: PackagesTabProps) {
       setRebootRequired(Boolean(result.reboot_required));
       if (selected !== "upgrade") setPackageInput("");
     } catch (err) {
-      const detail = plainError(err instanceof Error ? err.message : "");
+      const detail = isAgentUnsupported(err) ? tOffers("notOffered") : plainError(err instanceof Error ? err.message : "");
       setActionError(`${t("packages.failed")}${detail ? `: ${detail}` : ""}`);
     } finally {
       setActionBusy(false);
@@ -81,11 +85,11 @@ export function PackagesTab({ nodeId, backend = "" }: PackagesTabProps) {
       <div className="dv-bar">
         <FilterField value={filter} onChange={setFilter} placeholder={t("packages.filter")} />
         <span className="dv-sp" />
-        <Button size="sm" disabled={actionBusy} onClick={() => setAsk({ action: "upgrade", names: [] })}>{t("packages.upgradeAll")}</Button>
+        {canAct ? <Button size="sm" disabled={actionBusy} onClick={() => setAsk({ action: "upgrade", names: [] })}>{t("packages.upgradeAll")}</Button> : null}
         <RefreshButton loading={loading} onClick={() => void refresh()} />
       </div>
 
-      <form className="dv-bar dsy-pkform" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+      {canAct ? <form className="dv-bar dsy-pkform" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <input
           className="dv-input"
           type="text"
@@ -102,7 +106,7 @@ export function PackagesTab({ nodeId, backend = "" }: PackagesTabProps) {
           <option value="upgrade">{t("packages.upgrade")}</option>
         </select>
         <Button size="sm" type="submit" disabled={actionBusy}>{actionBusy ? t("packages.running") : t(`packages.${action}`)}</Button>
-      </form>
+      </form> : null}
 
       {actionError ? <p className="dv-err dsy-msg" role="alert">{actionError}</p> : null}
       {rebootRequired ? <p className="dv-prob warn dsy-msg">{t("packages.reboot")}</p> : null}
@@ -134,12 +138,12 @@ export function PackagesTab({ nodeId, backend = "" }: PackagesTabProps) {
                 <span role="cell" className="dv-txt c-ver" title={pkg.version || undefined}>{pkg.version || "—"}</span>
                 <RowMenu
                   name={pkg.name}
-                  items={[
+                  items={canAct ? [
                     { label: t("packages.upgrade"), disabled: actionBusy, onSelect: () => void runAction("upgrade", [pkg.name]) },
                     { label: t("packages.copyName"), onSelect: () => copyText(pkg.name) },
                     "sep",
                     { label: t("packages.removeAsk"), danger: true, disabled: actionBusy, onSelect: () => setAsk({ action: "remove", names: [pkg.name] }) },
-                  ]}
+                  ] : [{ label: t("packages.copyName"), onSelect: () => copyText(pkg.name) }]}
                 />
               </div>
             );

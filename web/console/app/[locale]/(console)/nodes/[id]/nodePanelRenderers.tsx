@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
+import type { DeviceAgentOffers } from "../../../../console/agentOffers";
 import type { Asset } from "../../../../console/models";
 import type { CategoryDef, CategorySlug } from "../../../../console/taxonomy";
 import { AgentSettingsTab } from "./AgentSettingsTab";
@@ -74,6 +75,8 @@ export type NodePanelRendererContext = {
   activeSub: string | null;
   activeDetail: string | null;
   metadata: Record<string, string>;
+  /** What the device's agent offers (console/agentOffers): actions inside a panel follow it. */
+  agentOffers: DeviceAgentOffers;
   nodeId: SystemPanelProps["nodeId"];
   asset: Asset;
   telemetryOverview: SystemPanelProps["telemetry"];
@@ -133,11 +136,12 @@ const PANEL_RENDERERS: Record<RegisteredPanelID, PanelRenderer> = {
   processes: (context) => <ProcessesTab nodeId={context.nodeId} />,
   network: (context) => <InterfacesTab nodeId={context.nodeId} />,
   files: (context) => <FilesTab nodeId={context.nodeId} platform={context.asset.platform} />,
-  services: (context) => <ServicesTab nodeId={context.nodeId} />,
+  services: (context) => <ServicesTab nodeId={context.nodeId} canAct={context.agentOffers.serviceActions} />,
   packages: (context) => (
     <PackagesTab
       nodeId={context.nodeId}
       backend={context.metadata["package_backend"] ?? ""}
+      canAct={context.agentOffers.packageActions}
     />
   ),
   logs: renderDockerLogsPanel,
@@ -158,7 +162,7 @@ const PANEL_RENDERERS: Record<RegisteredPanelID, PanelRenderer> = {
   connect: (context) => (
     <>
       <ConnectPanel nodeId={context.nodeId} />
-      <HubSSHKeyCard nodeId={context.nodeId} isAgentDevice={context.asset.source === "agent"} />
+      <HubSSHKeyCard nodeId={context.nodeId} isAgentDevice={context.asset.source === "agent"} offered={context.agentOffers.sshKeys} />
     </>
   ),
 };

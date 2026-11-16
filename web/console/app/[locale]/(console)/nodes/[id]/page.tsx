@@ -7,6 +7,7 @@ import { useRouter, Link } from "../../../../../i18n/navigation";
 import { DeviceIdentityBar } from "../../../../components/DeviceIdentityBar";
 import type { Asset } from "../../../../console/models";
 import { useFastStatus, useGroupLabelByID, useSlowStatus, useStatusControls } from "../../../../contexts/StatusContext";
+import { useAgentAdvertisement } from "../../../../hooks/useAgentAdvertisement";
 import { useConnectedAgents } from "../../../../hooks/useConnectedAgents";
 import { ClusterTopologySection } from "./ClusterTopologySection";
 import { DockerStackOverviewTab } from "./DockerStackOverviewTab";
@@ -24,7 +25,7 @@ import { DeviceEditCard } from "./DeviceEditCard";
 import { DeviceUsage } from "./DeviceUsage";
 import { DeviceActivity, DeviceServicesList } from "./DeviceOverviewLists";
 import { DeviceLogsTab, DeviceOverviewLayout, DeviceSettingsTab, DeviceSystemTab } from "./DeviceTabShells";
-import { buildDeviceTabs, logsViewsOf, systemViewsOf, tabOfPanel } from "./deviceTabsModel";
+import { buildDeviceTabs, logsViewsOf, systemViewsOf, tabOfPanel, withheldAgentPanel } from "./deviceTabsModel";
 import { useDeviceActivity } from "./useDeviceActivity";
 import { guestsOf } from "./deviceStatusModel";
 import { useAuth } from "../../../../contexts/AuthContext";
@@ -42,12 +43,14 @@ export default function NodeDetailPage() {
   const { user } = useAuth();
   const t = useTranslations("devices.page");
   const tAccess = useTranslations("common.operatorAccess");
+  const tOffers = useTranslations("devices.agentOffers");
   const canWrite = hasWriteRole(user?.role);
   // Host journal queries are host data; viewers keep stored log history only.
   const hostDataAllowed = canAccessHostData(user?.role);
 
   const { connectedAgentIds } = useConnectedAgents();
   const nodeHasAgent = connectedAgentIds.has(nodeId);
+  const advertisement = useAgentAdvertisement(nodeId);
 
   const model = useNodeDetailPageModel({
     nodeId,
@@ -55,8 +58,9 @@ export default function NodeDetailPage() {
     telemetry: status?.telemetryOverview,
     groupLabelByID,
     nodeHasAgent,
+    advertisement,
   });
-  const { asset, metadata, isProxmoxAsset, isDockerContainer, isDockerStack, effectiveKind, infraCategories, panels } = model;
+  const { asset, metadata, isProxmoxAsset, isDockerContainer, isDockerStack, effectiveKind, infraCategories, panels, agentOffers } = model;
 
   const { activePanel, activeSub, activeDetail, activeTabForHook } = useNodeDetailRouting({
     nodeId,
@@ -77,6 +81,8 @@ export default function NodeDetailPage() {
     activePanel,
   });
   const activePanelBlocked = activePanel !== null && !isNodePanelAllowed(activePanel, user?.role, { isDockerContainer });
+  // A panel opened by address for something this device's agent does not offer says so instead of loading.
+  const activePanelWithheld = withheldAgentPanel(activePanel, agentOffers, categorySlugs);
 
   const openPanel = (panel: string) => router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=${panel}`);
 
@@ -110,6 +116,7 @@ export default function NodeDetailPage() {
     nodeId,
     asset: renderAsset,
     metadata,
+    agentOffers,
     telemetryOverview: model.telemetryOverview,
     telemetryLoading: data.telemetryLoading ?? false,
     infraCategories,
@@ -155,6 +162,8 @@ export default function NodeDetailPage() {
   let body;
   if (activePanelBlocked) {
     body = <OperatorAccessRequired title={tAccess("title")} feature="hostData" />;
+  } else if (activePanelWithheld) {
+    body = <div className="dv-tab"><div className="dv-sheet dv-empty"><b>{tOffers("notOffered")}</b></div></div>;
   } else if (currentTab === "overview") {
     body = isDockerStack ? (
       <DockerStackOverviewTab hostId={model.dockerStackHostId} stackName={model.dockerStackName} stackAssetId={model.dockerStackAssetId} />
@@ -181,6 +190,7 @@ export default function NodeDetailPage() {
           <DeviceDetails
             asset={asset}
             nodeHasAgent={nodeHasAgent}
+            monitoringOnly={agentOffers.monitoringOnly}
             host={model.parentInfraHost}
             groups={slowStatus?.groups ?? []}
             guests={isProxmoxAsset && effectiveKind === "node" ? guestsOf(asset, status?.assets ?? []) : null}
@@ -220,11 +230,12 @@ export default function NodeDetailPage() {
       <HierarchyBreadcrumb assetID={nodeId} name={asset.name} />
       <DeviceIdentityBar
         asset={asset}
+        note={agentOffers.monitoringOnly ? tOffers("monitoringOnly") : undefined}
         actions={isDockerContainer ? <DeviceContainerActions asset={asset} /> : (
           <DeviceHeaderActions
             asset={asset}
             offers={offers}
-            onPower={nodeHasAgent && canWrite ? (power) => void data.runNodePower(power, asset.name) : undefined}
+            onPower={agentOffers.power && canWrite ? (power) => void data.runNodePower(power, asset.name) : undefined}
           />
         )}
       />

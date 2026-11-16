@@ -1,3 +1,4 @@
+import { parseAgentAdvertisements } from "../../console/agentOffers";
 import type { LiveStatusResponse, StatusResponse } from "../../console/models";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -48,6 +49,7 @@ export function normalizeLiveStatusResponse(value: unknown): LiveStatusResponse 
     endpoints: ensureArray<LiveStatusResponse["endpoints"][number]>(raw.endpoints),
     assets: ensureArray<LiveStatusResponse["assets"][number]>(raw.assets),
     telemetryOverview: ensureArray<LiveStatusResponse["telemetryOverview"][number]>(raw.telemetryOverview),
+    agentAdvertisements: parseAgentAdvertisements(raw.agentAdvertisements),
   };
 }
 
@@ -88,6 +90,7 @@ export function normalizeStatusResponse(value: unknown): StatusResponse {
     recentCommands: ensureArray<StatusResponse["recentCommands"][number]>(raw.recentCommands),
     recentAudit: ensureArray<StatusResponse["recentAudit"][number]>(raw.recentAudit),
     canonical: asObject(raw.canonical) as StatusResponse["canonical"] | undefined,
+    agentAdvertisements: parseAgentAdvertisements(raw.agentAdvertisements),
   };
 }
 
@@ -200,6 +203,7 @@ function areLiveSlicesEqual(current: StatusResponse, live: LiveStatusResponse): 
     && areUnknownValuesEqual(current.endpoints, live.endpoints)
     && areLiveAssetsEqual(current.assets, live.assets)
     && areLiveTelemetryEqual(current.telemetryOverview, live.telemetryOverview)
+    && areUnknownValuesEqual(current.agentAdvertisements ?? {}, live.agentAdvertisements ?? {})
   );
 }
 
@@ -265,6 +269,7 @@ export function mergeLiveStatus(current: StatusResponse | null, full: StatusResp
       endpoints: live.endpoints,
       assets: live.assets,
       telemetryOverview: live.telemetryOverview,
+      agentAdvertisements: live.agentAdvertisements,
       connectors: [],
       groups: [],
       recentLogs: [],
@@ -306,6 +311,7 @@ export function mergeLiveStatus(current: StatusResponse | null, full: StatusResp
       endpoints: live.endpoints,
       assets: live.assets,
       telemetryOverview: live.telemetryOverview,
+      agentAdvertisements: live.agentAdvertisements,
     };
   }
   return { status: nextStatus, decision };
@@ -331,6 +337,7 @@ export function mergeFullStatus(current: StatusResponse | null, payload: StatusR
       endpoints: current.endpoints,
       assets: current.assets,
       telemetryOverview: current.telemetryOverview,
+      agentAdvertisements: current.agentAdvertisements,
     };
     if (areSlowStatusSlicesEqual(current, nextStatus) && areLiveSlicesEqual(current, {
       timestamp: nextStatus.timestamp,
@@ -343,6 +350,7 @@ export function mergeFullStatus(current: StatusResponse | null, payload: StatusR
       endpoints: nextStatus.endpoints,
       assets: nextStatus.assets,
       telemetryOverview: nextStatus.telemetryOverview,
+      agentAdvertisements: nextStatus.agentAdvertisements,
     })) {
       decision = "unchanged";
       nextStatus = current;

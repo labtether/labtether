@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
 import { Link, useRouter } from "../../../../i18n/navigation";
 import { formatAge } from "../../../console/formatters";
+import { useAgentAdvertisement } from "../../../hooks/useAgentAdvertisement";
 import { useConnectedAgents } from "../../../hooks/useConnectedAgents";
 import { DeviceMenu } from "./[id]/DeviceMenu";
 import { rowOffers } from "./[id]/deviceMenuModel";
@@ -57,9 +58,11 @@ export function DeviceRow({
   tree?: "mid" | "last";
 }) {
   const t = useTranslations("devices.list");
+  const tOffers = useTranslations("devices.agentOffers");
   const router = useRouter();
   const { connectedAgentIds } = useConnectedAgents();
   const { asset } = card;
+  const advertisement = useAgentAdvertisement(asset.id);
   const href = `/nodes/${asset.id}`;
   const meta = asset.metadata ?? {};
   const address = meta.ip_address || meta.ip || "";
@@ -71,12 +74,13 @@ export function DeviceRow({
     line = <span className={`ld-prob ${card.freshness === "offline" ? "bad" : "warn"}`}>{word}</span>;
   } else {
     const what = meta.os_pretty_name || meta.os_name || friendlySourceLabel(asset.source);
+    const edition = advertisement?.edition === "monitoring" ? tOffers("monitoringOnly") : "";
     const host = card.hostedOn?.name;
     const where = !host ? "" : nested ? (meta.vmid ? t("vm", { vmid: meta.vmid }) : "") : meta.vmid ? t("vmOn", { vmid: meta.vmid, host }) : t("on", { host });
     const containers = card.workloads.containers;
     line = (
       <>
-        {[what, where].filter(Boolean).join(" · ")}
+        {[what, edition, where].filter(Boolean).join(" · ")}
         {guests > 0 ? (
           <>
             {" · "}
@@ -110,7 +114,7 @@ export function DeviceRow({
       <UsageBar value={needsAttention(card) ? null : card.cpu} />
       <UsageBar value={needsAttention(card) ? null : card.mem} />
       <UsageBar value={needsAttention(card) ? null : card.disk} />
-      <DeviceMenu asset={asset} offers={rowOffers(asset, connectedAgentIds.has(asset.id))} variant="row" className="ld-more-btn" />
+      <DeviceMenu asset={asset} offers={rowOffers(asset, connectedAgentIds.has(asset.id), advertisement)} variant="row" className="ld-more-btn" />
     </div>
   );
 }

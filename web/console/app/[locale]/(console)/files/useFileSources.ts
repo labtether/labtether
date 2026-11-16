@@ -3,12 +3,13 @@
 import { useMemo } from "react";
 import { useFastStatus } from "../../../contexts/StatusContext";
 import { useConnectedAgents } from "../../../hooks/useConnectedAgents";
+import { agentWithholds } from "../../../console/agentOffers";
 import type { Asset } from "../../../console/models";
 import { useFileConnections } from "./useFileConnections";
 
 // What Files can open: devices whose agent is connected, the devices it can't open (and why), and saved connections.
 
-export type Unavailable = { asset: Asset; reason: "offline" | "noAgent" };
+export type Unavailable = { asset: Asset; reason: "offline" | "noAgent" | "notOffered" };
 
 const isUp = (status: string) => ["online", "ok", "up", "healthy"].includes(status.toLowerCase());
 
@@ -22,7 +23,10 @@ export function useFileSources() {
     const r: Asset[] = [];
     const u: Unavailable[] = [];
     for (const asset of all) {
-      if (connectedAgentIds.has(asset.id)) r.push(asset);
+      // An agent that lists what it offers and leaves out files cannot open here (console/agentOffers).
+      if (connectedAgentIds.has(asset.id) && agentWithholds(status?.agentAdvertisements?.[asset.id], "files", asset.platform)) {
+        u.push({ asset, reason: "notOffered" });
+      } else if (connectedAgentIds.has(asset.id)) r.push(asset);
       else u.push({ asset, reason: isUp(asset.status ?? "") ? "noAgent" : "offline" });
     }
     return { ready: r, unavailable: u };

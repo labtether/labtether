@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useFastStatus } from "../../contexts/StatusContext";
+import { agentWithholds } from "../../console/agentOffers";
 import { isHiddenAsset } from "../../console/taxonomy";
 import type { QuickConnectParams } from "../../hooks/useSession";
 import type { TerminalPreferences } from "../../hooks/useTerminalPreferences";
@@ -66,6 +67,11 @@ export default function TerminalPane({
   const status = useFastStatus();
   const assets = useMemo(() => (status?.assets ?? []).filter((asset) => !isHiddenAsset(asset)), [status?.assets]);
   const asset = assets.find((entry) => entry.id === targetNodeId);
+  // The pickers leave out a device whose agent lists what it offers without the terminal (console/agentOffers).
+  const pickable = useMemo(
+    () => assets.filter((entry) => !agentWithholds(status?.agentAdvertisements?.[entry.id], "terminal", entry.platform)),
+    [assets, status?.agentAdvertisements],
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [paneMenu, setPaneMenu] = useState<PaneContextMenuState | null>(null);
@@ -170,7 +176,7 @@ export default function TerminalPane({
     return (
       <section className={`tm-pane slot${split && isFocused ? " on" : ""}`} aria-label={t("emptyPane")} onClick={onFocus}>
         <TerminalPicker
-          assets={assets}
+          assets={pickable}
           connectedAgentIds={session.connectedAgentIds}
           onPick={handleTargetSelect}
           onAddress={requestAddress}
@@ -293,7 +299,7 @@ export default function TerminalPane({
       ) : null}
 
       <TerminalTargetPicker
-        assets={assets}
+        assets={pickable}
         selectedTargetID={targetNodeId}
         connectedAgentIDs={session.connectedAgentIds}
         onSelect={handleTargetSelect}

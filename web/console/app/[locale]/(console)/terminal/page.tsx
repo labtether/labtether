@@ -11,6 +11,7 @@ import { useTerminalPreferences } from "../../../hooks/useTerminalPreferences";
 import { useTerminalSnippets } from "../../../hooks/useTerminalSnippets";
 import { canAccessHostData } from "../../../lib/roles";
 import { isHiddenAsset } from "../../../console/taxonomy";
+import { agentWithholds } from "../../../console/agentOffers";
 import { getFontById } from "../../../terminal/fonts";
 import { OperatorAccessRequired } from "../../../components/OperatorAccessRequired";
 import BookmarkDialog from "../../../components/terminal/BookmarkDialog";
@@ -61,6 +62,11 @@ function TerminalWorkspacePageContent() {
   const [archived, setArchived] = useState<{ id: string; title: string } | null>(null);
 
   const assets = useMemo(() => (status?.assets ?? []).filter((asset) => !isHiddenAsset(asset)), [status?.assets]);
+  // An agent that lists what it offers and leaves out the terminal is not offered here (console/agentOffers).
+  const pickable = useMemo(
+    () => assets.filter((asset) => !agentWithholds(status?.agentAdvertisements?.[asset.id], "terminal", asset.platform)),
+    [assets, status?.agentAdvertisements],
+  );
   const names = useMemo(() => new Map(assets.map((asset) => [asset.id, asset.name || asset.id])), [assets]);
   const nameOf = useCallback((id: string) => names.get(id) ?? "", [names]);
   const devices = useMemo(() => assets.map((asset) => ({ id: asset.id, name: asset.name || asset.id })).sort((a, b) => a.name.localeCompare(b.name)), [assets]);
@@ -116,7 +122,7 @@ function TerminalWorkspacePageContent() {
   } else if (ws.fresh) {
     body = (
       <TerminalLanding
-        assets={assets}
+        assets={pickable}
         connectedAgentIds={connectedAgentIds}
         lib={lib}
         nameOf={nameOf}
