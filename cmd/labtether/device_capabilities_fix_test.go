@@ -10,6 +10,9 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
+	portainerpkg "github.com/labtether/labtether/internal/hubapi/portainer"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -20,7 +23,7 @@ func TestHandleTrueNASDisksSmartTestRequiresAdmin(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-1", "operator"))
 	rec := httptest.NewRecorder()
 
-	sut.handleTrueNASDisks(context.Background(), rec, req, assets.Asset{ID: "truenas-host"}, nil, []string{"sda", "smart-test"})
+	sut.ensureTruenasDeps().HandleTrueNASDisks(context.Background(), rec, req, assets.Asset{ID: "truenas-host"}, nil, []string{"sda", "smart-test"})
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for non-admin smart test, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -34,7 +37,7 @@ func TestHandlePortainerContainerExecRequiresAdmin(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-1", "operator"))
 	rec := httptest.NewRecorder()
 
-	sut.handlePortainerContainerExec(rec, req, "portainer-host", "abc123")
+	sut.ensurePortainerDeps().HandlePortainerContainerExec(rec, req, "portainer-host", "abc123")
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for non-admin portainer exec, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -48,7 +51,7 @@ func TestHandlePortainerContainerExecRequiresWebSocketUpgrade(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec := httptest.NewRecorder()
 
-	sut.handlePortainerContainerExec(rec, req, "portainer-host", "abc123")
+	sut.ensurePortainerDeps().HandlePortainerContainerExec(rec, req, "portainer-host", "abc123")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 without websocket upgrade, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -84,7 +87,7 @@ func TestHandlePortainerCapabilitiesReportsExecSupportFromAuthMethod(t *testing.
 			}
 
 			rec := httptest.NewRecorder()
-			sut.handlePortainerCapabilities(rec, assets.Asset{
+			sut.ensurePortainerDeps().HandlePortainerCapabilities(rec, assets.Asset{
 				ID:     "portainer-host-1",
 				Source: "portainer",
 				Type:   "container-host",
@@ -97,7 +100,7 @@ func TestHandlePortainerCapabilitiesReportsExecSupportFromAuthMethod(t *testing.
 				t.Fatalf("expected 200, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 			}
 
-			var payload portainerCapabilities
+			var payload portainerpkg.PortainerCapabilities
 			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 				t.Fatalf("decode capabilities: %v", err)
 			}
@@ -140,20 +143,20 @@ func TestHandleTrueNASCapabilitiesKeepsProbeErrorsConservative(t *testing.T) {
 		Type:     "nas",
 		Metadata: map[string]string{"collector_id": "collector-truenas-capabilities"},
 	}
-	runtime, err := sut.loadTrueNASRuntime("collector-truenas-capabilities")
+	runtime, err := sut.ensureTruenasDeps().LoadTrueNASRuntime("collector-truenas-capabilities")
 	if err != nil {
 		t.Fatalf("loadTrueNASRuntime failed: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/capabilities", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTrueNASCapabilities(req.Context(), rec, asset, runtime)
+	sut.ensureTruenasDeps().HandleTrueNASCapabilities(req.Context(), rec, asset, runtime)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 	}
 
-	var payload truenasCapabilities
+	var payload truenaspkg.TruenasCapabilities
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode capabilities: %v", err)
 	}
@@ -166,7 +169,7 @@ func TestHandleTrueNASCapabilitiesKeepsProbeErrorsConservative(t *testing.T) {
 }
 
 func TestBuildProxmoxCapabilityTabsOmitsStorageHAAndReplication(t *testing.T) {
-	tabs := buildProxmoxCapabilityTabs("storage")
+	tabs := proxmoxpkg.BuildProxmoxCapabilityTabs("storage")
 	allowed := make(map[string]bool, len(tabs))
 	for _, tab := range tabs {
 		allowed[tab] = true
@@ -180,10 +183,10 @@ func TestBuildProxmoxCapabilityTabsOmitsStorageHAAndReplication(t *testing.T) {
 }
 
 func TestSelectProxmoxHADoesNotMatchStorageAssets(t *testing.T) {
-	match, related := selectProxmoxHA([]proxmox.HAResource{
+	match, related := proxmoxpkg.SelectProxmoxHA([]proxmox.HAResource{
 		{SID: "vm:101", Node: "pve01", State: "started"},
 		{SID: "ct:202", Node: "pve01", State: "started"},
-	}, proxmoxSessionTarget{Kind: "storage", Node: "pve01"})
+	}, proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01"})
 
 	if match != nil {
 		t.Fatalf("expected no ha match for storage asset, got %+v", match)

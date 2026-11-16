@@ -103,18 +103,18 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 			s.handleDockerExecTerminalStream(w, r, session, agentID, containerID)
 		},
 		ResolveProxmoxSessionTarget: func(assetID string) (terminalpkg.ProxmoxSessionTarget, bool, error) {
-			target, ok, err := s.resolveProxmoxSessionTarget(assetID)
+			target, ok, err := s.ensureProxmoxDeps().ResolveProxmoxSessionTarget(assetID)
 			return target, ok, err
 		},
 		TryProxmoxTerminalStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session, target terminalpkg.ProxmoxSessionTarget) error {
-			return s.tryProxmoxTerminalStream(w, r, session, target.(proxmoxpkg.ProxmoxSessionTarget))
+			return s.ensureProxmoxDeps().TryProxmoxTerminalStream(w, r, session, target.(proxmoxpkg.ProxmoxSessionTarget))
 		},
 		ResolveTrueNASSessionTarget: func(assetID string) (terminalpkg.TruenasShellTarget, bool, error) {
-			target, ok, err := s.resolveTrueNASSessionTarget(assetID)
+			target, ok, err := s.ensureTruenasDeps().ResolveTrueNASSessionTarget(assetID)
 			return target, ok, err
 		},
 		TryTrueNASTerminalStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session, target terminalpkg.TruenasShellTarget) error {
-			return s.tryTrueNASTerminalStream(w, r, session, target.(truenaspkg.TruenasShellTarget))
+			return s.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, session, target.(truenaspkg.TruenasShellTarget))
 		},
 
 		GetProtocolConfig: func(ctx context.Context, assetID, protocol string) (*protocols.ProtocolConfig, error) {

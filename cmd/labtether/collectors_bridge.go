@@ -51,25 +51,25 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 			return s.detectLinkSuggestions()
 		},
 		ExecuteProxmoxActionDirect: func(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-			return s.executeProxmoxActionDirect(ctx, actionID, req)
+			return s.ensureProxmoxDeps().ExecuteProxmoxActionDirect(ctx, actionID, req)
 		},
 
 		LoadProxmoxRuntime: func(collectorID string) (*proxmoxconnector.Client, error) {
-			runtime, err := s.loadProxmoxRuntime(collectorID)
+			runtime, err := s.ensureProxmoxDeps().LoadProxmoxRuntime(collectorID)
 			if err != nil {
 				return nil, err
 			}
 			return runtime.Client(), nil
 		},
 		LoadTrueNASRuntime: func(collectorID string) (*truenasconnector.Client, error) {
-			runtime, err := s.loadTrueNASRuntime(collectorID)
+			runtime, err := s.ensureTruenasDeps().LoadTrueNASRuntime(collectorID)
 			if err != nil {
 				return nil, err
 			}
 			return runtime.Client, nil
 		},
 		EnsureTrueNASSubscriptionWorker: func(ctx context.Context, collectorID string, client *truenasconnector.Client) {
-			runtime, err := s.loadTrueNASRuntime(collectorID)
+			runtime, err := s.ensureTruenasDeps().LoadTrueNASRuntime(collectorID)
 			if err != nil {
 				return
 			}
@@ -77,7 +77,7 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 			if loadErr != nil || !ok {
 				return
 			}
-			s.ensureTrueNASSubscriptionWorker(ctx, collector, runtime)
+			s.ensureTruenasDeps().EnsureTrueNASSubscriptionWorker(ctx, collector, runtime)
 		},
 
 		BuildKnownHostsHostKeyCallback: shared.BuildKnownHostsHostKeyCallback,

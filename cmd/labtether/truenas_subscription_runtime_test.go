@@ -165,7 +165,7 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 	sut := newTestAPIServer(t)
 	collector := hubcollector.Collector{ID: "collector-truenas-1", AssetID: "truenas-cluster-1"}
 
-	sut.ingestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
+	sut.ensureTruenasDeps().IngestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
 		Collection:  "alert.list",
 		MessageType: "removed",
 		Fields: map[string]any{
@@ -205,7 +205,7 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 		t.Fatalf("expected propagated fields, got %#v", first.Fields)
 	}
 
-	sut.ingestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
+	sut.ensureTruenasDeps().IngestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
 		Collection:  "service.query",
 		MessageType: "failed",
 		EventID:     "evt-2",
@@ -230,7 +230,7 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 		t.Fatalf("expected failed event to map to error level, got %q", events[0].Level)
 	}
 
-	sut.ingestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
+	sut.ensureTruenasDeps().IngestTrueNASSubscriptionEvent(collector, collector.ID, truenas.SubscriptionEvent{
 		Collection:  "service.query",
 		MessageType: "",
 		Fields:      map[string]any{"name": "ssh"},
@@ -256,14 +256,14 @@ func TestRunTrueNASSubscriptionWorkerInactiveCollector(t *testing.T) {
 			{ID: "collector-truenas-1", CollectorType: hubcollector.CollectorTypeTrueNAS, Enabled: false},
 		},
 	}
-	sut.ensureTruenasDeps().TruenasSubs = map[string]truenasSubscriptionHandle{
+	sut.ensureTruenasDeps().TruenasSubs = map[string]truenaspkg.TruenasSubscriptionHandle{
 		"collector-truenas-1": {ConfigKey: "cfg-1", Cancel: func() {}},
 	}
 
-	sut.runTrueNASSubscriptionWorker(context.Background(), hubcollector.Collector{
+	sut.ensureTruenasDeps().RunTrueNASSubscriptionWorker(context.Background(), hubcollector.Collector{
 		ID:      "collector-truenas-1",
 		AssetID: "truenas-cluster-1",
-	}, &truenasRuntime{
+	}, &truenaspkg.TruenasRuntime{
 		Client:      &truenas.Client{},
 		CollectorID: "collector-truenas-1",
 		ConfigKey:   "cfg-1",
@@ -305,18 +305,18 @@ func TestRunTrueNASSubscriptionWorkerAdditionalBranches(t *testing.T) {
 		}
 
 		collector := hubcollector.Collector{ID: "collector-truenas-evt", AssetID: "truenas-cluster-evt"}
-		runtime := &truenasRuntime{
+		runtime := &truenaspkg.TruenasRuntime{
 			Client:      &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second},
 			CollectorID: collector.ID,
 			ConfigKey:   "cfg-evt",
 		}
-		sut.ensureTruenasDeps().TruenasSubs = map[string]truenasSubscriptionHandle{
+		sut.ensureTruenasDeps().TruenasSubs = map[string]truenaspkg.TruenasSubscriptionHandle{
 			collector.ID: {ConfigKey: "cfg-evt", Cancel: func() {}},
 		}
 
 		done := make(chan struct{})
 		go func() {
-			sut.runTrueNASSubscriptionWorker(ctx, collector, runtime)
+			sut.ensureTruenasDeps().RunTrueNASSubscriptionWorker(ctx, collector, runtime)
 			close(done)
 		}()
 
@@ -379,12 +379,12 @@ func TestRunTrueNASSubscriptionWorkerAdditionalBranches(t *testing.T) {
 		}
 
 		collector := hubcollector.Collector{ID: "collector-truenas-backoff", AssetID: "truenas-cluster-backoff"}
-		runtime := &truenasRuntime{
+		runtime := &truenaspkg.TruenasRuntime{
 			Client:      &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second},
 			CollectorID: collector.ID,
 			ConfigKey:   "cfg-backoff",
 		}
-		sut.ensureTruenasDeps().TruenasSubs = map[string]truenasSubscriptionHandle{
+		sut.ensureTruenasDeps().TruenasSubs = map[string]truenaspkg.TruenasSubscriptionHandle{
 			collector.ID: {ConfigKey: "cfg-backoff", Cancel: func() {}},
 		}
 
@@ -401,7 +401,7 @@ func TestRunTrueNASSubscriptionWorkerAdditionalBranches(t *testing.T) {
 			truenaspkg.SubscriptionBackoffMu.Unlock()
 		}()
 
-		sut.runTrueNASSubscriptionWorker(ctx, collector, runtime)
+		sut.ensureTruenasDeps().RunTrueNASSubscriptionWorker(ctx, collector, runtime)
 		if got := subscribeCount.Load(); got < 2 {
 			t.Fatalf("completed subscription handshakes = %d, want at least 2", got)
 		}

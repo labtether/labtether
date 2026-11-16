@@ -61,7 +61,7 @@ func TestTryTrueNASTerminalStreamAuthFailure(t *testing.T) {
 	sut := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/terminal/stream", nil)
 	rec := httptest.NewRecorder()
-	err := sut.tryTrueNASTerminalStream(rec, req, terminal.Session{ID: "sess-1", Target: "truenas-host-1"}, truenasShellTarget{
+	err := sut.ensureTruenasDeps().TryTrueNASTerminalStream(rec, req, terminal.Session{ID: "sess-1", Target: "truenas-host-1"}, truenaspkg.TruenasShellTarget{
 		BaseURL:    nas.URL,
 		APIKey:     "api-key",
 		SkipVerify: true,
@@ -125,7 +125,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 		sut := newTestAPIServer(t)
 		req := httptest.NewRequest(http.MethodGet, "/terminal/stream", nil)
 		rec := httptest.NewRecorder()
-		err := sut.tryTrueNASTerminalStream(rec, req, terminal.Session{ID: "sess-upgrade-fail"}, truenasShellTarget{
+		err := sut.ensureTruenasDeps().TryTrueNASTerminalStream(rec, req, terminal.Session{ID: "sess-upgrade-fail"}, truenaspkg.TruenasShellTarget{
 			BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 		})
 		if err == nil || !strings.Contains(err.Error(), "browser ws upgrade") {
@@ -165,7 +165,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 		sut := newTestAPIServer(t)
 		errCh := make(chan error, 1)
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-shell-dial-fail"}, truenasShellTarget{
+			errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-shell-dial-fail"}, truenaspkg.TruenasShellTarget{
 				BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 			})
 		}))
@@ -205,7 +205,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 		sut := newTestAPIServer(t)
 		errCh := make(chan error, 1)
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-send-fail"}, truenasShellTarget{
+			errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-send-fail"}, truenaspkg.TruenasShellTarget{
 				BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 				Options: map[string]any{"invalid": make(chan int)},
 			})
@@ -252,7 +252,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 			sut := newTestAPIServer(t)
 			errCh := make(chan error, 1)
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-browser-write-fail"}, truenasShellTarget{
+				errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-browser-write-fail"}, truenaspkg.TruenasShellTarget{
 					BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 				})
 			}))
@@ -301,7 +301,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 			sut := newTestAPIServer(t)
 			errCh := make(chan error, 1)
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-nas-write-fail"}, truenasShellTarget{
+				errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-nas-write-fail"}, truenaspkg.TruenasShellTarget{
 					BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 				})
 			}))
@@ -343,7 +343,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 			sut := newTestAPIServer(t)
 			errCh := make(chan error, 1)
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-read-fail"}, truenasShellTarget{
+				errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-read-fail"}, truenaspkg.TruenasShellTarget{
 					BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 				})
 			}))
@@ -384,7 +384,7 @@ func TestTryTrueNASTerminalStreamAdditionalFailureBranches(t *testing.T) {
 			sut := newTestAPIServer(t)
 			errCh := make(chan error, 1)
 			proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				errCh <- sut.tryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-failed"}, truenasShellTarget{
+				errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, terminal.Session{ID: "sess-auth-failed"}, truenaspkg.TruenasShellTarget{
 					BaseURL: nas.URL, APIKey: "api-key", SkipVerify: true, Timeout: time.Second,
 				})
 			}))

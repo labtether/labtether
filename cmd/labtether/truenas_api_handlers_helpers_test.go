@@ -6,6 +6,8 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/truenas"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -64,7 +66,7 @@ func TestHandleTrueNASAssetsAdditionalErrors(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing asset, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), errTrueNASAssetNotFound.Error())
+	assertErrorBodyContains(t, rec.Body.Bytes(), truenaspkg.ErrTrueNASAssetNotFound.Error())
 
 	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "docker-host-1",
@@ -82,7 +84,7 @@ func TestHandleTrueNASAssetsAdditionalErrors(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for non-truenas asset, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), errAssetNotTrueNAS.Error())
+	assertErrorBodyContains(t, rec.Body.Bytes(), truenaspkg.ErrAssetNotTrueNAS.Error())
 
 	sut.logStore = nil
 	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
@@ -97,7 +99,7 @@ func TestHandleTrueNASAssetsAdditionalErrors(t *testing.T) {
 
 func TestWriteTrueNASResolveErrorDefaultBranch(t *testing.T) {
 	rec := httptest.NewRecorder()
-	writeTrueNASResolveError(rec, errors.New("upstream failed"))
+	truenaspkg.WriteTrueNASResolveError(rec, errors.New("upstream failed"))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for generic resolve error, got %d", rec.Code)
 	}
@@ -144,17 +146,17 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 
 		// The other NAS is usable, so an error must come from preserving the
 		// asset's explicit owner rather than from an unconfigured fixture.
-		if runtime, err := sut.loadTrueNASRuntime("collector-truenas-1"); err != nil || runtime == nil {
+		if runtime, err := sut.ensureTruenasDeps().LoadTrueNASRuntime("collector-truenas-1"); err != nil || runtime == nil {
 			t.Fatalf("other NAS fixture is unavailable: %v", err)
 		}
 		t.Run("API reads", func(t *testing.T) {
-			asset, runtime, err := sut.resolveTrueNASAssetRuntime("truenas-host-vaultnas")
+			asset, runtime, err := sut.ensureTruenasDeps().ResolveTrueNASAssetRuntime("truenas-host-vaultnas")
 			if err == nil || runtime != nil || asset.ID != "" {
 				t.Fatal("missing owner resolved an API read against another NAS")
 			}
 		})
 		t.Run("shell sessions", func(t *testing.T) {
-			target, resolved, err := sut.resolveTrueNASSessionTarget("truenas-host-vaultnas")
+			target, resolved, err := sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("truenas-host-vaultnas")
 			if err == nil || resolved || target.BaseURL != "" || target.APIKey != "" {
 				t.Fatal("missing owner resolved a shell against another NAS")
 			}
@@ -164,27 +166,27 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 	t.Run("runtime load error is wrapped", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-missing")
-		if _, _, err := sut.resolveTrueNASAssetRuntime("truenas-host-vaultnas"); err == nil || !strings.Contains(err.Error(), "failed to load truenas runtime") {
+		if _, _, err := sut.ensureTruenasDeps().ResolveTrueNASAssetRuntime("truenas-host-vaultnas"); err == nil || !strings.Contains(err.Error(), "failed to load truenas runtime") {
 			t.Fatalf("expected wrapped runtime load error, got %v", err)
 		}
 	})
 }
 
 func TestTrueNASAPIHelperCoverage(t *testing.T) {
-	if got := parseTrueNASEventsWindow(""); got != 24*time.Hour {
+	if got := truenaspkg.ParseTrueNASEventsWindow(""); got != 24*time.Hour {
 		t.Fatalf("default events window = %s, want 24h", got)
 	}
-	if got := parseTrueNASEventsWindow("bad"); got != 24*time.Hour {
+	if got := truenaspkg.ParseTrueNASEventsWindow("bad"); got != 24*time.Hour {
 		t.Fatalf("invalid events window = %s, want 24h", got)
 	}
-	if got := parseTrueNASEventsWindow("10m"); got != time.Hour {
+	if got := truenaspkg.ParseTrueNASEventsWindow("10m"); got != time.Hour {
 		t.Fatalf("short events window clamp = %s, want 1h", got)
 	}
-	if got := parseTrueNASEventsWindow("800h"); got != 30*24*time.Hour {
+	if got := truenaspkg.ParseTrueNASEventsWindow("800h"); got != 30*24*time.Hour {
 		t.Fatalf("long events window clamp = %s, want 30d", got)
 	}
 
-	results := latestSmartResultsByDisk([]map[string]any{
+	results := truenaspkg.LatestSmartResultsByDisk([]map[string]any{
 		{"disk": "sda", "status": "SUCCESS", "created_at": "2026-02-22T00:00:00Z"},
 		{"disk": map[string]any{"name": "sda"}, "status": "FAILED", "created_at": "2026-02-23T00:00:00Z"},
 		{"disk": "sdb", "status": "SUCCESS", "end_time": "2026-02-22T10:00:00Z"},
@@ -196,61 +198,61 @@ func TestTrueNASAPIHelperCoverage(t *testing.T) {
 		t.Fatalf("expected sdb result to be retained")
 	}
 
-	if got := deriveTrueNASDiskHealthStatus(trueNASDiskHealth{SmartHealth: "FAILED"}); got != "critical" {
+	if got := truenaspkg.DeriveTrueNASDiskHealthStatus(truenaspkg.TrueNASDiskHealth{SmartHealth: "FAILED"}); got != "critical" {
 		t.Fatalf("deriveTrueNASDiskHealthStatus failed health = %q", got)
 	}
-	if got := deriveTrueNASDiskHealthStatus(trueNASDiskHealth{TemperatureCelsius: proxmoxpkg.Float64Ptr(55)}); got != "warning" {
+	if got := truenaspkg.DeriveTrueNASDiskHealthStatus(truenaspkg.TrueNASDiskHealth{TemperatureCelsius: proxmoxpkg.Float64Ptr(55)}); got != "warning" {
 		t.Fatalf("deriveTrueNASDiskHealthStatus warning temp = %q", got)
 	}
-	if got := deriveTrueNASDiskHealthStatus(trueNASDiskHealth{LastTestStatus: "SUCCESS"}); got != "healthy" {
+	if got := truenaspkg.DeriveTrueNASDiskHealthStatus(truenaspkg.TrueNASDiskHealth{LastTestStatus: "SUCCESS"}); got != "healthy" {
 		t.Fatalf("deriveTrueNASDiskHealthStatus healthy = %q", got)
 	}
-	if got := deriveTrueNASDiskHealthStatus(trueNASDiskHealth{}); got != "unknown" {
+	if got := truenaspkg.DeriveTrueNASDiskHealthStatus(truenaspkg.TrueNASDiskHealth{}); got != "unknown" {
 		t.Fatalf("deriveTrueNASDiskHealthStatus empty = %q", got)
 	}
 
-	if trueNASDiskHealthSeverity("critical") != 4 || trueNASDiskHealthSeverity("warning") != 3 || trueNASDiskHealthSeverity("unknown") != 2 || trueNASDiskHealthSeverity("healthy") != 1 || trueNASDiskHealthSeverity("other") != 0 {
+	if truenaspkg.TrueNASDiskHealthSeverity("critical") != 4 || truenaspkg.TrueNASDiskHealthSeverity("warning") != 3 || truenaspkg.TrueNASDiskHealthSeverity("unknown") != 2 || truenaspkg.TrueNASDiskHealthSeverity("healthy") != 1 || truenaspkg.TrueNASDiskHealthSeverity("other") != 0 {
 		t.Fatalf("unexpected disk health severities")
 	}
 
-	if anyToFloat64(float32(7.5)) != 7.5 || anyToFloat64("3.25") != 3.25 || anyToFloat64("bad") != 0 {
+	if shared.AnyToFloat64(float32(7.5)) != 7.5 || shared.AnyToFloat64("3.25") != 3.25 || shared.AnyToFloat64("bad") != 0 {
 		t.Fatalf("unexpected anyToFloat64 conversions")
 	}
 
-	if parsed, ok := parseAnyBoolLoose("enabled"); !ok || !parsed {
+	if parsed, ok := shared.ParseAnyBoolLoose("enabled"); !ok || !parsed {
 		t.Fatalf("expected enabled => true")
 	}
-	if parsed, ok := parseAnyBoolLoose("off"); !ok || parsed {
+	if parsed, ok := shared.ParseAnyBoolLoose("off"); !ok || parsed {
 		t.Fatalf("expected off => false")
 	}
-	if _, ok := parseAnyBoolLoose("maybe"); ok {
+	if _, ok := shared.ParseAnyBoolLoose("maybe"); ok {
 		t.Fatalf("expected unknown bool string to fail parse")
 	}
 
-	if got := normalizeTrueNASFilesystemPath(" datasets/alpha "); got != "/datasets/alpha" {
+	if got := truenaspkg.NormalizeTrueNASFilesystemPath(" datasets/alpha "); got != "/datasets/alpha" {
 		t.Fatalf("normalizeTrueNASFilesystemPath = %q", got)
 	}
-	if got := normalizeTrueNASFilesystemPath("."); got != "/" {
+	if got := truenaspkg.NormalizeTrueNASFilesystemPath("."); got != "/" {
 		t.Fatalf("normalizeTrueNASFilesystemPath(.) = %q", got)
 	}
-	if got := parentTrueNASFilesystemPath("/"); got != "" {
+	if got := truenaspkg.ParentTrueNASFilesystemPath("/"); got != "" {
 		t.Fatalf("parentTrueNASFilesystemPath(/) = %q, want empty", got)
 	}
-	if got := parentTrueNASFilesystemPath("/mnt/data"); got != "/mnt" {
+	if got := truenaspkg.ParentTrueNASFilesystemPath("/mnt/data"); got != "/mnt" {
 		t.Fatalf("parentTrueNASFilesystemPath(/mnt/data) = %q, want /mnt", got)
 	}
 
-	if entries, ok := normalizeTrueNASListDirResult([]any{map[string]any{"name": "a"}, "skip"}); !ok || len(entries) != 1 {
+	if entries, ok := truenaspkg.NormalizeTrueNASListDirResult([]any{map[string]any{"name": "a"}, "skip"}); !ok || len(entries) != 1 {
 		t.Fatalf("normalizeTrueNASListDirResult array decode failed: %#v ok=%v", entries, ok)
 	}
-	if entries, ok := normalizeTrueNASListDirResult(map[string]any{"entries": []any{map[string]any{"name": "b"}}}); !ok || len(entries) != 1 {
+	if entries, ok := truenaspkg.NormalizeTrueNASListDirResult(map[string]any{"entries": []any{map[string]any{"name": "b"}}}); !ok || len(entries) != 1 {
 		t.Fatalf("normalizeTrueNASListDirResult map entries decode failed: %#v ok=%v", entries, ok)
 	}
-	if _, ok := normalizeTrueNASListDirResult("invalid"); ok {
+	if _, ok := truenaspkg.NormalizeTrueNASListDirResult("invalid"); ok {
 		t.Fatalf("normalizeTrueNASListDirResult should fail for invalid payload")
 	}
 
-	entry := mapTrueNASFilesystemEntry(map[string]any{
+	entry := truenaspkg.MapTrueNASFilesystemEntry(map[string]any{
 		"name":       "photos",
 		"type":       "DIRECTORY",
 		"mode":       "0755",
@@ -265,25 +267,25 @@ func TestTrueNASAPIHelperCoverage(t *testing.T) {
 		t.Fatalf("expected mapped modified timestamp")
 	}
 
-	if _, ok := parseAnyTimestamp(time.Now()); !ok {
+	if _, ok := shared.ParseAnyTimestamp(time.Now()); !ok {
 		t.Fatalf("expected parseAnyTimestamp(time.Time) success")
 	}
-	if _, ok := parseAnyTimestamp(int64(1700000000)); !ok {
+	if _, ok := shared.ParseAnyTimestamp(int64(1700000000)); !ok {
 		t.Fatalf("expected parseAnyTimestamp(int64) success")
 	}
-	if _, ok := parseAnyTimestamp(int(1700000000)); !ok {
+	if _, ok := shared.ParseAnyTimestamp(int(1700000000)); !ok {
 		t.Fatalf("expected parseAnyTimestamp(int) success")
 	}
-	if _, ok := parseAnyTimestamp(float64(1700000000)); !ok {
+	if _, ok := shared.ParseAnyTimestamp(float64(1700000000)); !ok {
 		t.Fatalf("expected parseAnyTimestamp(float64) success")
 	}
-	if _, ok := parseAnyTimestamp("2026-02-23T01:02:03.123Z"); !ok {
+	if _, ok := shared.ParseAnyTimestamp("2026-02-23T01:02:03.123Z"); !ok {
 		t.Fatalf("expected parseAnyTimestamp(RFC3339Nano) success")
 	}
-	if _, ok := parseAnyTimestamp("1700000000"); !ok {
+	if _, ok := shared.ParseAnyTimestamp("1700000000"); !ok {
 		t.Fatalf("expected parseAnyTimestamp(unix string) success")
 	}
-	if _, ok := parseAnyTimestamp("bad"); ok {
+	if _, ok := shared.ParseAnyTimestamp("bad"); ok {
 		t.Fatalf("expected parseAnyTimestamp(bad) to fail")
 	}
 }
@@ -292,17 +294,17 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 	t.Run("resolve asset branches", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		sut.assetStore = nil
-		if _, err := sut.resolveTrueNASAsset("asset"); err == nil {
+		if _, err := sut.ensureTruenasDeps().ResolveTrueNASAsset("asset"); err == nil {
 			t.Fatalf("expected resolveTrueNASAsset to fail when asset store nil")
 		}
 
 		sut = newTestAPIServer(t)
-		if _, err := sut.resolveTrueNASAsset("   "); err == nil {
+		if _, err := sut.ensureTruenasDeps().ResolveTrueNASAsset("   "); err == nil {
 			t.Fatalf("expected resolveTrueNASAsset to fail on empty id")
 		}
 
 		sut.assetStore = &failingTrueNASAssetStore{AssetStore: sut.assetStore, err: errors.New("asset get failed")}
-		if _, err := sut.resolveTrueNASAsset("asset"); err == nil || !strings.Contains(err.Error(), "failed to load asset") {
+		if _, err := sut.ensureTruenasDeps().ResolveTrueNASAsset("asset"); err == nil || !strings.Contains(err.Error(), "failed to load asset") {
 			t.Fatalf("expected wrapped GetAsset error, got %v", err)
 		}
 	})
@@ -315,13 +317,13 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
 		var out []map[string]any
-		if err := callTrueNASQueryCompat(context.Background(), client, "disk.query", &out); err == nil || !truenas.IsMethodCallError(err) {
+		if err := truenaspkg.CallTrueNASQueryCompat(context.Background(), client, "disk.query", &out); err == nil || !truenas.IsMethodCallError(err) {
 			t.Fatalf("expected final method call error, got %v", err)
 		}
 	})
 
 	t.Run("latestSmartResultsByDisk skips empty and compares end_time fallback", func(t *testing.T) {
-		out := latestSmartResultsByDisk([]map[string]any{
+		out := truenaspkg.LatestSmartResultsByDisk([]map[string]any{
 			{"disk": "", "status": "skip"},
 			{"disk": "sda", "status": "old", "created_at": "bad-time", "end_time": "2026-02-22T00:00:00Z"},
 			{"disk": "sda", "status": "new", "created_at": "bad-time", "end_time": "2026-02-23T00:00:00Z"},
@@ -332,44 +334,44 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 	})
 
 	t.Run("helper conversions and parser fallbacks", func(t *testing.T) {
-		if got := anyToFloat64(int(5)); got != 5 {
+		if got := shared.AnyToFloat64(int(5)); got != 5 {
 			t.Fatalf("anyToFloat64(int) = %v", got)
 		}
-		if got := anyToFloat64(int64(6)); got != 6 {
+		if got := shared.AnyToFloat64(int64(6)); got != 6 {
 			t.Fatalf("anyToFloat64(int64) = %v", got)
 		}
 
-		if parsed, ok := parseAnyBoolLoose(true); !ok || !parsed {
+		if parsed, ok := shared.ParseAnyBoolLoose(true); !ok || !parsed {
 			t.Fatalf("parseAnyBoolLoose(bool) failed")
 		}
-		if parsed, ok := parseAnyBoolLoose(int(1)); !ok || !parsed {
+		if parsed, ok := shared.ParseAnyBoolLoose(int(1)); !ok || !parsed {
 			t.Fatalf("parseAnyBoolLoose(int) failed")
 		}
-		if parsed, ok := parseAnyBoolLoose(int64(0)); !ok || parsed {
+		if parsed, ok := shared.ParseAnyBoolLoose(int64(0)); !ok || parsed {
 			t.Fatalf("parseAnyBoolLoose(int64) failed")
 		}
-		if parsed, ok := parseAnyBoolLoose(float64(1)); !ok || !parsed {
+		if parsed, ok := shared.ParseAnyBoolLoose(float64(1)); !ok || !parsed {
 			t.Fatalf("parseAnyBoolLoose(float64) failed")
 		}
-		if parsed, ok := parseAnyBoolLoose("true"); !ok || !parsed {
+		if parsed, ok := shared.ParseAnyBoolLoose("true"); !ok || !parsed {
 			t.Fatalf("parseAnyBoolLoose(\"true\") failed")
 		}
 
-		if got := normalizeTrueNASFilesystemPath(""); got != "/mnt" {
+		if got := truenaspkg.NormalizeTrueNASFilesystemPath(""); got != "/mnt" {
 			t.Fatalf("normalizeTrueNASFilesystemPath(empty) = %q", got)
 		}
-		if got := normalizeTrueNASFilesystemPath("mnt/data"); got != "/mnt/data" {
+		if got := truenaspkg.NormalizeTrueNASFilesystemPath("mnt/data"); got != "/mnt/data" {
 			t.Fatalf("normalizeTrueNASFilesystemPath(relative) = %q", got)
 		}
-		if got := normalizeTrueNASFilesystemPath("///"); got != "/" {
+		if got := truenaspkg.NormalizeTrueNASFilesystemPath("///"); got != "/" {
 			t.Fatalf("normalizeTrueNASFilesystemPath(root-ish) = %q", got)
 		}
 
-		if entries, ok := normalizeTrueNASListDirResult(map[string]any{"data": []any{map[string]any{"name": "x"}}}); !ok || len(entries) != 1 {
+		if entries, ok := truenaspkg.NormalizeTrueNASListDirResult(map[string]any{"data": []any{map[string]any{"name": "x"}}}); !ok || len(entries) != 1 {
 			t.Fatalf("normalizeTrueNASListDirResult(data) failed: %#v ok=%v", entries, ok)
 		}
 
-		entry := mapTrueNASFilesystemEntry(map[string]any{
+		entry := truenaspkg.MapTrueNASFilesystemEntry(map[string]any{
 			"path":       "",
 			"type":       "",
 			"is_dir":     true,
@@ -386,7 +388,7 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected modified fallback timestamp")
 		}
 
-		linkEntry := mapTrueNASFilesystemEntry(map[string]any{
+		linkEntry := truenaspkg.MapTrueNASFilesystemEntry(map[string]any{
 			"name": "sym",
 			"path": "/mnt/sym",
 			"type": "symlink",
@@ -395,10 +397,10 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected symlink type to force IsSymbolic")
 		}
 
-		if _, ok := parseAnyTimestamp(""); ok {
+		if _, ok := shared.ParseAnyTimestamp(""); ok {
 			t.Fatalf("expected empty timestamp string to fail parse")
 		}
-		if _, ok := parseAnyTimestamp("2026-02-23T01:02:03Z"); !ok {
+		if _, ok := shared.ParseAnyTimestamp("2026-02-23T01:02:03Z"); !ok {
 			t.Fatalf("expected RFC3339 timestamp to parse")
 		}
 	})
@@ -410,7 +412,7 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 		defer server.Close()
 
 		client := &truenas.Client{BaseURL: server.URL, APIKey: "api-key", Timeout: time.Second}
-		if _, err := callTrueNASListDir(context.Background(), client, "/mnt"); err == nil || !truenas.IsMethodCallError(err) {
+		if _, err := truenaspkg.CallTrueNASListDir(context.Background(), client, "/mnt"); err == nil || !truenas.IsMethodCallError(err) {
 			t.Fatalf("expected exhausted retries to return method call error, got %v", err)
 		}
 	})

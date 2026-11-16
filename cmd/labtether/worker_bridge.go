@@ -27,15 +27,17 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 			return s.ensureAgentsDeps().ExecuteViaAgentContext(ctx, job)
 		},
 		ExecuteTerminalCommandContext: opspkg.ExecuteCommandContext,
-		ExecuteActionInProcessContext: s.executeActionInProcessContext,
-		ExecuteUpdateScopeContext:     s.executeUpdateScopeContext,
-		TerminalStore:                 s.terminalStore,
-		ActionStore:                   s.actionStore,
-		UpdateStore:                   s.updateStore,
-		AuditStore:                    s.auditStore,
-		LogStore:                      s.logStore,
-		PresenceStore:                 s.presenceStore,
-		ScheduleStore:                 s.scheduleStore,
+		ExecuteActionInProcessContext: func(ctx context.Context, job actions.Job) actions.Result {
+			return s.ensureProxmoxDeps().ExecuteActionInProcessContext(ctx, job)
+		},
+		ExecuteUpdateScopeContext: s.executeUpdateScopeContext,
+		TerminalStore:             s.terminalStore,
+		ActionStore:               s.actionStore,
+		UpdateStore:               s.updateStore,
+		AuditStore:                s.auditStore,
+		LogStore:                  s.logStore,
+		PresenceStore:             s.presenceStore,
+		ScheduleStore:             s.scheduleStore,
 		ScheduleExecutionStore: func() persistence.ScheduleExecutionStore {
 			store, _ := s.scheduleStore.(persistence.ScheduleExecutionStore)
 			return store
@@ -73,7 +75,7 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 			return opspkg.ExecuteCommand(job)
 		},
 		ExecuteActionInProcess: func(job actions.Job) actions.Result {
-			return s.executeActionInProcess(job)
+			return s.ensureProxmoxDeps().ExecuteActionInProcess(job)
 		},
 		ExecuteUpdateScope: func(job updates.Job, target, scope string) updates.RunResultEntry {
 			return s.executeUpdateScope(job, target, scope)
