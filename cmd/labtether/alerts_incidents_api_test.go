@@ -35,7 +35,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"alert-node-1","type":"host","name":"Alert Node 1","source":"agent","group_id":"` + sitePayload.Group.ID + `","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
@@ -428,7 +428,7 @@ func seedAssetViaHeartbeatWithSite(t *testing.T, sut *apiServer, assetID, groupI
 	payload := []byte(`{"asset_id":"` + assetID + `","type":"host","name":"` + assetID + `","source":"agent","group_id":"` + groupID + `","status":"online","platform":"linux"}`)
 	req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202 for asset heartbeat, got %d: %s", rec.Code, rec.Body.String())
 	}

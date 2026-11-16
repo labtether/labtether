@@ -18,7 +18,7 @@ func TestUpdateAssetGroupCascadesToProxmoxSubDevices(t *testing.T) {
 	recordHeartbeat := func(payload string) {
 		req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader([]byte(payload)))
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusAccepted {
 			t.Fatalf("expected 202 heartbeat, got %d", rec.Code)
 		}
@@ -27,7 +27,7 @@ func TestUpdateAssetGroupCascadesToProxmoxSubDevices(t *testing.T) {
 	getAssetGroupID := func(assetID string) string {
 		req := httptest.NewRequest(http.MethodGet, "/assets/"+assetID, nil)
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 fetching asset %s, got %d", assetID, rec.Code)
 		}
@@ -87,7 +87,7 @@ func TestUpdateAssetGroupCascadesToProxmoxSubDevices(t *testing.T) {
 		bytes.NewReader([]byte(`{"group_id":"`+groupTwoID+`"}`)),
 	)
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 updating parent host, got %d", updateRec.Code)
 	}
@@ -116,7 +116,7 @@ func TestUpdateAssetGroupCascadesToDockerSubDevicesByAgentID(t *testing.T) {
 	recordHeartbeat := func(payload string) {
 		req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader([]byte(payload)))
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusAccepted {
 			t.Fatalf("expected 202 heartbeat, got %d", rec.Code)
 		}
@@ -125,7 +125,7 @@ func TestUpdateAssetGroupCascadesToDockerSubDevicesByAgentID(t *testing.T) {
 	getAssetGroupID := func(assetID string) string {
 		req := httptest.NewRequest(http.MethodGet, "/assets/"+assetID, nil)
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 fetching asset %s, got %d", assetID, rec.Code)
 		}
@@ -176,7 +176,7 @@ func TestUpdateAssetGroupCascadesToDockerSubDevicesByAgentID(t *testing.T) {
 		bytes.NewReader([]byte(`{"group_id":"`+groupTwoID+`"}`)),
 	)
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 updating docker host, got %d", updateRec.Code)
 	}

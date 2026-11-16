@@ -17,7 +17,7 @@ func TestAssetMetricsLongWindows(t *testing.T) {
 
 	payload := []byte(`{"asset_id":"lab-host-long","type":"host","name":"Lab Host Long","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"17.2"}}`)
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload)))
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload)))
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("heartbeat: expected 202, got %d", createRec.Code)
 	}

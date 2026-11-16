@@ -44,7 +44,7 @@ func TestStatusAggregateIncludesCanonicalPayload(t *testing.T) {
 	sut.persistCanonicalConnectorSnapshot("proxmox", "collector-status", connector.DisplayName(), "", connector, discovered)
 
 	agentAssetID := "linux-node-status-contract"
-	if _, err := sut.processHeartbeatRequest(assets.HeartbeatRequest{
+	if _, err := sut.ensureResourcesDeps().ProcessHeartbeatRequest(assets.HeartbeatRequest{
 		AssetID:  agentAssetID,
 		Type:     "host",
 		Name:     "linux-node-status-contract",

@@ -320,7 +320,7 @@ func TestEnrollRejectsRecoveryFromHeartbeatOnlyFingerprint(t *testing.T) {
 	heartbeatRequest := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewReader(heartbeatPayload))
 	heartbeatRequest.Header.Set("Authorization", "Bearer "+initialResponse.AgentToken)
 	heartbeatRecorder := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(heartbeatRecorder, heartbeatRequest)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(heartbeatRecorder, heartbeatRequest)
 	if heartbeatRecorder.Code != http.StatusAccepted {
 		t.Fatalf("authenticated heartbeat: expected 202, got %d: %s", heartbeatRecorder.Code, heartbeatRecorder.Body.String())
 	}

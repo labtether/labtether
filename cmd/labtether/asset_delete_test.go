@@ -85,7 +85,7 @@ func TestDeleteAsset_Success(t *testing.T) {
 	// DELETE /assets/test-node-01
 	req := httptest.NewRequest(http.MethodDelete, "/assets/test-node-01", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -114,7 +114,7 @@ func TestDeleteAsset_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/nonexistent", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
@@ -137,7 +137,7 @@ func TestDeleteAsset_GetStillWorks(t *testing.T) {
 	// GET /assets/test-node-02 should still work.
 	req := httptest.NewRequest(http.MethodGet, "/assets/test-node-02", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for GET, got %d: %s", rec.Code, rec.Body.String())
@@ -163,7 +163,7 @@ func TestDeleteAsset_ConnectedAgentReturnsConflict(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
@@ -203,7 +203,7 @@ func TestDeleteAsset_ConnectedAgentConflictSendsNothing(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
@@ -287,7 +287,7 @@ func TestDeleteAsset_AgentDeleteCascadesAttachedDockerAssets(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/agent-01", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -372,7 +372,7 @@ func TestDeleteAsset_NonAgentDeleteCascadesAttachedDockerAssetsAndWebServices(t 
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -430,7 +430,7 @@ func TestDeleteAsset_RemovesAutoDockerCollectorsForDeletedParent(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-delta", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

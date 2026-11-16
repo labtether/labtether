@@ -40,7 +40,7 @@ func TestDeletePreviewMatchesWhatRemovingAConnectionDeletes(t *testing.T) {
 	before, _ := sut.assetStore.ListAssets()
 
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, httptest.NewRequest(http.MethodGet, "/assets/truenas-nas01/delete-preview", nil))
+	sut.ensureResourcesDeps().HandleAssetActions(rec, httptest.NewRequest(http.MethodGet, "/assets/truenas-nas01/delete-preview", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
 	}
@@ -57,7 +57,7 @@ func TestDeletePreviewMatchesWhatRemovingAConnectionDeletes(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	sut.handleAssetActions(rec, httptest.NewRequest(http.MethodDelete, "/assets/truenas-nas01", nil))
+	sut.ensureResourcesDeps().HandleAssetActions(rec, httptest.NewRequest(http.MethodDelete, "/assets/truenas-nas01", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", rec.Code, rec.Body.String())
 	}

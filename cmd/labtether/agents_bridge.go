@@ -84,7 +84,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
-			return s.processHeartbeatRequest(req)
+			return s.ensureResourcesDeps().ProcessHeartbeatRequest(req)
 		},
 		ProcessAuthenticatedAgentHeartbeat: func(agentTokenID string, req assets.HeartbeatRequest) (*assets.Asset, error) {
 			if enrollmentTransactions == nil {

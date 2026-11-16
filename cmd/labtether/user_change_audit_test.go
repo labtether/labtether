@@ -61,8 +61,8 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 		t.Fatalf("seed device: %v", err)
 	}
 	groupID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleGroups(w, r) }, http.MethodPost, "/groups", `{"name":"Rack A"}`), "group", "id")
-	call(s.handleAssetActions, http.MethodPatch, "/assets/nas01", `{"name":"nas-main","group_id":"`+groupID+`"}`)
-	call(s.handleAssetActions, http.MethodPatch, "/assets/nas01", `{"name":"nas-main"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAssetActions(w, r) }, http.MethodPatch, "/assets/nas01", `{"name":"nas-main","group_id":"`+groupID+`"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAssetActions(w, r) }, http.MethodPatch, "/assets/nas01", `{"name":"nas-main"}`)
 	call(s.handleV2AssetActions, http.MethodPatch, "/api/v2/assets/nas01", `{"tags":["storage"]}`)
 
 	windows := "/groups/" + groupID + "/maintenance-windows"

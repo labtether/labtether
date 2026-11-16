@@ -44,10 +44,10 @@ func (s *apiServer) buildHTTPHandlers(
 		"/group-failover-pairs/":         s.withAuth(requireReadWriteScopes("failover:read", "failover:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleFailoverPairActions(w, r) })),
 		"/groups":                        s.withAuth(requireReadWriteScopes("groups:read", "groups:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleGroups(w, r) })),
 		"/groups/":                       s.withAuth(requireReadWriteScopes("groups:read", "groups:write", s.handleGroupActions)),
-		"/assets":                        s.withAuth(requireScope("assets:read", s.handleAssets)),
+		"/assets":                        s.withAuth(requireScope("assets:read", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAssets(w, r) })),
 		"/assets/manual":                 s.withAuth(requireScope("assets:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleManualDeviceRoutes(w, r) })),
-		"/assets/heartbeat":              s.withAgentHeartbeatAuth(s.handleAssetActions),
-		"/assets/":                       s.withAuth(s.handleAssetActions),
+		"/assets/heartbeat":              s.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAssetActions(w, r) }),
+		"/assets/":                       s.withAuth(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAssetActions(w, r) }),
 		"/credentials/profiles":          s.withAuth(requireReadWriteScopes("credentials:read", "credentials:write", s.handleCredentialProfiles)),
 		"/credentials/profiles/":         s.withAuth(requireReadWriteScopes("credentials:read", "credentials:write", s.handleCredentialProfileActions)),
 		// /metrics is an exact-match path (no trailing slash) so it does not

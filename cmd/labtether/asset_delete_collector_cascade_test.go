@@ -50,7 +50,7 @@ func TestDeleteAsset_NonDockerInfraDeleteCascadesAttachedInfraChildren(t *testin
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/proxmox-node-pve01", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -108,7 +108,7 @@ func TestDeleteAsset_ProxmoxDeleteScopesCascadeByCollectorID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/proxmox-node-shared", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -166,7 +166,7 @@ func TestDeleteAsset_PortainerDeleteScopesCascadeByCollectorID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/portainer-endpoint-a", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -221,7 +221,7 @@ func TestDeleteAsset_PBSDeleteCascadesByCollectorID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/pbs-root-a", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -276,7 +276,7 @@ func TestDeleteAsset_HomeAssistantDeleteCascadesByCollectorID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/ha-cluster-a", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -331,7 +331,7 @@ func TestDeleteAsset_FutureCollectorClusterDeleteCascadesByCollectorID(t *testin
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/future-cluster-a", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

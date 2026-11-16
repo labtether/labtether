@@ -42,7 +42,7 @@ func (s *apiServer) autoProvisionDockerCollectorIfNeeded(agentAssetID string, co
 		"agent_id":       strings.TrimSpace(agentAssetID),
 		"discovered":     "0",
 	})
-	if _, err := s.processHeartbeatRequest(assets.HeartbeatRequest{
+	if _, err := s.ensureResourcesDeps().ProcessHeartbeatRequest(assets.HeartbeatRequest{
 		AssetID:  collectorAssetID,
 		Type:     "connector-cluster",
 		Name:     collectorAssetID,

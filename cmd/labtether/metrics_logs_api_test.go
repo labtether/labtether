@@ -21,7 +21,7 @@ func TestMetricsOverview(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-01","type":"host","name":"Lab Host 01","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"17.2","memory_percent":"22.3","disk_percent":"41.0","temp_celsius":"52.1","network_rx_bytes_per_sec":"1024","network_tx_bytes_per_sec":"2048"}}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
@@ -42,7 +42,7 @@ func TestAssetMetricsSeries(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-01","type":"host","name":"Lab Host 01","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"17.2","memory_percent":"22.3","disk_percent":"41.0","temp_celsius":"52.1","network_rx_bytes_per_sec":"1024","network_tx_bytes_per_sec":"2048"}}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
@@ -63,7 +63,7 @@ func TestLogsQuery(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-logs","type":"host","name":"Lab Host Logs","source":"agent","status":"online","platform":"linux"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
 	}

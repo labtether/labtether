@@ -42,7 +42,7 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
-			return s.processHeartbeatRequest(req)
+			return s.ensureResourcesDeps().ProcessHeartbeatRequest(req)
 		},
 		PersistCanonicalConnectorSnapshot: func(connectorID, collectorID, displayName, parentAssetID string, connector connectorsdk.Connector, discovered []connectorsdk.Asset) {
 			s.persistCanonicalConnectorSnapshot(connectorID, collectorID, displayName, parentAssetID, connector, discovered)
