@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	bulkpkg "github.com/labtether/labtether/internal/hubapi/bulkpkg"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 // buildBulkDeps constructs the bulkpkg.Deps from the apiServer's fields.
@@ -57,6 +59,8 @@ func (s *apiServer) serviceActionForBulk(_ *http.Request, assetID, service, acti
 			code = "asset_not_found"
 		}
 		return bulkpkg.ExecResult{AssetID: assetID, Error: code, Message: message}
+	case errors.Is(err, respkg.ErrServiceAgentUnsupported):
+		return bulkpkg.ExecResult{AssetID: assetID, Error: apiv2.AgentUnsupportedCode, Message: servicehttp.AgentUnsupportedMessage}
 	case errors.Is(err, respkg.ErrServiceAgentTimeout):
 		return bulkpkg.ExecResult{AssetID: assetID, Error: "agent_timeout", Message: err.Error(), DurationMs: elapsed}
 	case err != nil:

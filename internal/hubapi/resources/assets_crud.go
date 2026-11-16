@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/idgen"
@@ -81,6 +82,9 @@ func (d *Deps) V2GetAsset(w http.ResponseWriter, _ *http.Request, assetID string
 	}
 	if d.HubSSHKeyEnabled != nil {
 		result["hub_ssh_key_enabled"] = d.HubSSHKeyEnabled(assetID)
+	}
+	if ad, ok := agentcaps.Describe(asset.Source, asset.Metadata); ok {
+		result["agent_advertisement"] = ad
 	}
 	apiv2.WriteJSON(w, http.StatusOK, result)
 }

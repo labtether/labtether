@@ -100,6 +100,8 @@ func powerHTTPError(kind powercontrol.ErrorKind) (int, string) {
 		return http.StatusConflict, "asset_offline"
 	case powercontrol.ErrorUnsupported:
 		return http.StatusUnprocessableEntity, "power_unsupported"
+	case powercontrol.ErrorAgentUnsupported:
+		return http.StatusUnprocessableEntity, apiv2.AgentUnsupportedCode
 	case powercontrol.ErrorRejected:
 		return http.StatusConflict, "power_rejected"
 	case powercontrol.ErrorTimedOut:

@@ -28,6 +28,9 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileMkdir) {
+		return
+	}
 
 	requestID := generateRequestID()
 	bridge := newFileBridge(1, assetID)
@@ -84,6 +87,9 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		d.writeAgentNotConnected(w, assetID)
+		return
+	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileDelete) {
 		return
 	}
 
@@ -145,6 +151,9 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileRename) {
+		return
+	}
 
 	requestID := generateRequestID()
 	bridge := newFileBridge(1, assetID)
@@ -203,6 +212,9 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		d.writeAgentNotConnected(w, assetID)
+		return
+	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileCopy) {
 		return
 	}
 

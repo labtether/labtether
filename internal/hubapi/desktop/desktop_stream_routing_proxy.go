@@ -12,6 +12,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/agentcaps"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
@@ -32,7 +34,8 @@ func (d *Deps) ShouldUseWebRTC(assetID string) bool {
 	if !ok {
 		return false
 	}
-	return strings.EqualFold(strings.TrimSpace(conn.Meta("webrtc_available")), "true")
+	return strings.EqualFold(strings.TrimSpace(conn.Meta("webrtc_available")), "true") &&
+		agentcaps.ConnOffers(conn, agentmgr.MsgWebRTCStart)
 }
 
 // CanFallbackWebRTCToVNC checks if a WebRTC-unavailable asset can fall back to VNC.

@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/idgen"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 const (
@@ -25,15 +27,18 @@ type Sender interface {
 type ErrorKind string
 
 const (
-	ErrorInvalid       ErrorKind = "invalid_request"
-	ErrorAgentOffline  ErrorKind = "agent_offline"
-	ErrorSendFailed    ErrorKind = "send_failed"
-	ErrorTimedOut      ErrorKind = "timed_out"
-	ErrorCanceled      ErrorKind = "canceled"
-	ErrorBusy          ErrorKind = "busy"
-	ErrorUnsupported   ErrorKind = "unsupported"
-	ErrorRejected      ErrorKind = "rejected"
-	ErrorExecutionFail ErrorKind = "execution_failed"
+	ErrorInvalid      ErrorKind = "invalid_request"
+	ErrorAgentOffline ErrorKind = "agent_offline"
+	ErrorSendFailed   ErrorKind = "send_failed"
+	ErrorTimedOut     ErrorKind = "timed_out"
+	ErrorCanceled     ErrorKind = "canceled"
+	ErrorBusy         ErrorKind = "busy"
+	ErrorUnsupported  ErrorKind = "unsupported"
+	// ErrorAgentUnsupported: the agent did not advertise power actions, so
+	// nothing was sent.
+	ErrorAgentUnsupported ErrorKind = "agent_unsupported"
+	ErrorRejected         ErrorKind = "rejected"
+	ErrorExecutionFail    ErrorKind = "execution_failed"
 )
 
 // ActionError carries a stable error kind and the agent's closed result code.
@@ -109,6 +114,9 @@ func (c *Coordinator) Execute(ctx context.Context, assetID string, action agentm
 	}
 	if conn == nil {
 		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorAgentOffline, Message: "asset agent is not connected"}
+	}
+	if !agentcaps.ConnOffers(conn, agentmgr.MsgPowerAction) {
+		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorAgentUnsupported, Message: servicehttp.AgentUnsupportedMessage}
 	}
 	if ctx == nil {
 		ctx = context.Background()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -98,6 +99,10 @@ func (a *agentTelemetryAdapter) timeout() time.Duration {
 // assetID. The wait is read after the send and ends when conn closes. Any
 // failure gives no reply.
 func (a *agentTelemetryAdapter) request(p *respkg.AgentReplies, conn *agentmgr.AgentConn, msgType, requestID string, payload any, assetID string) (agentmgr.Message, bool) {
+	if !agentcaps.ConnOffers(conn, msgType) {
+		// An explicit agent that did not advertise this list gets no request.
+		return agentmgr.Message{}, false
+	}
 	msg, err := agentmgr.Request(context.Background(), p, agentmgr.Call[any, agentmgr.Message]{
 		Type: msgType, ID: requestID, Payload: payload, Send: conn.Send, Device: assetID,
 		Accept: respkg.AcceptReplyTo(msgType), TimeoutFunc: a.timeout, Disconnect: conn.Done(),

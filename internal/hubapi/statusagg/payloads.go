@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
@@ -43,6 +44,8 @@ type LiveResponse struct {
 	Endpoints         []EndpointResult                `json:"endpoints"`
 	Assets            []assets.Asset                  `json:"assets"`
 	TelemetryOverview []shared.AssetTelemetryOverview `json:"telemetryOverview"`
+	// AgentAdvertisements: see agentAdvertisements.
+	AgentAdvertisements map[string]agentcaps.Advertisement `json:"agentAdvertisements,omitempty"`
 }
 
 // Summary is the full aggregated summary included in the full status response.
@@ -84,6 +87,8 @@ type Response struct {
 	RecentCommands      []terminal.Command                     `json:"recentCommands"`
 	RecentAudit         []audit.Event                          `json:"recentAudit"`
 	Canonical           CanonicalPayload                       `json:"canonical"`
+	// AgentAdvertisements: see agentAdvertisements.
+	AgentAdvertisements map[string]agentcaps.Advertisement `json:"agentAdvertisements,omitempty"`
 }
 
 // CanonicalPayload is the canonical model snapshot included in the full status
@@ -264,6 +269,7 @@ func ETag(response Response) string {
 	hashWriteInt(h, response.Summary.DeadLetterCount)
 	hashWriteInt(h, response.Summary.StaleAssetCount)
 	hashWriteString(h, response.Summary.RetentionError)
+	hashAgentAdvertisements(h, response.AgentAdvertisements)
 
 	for _, endpoint := range response.Endpoints {
 		hashWriteString(h, endpoint.Name)

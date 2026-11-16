@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -207,6 +208,9 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadGateway, "source agent disconnected")
 			return
 		}
+		if d.refuseUnadvertised(w, req.SourceID, agentmgr.MsgFileRead) {
+			return
+		}
 	}
 	if req.DestType == "connection" {
 		if err := d.ensureCanAccessTransferConnection(r.Context(), req.DestID, actorID); err != nil {
@@ -222,6 +226,9 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 		}
 		if !d.AgentMgr.IsConnected(req.DestID) {
 			servicehttp.WriteError(w, http.StatusBadGateway, "destination agent disconnected")
+			return
+		}
+		if d.refuseUnadvertised(w, req.DestID, agentmgr.MsgFileWrite) {
 			return
 		}
 	}

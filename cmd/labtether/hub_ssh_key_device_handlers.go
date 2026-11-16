@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
@@ -71,6 +73,12 @@ func (s *apiServer) updateAssetHubSSHKey(w http.ResponseWriter, r *http.Request,
 	var req hubSSHKeySettingRequest
 	if err := decodeJSONBody(w, r, &req); err != nil || req.Enabled == nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "enabled must be true or false")
+		return
+	}
+	if *req.Enabled && !agentcaps.Offers(asset.Metadata, agentmgr.MsgSSHKeyInstall) {
+		// The agent cannot add the key; refuse now instead of storing a
+		// setting the device can never follow.
+		servicehttp.WriteAgentUnsupported(w)
 		return
 	}
 	if *req.Enabled && s.currentHubSSHIdentity() == nil {

@@ -75,6 +75,13 @@ and reboot or shut down.
 - An answer of the wrong kind no longer answers a request: for example a
   process list can no longer answer a process kill, or a clipboard read a
   clipboard write.
+- An agent can say in its heartbeat that it lists everything it can do
+  (`agent_capability_mode=explicit`). The hub then offers such a device only
+  what its agent lists, and answers any other request with "this device's
+  agent does not support this" (422, v2 code `agent_unsupported`) without
+  sending it. Timed checks skip it too. Agents that do not say this, which
+  includes every Go agent, keep everything they had. The status data and the
+  v2 device record report the agent's edition and what it offers.
 
 ## [2.0.0] - unreleased
 

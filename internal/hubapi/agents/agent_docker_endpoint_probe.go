@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
@@ -51,6 +52,9 @@ func (d *Deps) RunDockerEndpointTest(
 	conn, ok := d.AgentMgr.Get(assetID)
 	if !ok || conn == nil {
 		return agentmgr.DockerEndpointTestResultData{}, ErrDockerEndpointTestUnavailable
+	}
+	if err := agentcaps.Check(conn, agentmgr.MsgDockerEndpointTest); err != nil {
+		return agentmgr.DockerEndpointTestResultData{}, err
 	}
 
 	timeout := d.DockerEndpointTestTimeout

@@ -3,6 +3,7 @@ package resources
 import (
 	"errors"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 )
 
@@ -11,6 +12,9 @@ var (
 	ErrServiceAgentNotConnected = errors.New("agent is not connected")
 	ErrServiceAgentTimeout      = errors.New("agent did not respond in time")
 	ErrServiceAgentBadAnswer    = errors.New("invalid agent response")
+	// ErrServiceAgentUnsupported: the agent did not advertise service
+	// actions, so nothing was sent.
+	ErrServiceAgentUnsupported = agentcaps.ErrUnsupported
 )
 
 // RunServiceAction asks a device's agent to start, stop, restart, enable or
@@ -28,6 +32,8 @@ func (d *Deps) RunServiceAction(assetID, service, action string) (agentmgr.Servi
 	msg, err := d.requestAgent(d.ServiceReplies, agentConn, agentmgr.MsgServiceAction, requestID,
 		agentmgr.ServiceActionData{RequestID: requestID, Service: service, Action: action}, assetID, serviceActionTimeout)
 	switch {
+	case errors.Is(err, agentcaps.ErrUnsupported):
+		return agentmgr.ServiceResultData{}, ErrServiceAgentUnsupported
 	case agentmgr.RequestKind(err) == agentmgr.RequestTimedOut:
 		return agentmgr.ServiceResultData{}, ErrServiceAgentTimeout
 	case err != nil:

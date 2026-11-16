@@ -6,108 +6,108 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
       "post": { "summary": "Create asset", "description": "Scope: assets:write.", "operationId": "createAsset", "tags": ["assets"], "responses": { "201": { "description": "Created" } } }
     },
     "/api/v2/assets/{id}": {
-      "get":    { "summary": "Get asset",    "description": "Scope: assets:read. The response also carries agent_connected and hub_ssh_key_enabled.",  "operationId": "getAsset",    "tags": ["assets"], "responses": { "200": { "description": "Asset" } } },
+      "get":    { "summary": "Get asset",    "description": "Scope: assets:read. The response also carries agent_connected, hub_ssh_key_enabled and, for an agent that said its advertisement is complete or named its edition, agent_advertisement (explicit, edition, offered).",  "operationId": "getAsset",    "tags": ["assets"], "responses": { "200": { "description": "Asset" } } },
       "put":    { "summary": "Update asset", "description": "Scope: assets:write.", "operationId": "updateAsset", "tags": ["assets"], "responses": { "200": { "description": "Updated" } } },
 	  "patch":  { "summary": "Partially update asset", "description": "Scope: assets:write.", "operationId": "patchAsset", "tags": ["assets"], "responses": { "200": { "description": "Updated" } } },
       "delete": { "summary": "Delete asset", "description": "Scope: assets:write.", "operationId": "deleteAsset", "tags": ["assets"], "responses": { "200": { "description": "Deleted" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/exec": {
-      "post": { "summary": "Execute a command on one asset", "description": "Scope: assets:exec. The asset must be allowed by the authenticated principal and have a connected agent.", "operationId": "execAsset", "tags": ["exec"], "responses": { "200": { "description": "Command result" }, "409": { "description": "Asset agent is offline" } } },
+      "post": { "summary": "Execute a command on one asset", "description": "Scope: assets:exec. The asset must be allowed by the authenticated principal and have a connected agent.", "operationId": "execAsset", "tags": ["exec"], "responses": { "200": { "description": "Command result" }, "409": { "description": "Asset agent is offline" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/hub-ssh-key": {
       "get": { "summary": "Get the Hub SSH key setting", "description": "Scope: assets:read. When on, the Hub adds its SSH key to the device through the agent and may log in over SSH as root. Devices added after this setting existed start with it off.", "operationId": "getAssetHubSSHKey", "tags": ["assets"], "responses": { "200": { "description": "Setting with enabled, removal_pending and agent_connected" } } },
-      "put": { "summary": "Turn the Hub SSH key on or off", "description": "Scope: hub:admin, and the caller must be an admin or owner. Body: enabled (boolean). Turning it off asks a connected agent to remove the key now, or when the agent next connects. Each change writes an audit event.", "operationId": "setAssetHubSSHKey", "tags": ["assets"], "responses": { "200": { "description": "Updated setting" }, "400": { "description": "enabled is missing" }, "403": { "description": "Caller is not an admin or owner, or lacks the scope" } } },
+      "put": { "summary": "Turn the Hub SSH key on or off", "description": "Scope: hub:admin, and the caller must be an admin or owner. Body: enabled (boolean). Turning it off asks a connected agent to remove the key now, or when the agent next connects. Each change writes an audit event.", "operationId": "setAssetHubSSHKey", "tags": ["assets"], "responses": { "200": { "description": "Updated setting" }, "400": { "description": "enabled is missing" }, "403": { "description": "Caller is not an admin or owner, or lacks the scope" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files": {
-      "get": { "summary": "List a directory", "description": "Scope: files:read. Supply the absolute path in the path query parameter.", "operationId": "listAssetFiles", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Directory entries" } } },
-      "delete": { "summary": "Delete a file or directory", "description": "Scope: files:write. Supply the absolute path in the path query parameter.", "operationId": "deleteAssetFile", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Delete result" } } },
+      "get": { "summary": "List a directory", "description": "Scope: files:read. Supply the absolute path in the path query parameter.", "operationId": "listAssetFiles", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Directory entries" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
+      "delete": { "summary": "Delete a file or directory", "description": "Scope: files:write. Supply the absolute path in the path query parameter.", "operationId": "deleteAssetFile", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "Delete result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/read": {
-      "get": { "summary": "Download a file", "description": "Scope: files:read. Streams the file response rather than wrapping it in the JSON response envelope.", "operationId": "readAssetFile", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "File bytes" } } },
+      "get": { "summary": "Download a file", "description": "Scope: files:read. Streams the file response rather than wrapping it in the JSON response envelope.", "operationId": "readAssetFile", "tags": ["files"], "parameters": [{ "name": "path", "in": "query", "required": true, "schema": { "type": "string" } }], "responses": { "200": { "description": "File bytes" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/write": {
-      "post": { "summary": "Upload a file", "description": "Scope: files:write.", "operationId": "writeAssetFile", "tags": ["files"], "responses": { "200": { "description": "Upload result" } } },
+      "post": { "summary": "Upload a file", "description": "Scope: files:write.", "operationId": "writeAssetFile", "tags": ["files"], "responses": { "200": { "description": "Upload result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/mkdir": {
-      "post": { "summary": "Create a directory", "description": "Scope: files:write.", "operationId": "createAssetDirectory", "tags": ["files"], "responses": { "200": { "description": "Create result" } } },
+      "post": { "summary": "Create a directory", "description": "Scope: files:write.", "operationId": "createAssetDirectory", "tags": ["files"], "responses": { "200": { "description": "Create result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/rename": {
-      "post": { "summary": "Rename or move a file", "description": "Scope: files:write.", "operationId": "renameAssetFile", "tags": ["files"], "responses": { "200": { "description": "Rename result" }, "409": { "description": "The destination name is taken, or the agent is not connected" } } },
+      "post": { "summary": "Rename or move a file", "description": "Scope: files:write.", "operationId": "renameAssetFile", "tags": ["files"], "responses": { "200": { "description": "Rename result" }, "409": { "description": "The destination name is taken, or the agent is not connected" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/copy": {
-      "post": { "summary": "Copy a file", "description": "Scope: files:write.", "operationId": "copyAssetFile", "tags": ["files"], "responses": { "200": { "description": "Copy result" }, "409": { "description": "The destination name is taken, or the agent is not connected" } } },
+      "post": { "summary": "Copy a file", "description": "Scope: files:write.", "operationId": "copyAssetFile", "tags": ["files"], "responses": { "200": { "description": "Copy result" }, "409": { "description": "The destination name is taken, or the agent is not connected" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/processes": {
-      "get": { "summary": "List running processes", "description": "Scope: processes:read.", "operationId": "listAssetProcesses", "tags": ["system"], "responses": { "200": { "description": "Process list" } } },
+      "get": { "summary": "List running processes", "description": "Scope: processes:read.", "operationId": "listAssetProcesses", "tags": ["system"], "responses": { "200": { "description": "Process list" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/processes/kill": {
-      "post": { "summary": "Terminate a process", "description": "Scope: processes:kill.", "operationId": "killAssetProcess", "tags": ["system"], "responses": { "200": { "description": "Termination result" } } },
+      "post": { "summary": "Terminate a process", "description": "Scope: processes:kill.", "operationId": "killAssetProcess", "tags": ["system"], "responses": { "200": { "description": "Termination result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/services": {
-      "get": { "summary": "List system services", "description": "Scope: services:read.", "operationId": "listAssetServices", "tags": ["system"], "responses": { "200": { "description": "Service list" } } },
+      "get": { "summary": "List system services", "description": "Scope: services:read.", "operationId": "listAssetServices", "tags": ["system"], "responses": { "200": { "description": "Service list" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/services/{name}/start": {
-      "post": { "summary": "Start a system service", "description": "Scope: services:write.", "operationId": "startAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" } } },
+      "post": { "summary": "Start a system service", "description": "Scope: services:write.", "operationId": "startAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/services/{name}/stop": {
-      "post": { "summary": "Stop a system service", "description": "Scope: services:write.", "operationId": "stopAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" } } },
+      "post": { "summary": "Stop a system service", "description": "Scope: services:write.", "operationId": "stopAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/services/{name}/restart": {
-      "post": { "summary": "Restart a system service", "description": "Scope: services:write.", "operationId": "restartAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" } } },
+      "post": { "summary": "Restart a system service", "description": "Scope: services:write.", "operationId": "restartAssetService", "tags": ["system"], "responses": { "200": { "description": "Service action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }, { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/network": {
-      "get": { "summary": "List network interfaces", "description": "Scope: network:read.", "operationId": "listAssetNetwork", "tags": ["system"], "responses": { "200": { "description": "Network interfaces" } } },
+      "get": { "summary": "List network interfaces", "description": "Scope: network:read.", "operationId": "listAssetNetwork", "tags": ["system"], "responses": { "200": { "description": "Network interfaces" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/disks": {
-      "get": { "summary": "List disks and filesystems", "description": "Scope: disks:read.", "operationId": "listAssetDisks", "tags": ["system"], "responses": { "200": { "description": "Disk inventory" } } },
+      "get": { "summary": "List disks and filesystems", "description": "Scope: disks:read.", "operationId": "listAssetDisks", "tags": ["system"], "responses": { "200": { "description": "Disk inventory" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/packages": {
-      "get": { "summary": "List installed packages", "description": "Scope: packages:read.", "operationId": "listAssetPackages", "tags": ["system"], "responses": { "200": { "description": "Installed packages" } } },
+      "get": { "summary": "List installed packages", "description": "Scope: packages:read.", "operationId": "listAssetPackages", "tags": ["system"], "responses": { "200": { "description": "Installed packages" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/packages/upgradable": {
-      "get": { "summary": "List upgradable packages", "description": "Scope: packages:read.", "operationId": "listAssetUpgradablePackages", "tags": ["system"], "responses": { "200": { "description": "Upgradable packages" } } },
+      "get": { "summary": "List upgradable packages", "description": "Scope: packages:read.", "operationId": "listAssetUpgradablePackages", "tags": ["system"], "responses": { "200": { "description": "Upgradable packages" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/packages/install": {
-      "post": { "summary": "Install a package", "description": "Scope: packages:write.", "operationId": "installAssetPackage", "tags": ["system"], "responses": { "200": { "description": "Package action result" } } },
+      "post": { "summary": "Install a package", "description": "Scope: packages:write.", "operationId": "installAssetPackage", "tags": ["system"], "responses": { "200": { "description": "Package action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/packages/update": {
-      "post": { "summary": "Update package metadata", "description": "Scope: packages:write.", "operationId": "updateAssetPackageMetadata", "tags": ["system"], "responses": { "200": { "description": "Package action result" } } },
+      "post": { "summary": "Update package metadata", "description": "Scope: packages:write.", "operationId": "updateAssetPackageMetadata", "tags": ["system"], "responses": { "200": { "description": "Package action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/packages/upgrade": {
-      "post": { "summary": "Upgrade packages", "description": "Scope: packages:write.", "operationId": "upgradeAssetPackages", "tags": ["system"], "responses": { "200": { "description": "Package action result" } } },
+      "post": { "summary": "Upgrade packages", "description": "Scope: packages:write.", "operationId": "upgradeAssetPackages", "tags": ["system"], "responses": { "200": { "description": "Package action result" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/cron": {
-      "get": { "summary": "List scheduled operating-system jobs", "description": "Scope: cron:read.", "operationId": "listAssetCron", "tags": ["system"], "responses": { "200": { "description": "Scheduled jobs" } } },
+      "get": { "summary": "List scheduled operating-system jobs", "description": "Scope: cron:read.", "operationId": "listAssetCron", "tags": ["system"], "responses": { "200": { "description": "Scheduled jobs" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/users": {
-      "get": { "summary": "List operating-system users", "description": "Scope: users:read.", "operationId": "listAssetUsers", "tags": ["system"], "responses": { "200": { "description": "User list" } } },
+      "get": { "summary": "List operating-system users", "description": "Scope: users:read.", "operationId": "listAssetUsers", "tags": ["system"], "responses": { "200": { "description": "User list" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/logs": {
-      "get": { "summary": "Query asset logs", "description": "Scope: logs:read.", "operationId": "queryAssetLogs", "tags": ["logs"], "responses": { "200": { "description": "Log entries" } } },
+      "get": { "summary": "Query asset logs", "description": "Scope: logs:read.", "operationId": "queryAssetLogs", "tags": ["logs"], "responses": { "200": { "description": "Log entries" }, "422": { "description": "The device's agent does not support this (error agent_unsupported); nothing was sent to it" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/wake": {
@@ -133,7 +133,7 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
         "responses": {
           "202": { "description": "Operating system accepted the reboot request" },
           "409": { "description": "Agent offline or request rejected" },
-          "422": { "description": "Power action unsupported on the agent platform" },
+          "422": { "description": "Power action unsupported on the agent platform (power_unsupported), or the agent did not advertise power actions (agent_unsupported)" },
           "429": { "description": "Global power-action concurrency limit reached" },
           "502": { "description": "Delivery or operating-system execution failed" },
           "504": { "description": "Timed out waiting for a correlated agent result" }
@@ -150,7 +150,7 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
         "responses": {
           "202": { "description": "Operating system accepted the shutdown request" },
           "409": { "description": "Agent offline or request rejected" },
-          "422": { "description": "Power action unsupported on the agent platform" },
+          "422": { "description": "Power action unsupported on the agent platform (power_unsupported), or the agent did not advertise power actions (agent_unsupported)" },
           "429": { "description": "Global power-action concurrency limit reached" },
           "502": { "description": "Delivery or operating-system execution failed" },
           "504": { "description": "Timed out waiting for a correlated agent result" }

@@ -62,6 +62,15 @@ func writeAgentTimeout(w http.ResponseWriter) {
 	writeErrorEnvelope(w, http.StatusGatewayTimeout, "agent_timeout", servicehttp.AgentTimeoutMessage)
 }
 
+// AgentUnsupportedCode is the v2 error code for a request the device's agent
+// did not advertise (servicehttp.WriteAgentUnsupported).
+const AgentUnsupportedCode = "agent_unsupported"
+
+// WriteAgentUnsupported answers a v2 client with the fixed words and code.
+func WriteAgentUnsupported(w http.ResponseWriter) {
+	writeErrorEnvelope(w, http.StatusUnprocessableEntity, AgentUnsupportedCode, servicehttp.AgentUnsupportedMessage)
+}
+
 func writeErrorEnvelope(w http.ResponseWriter, status int, errorCode, message string) {
 	markV2Envelope(w)
 	w.Header().Set("Content-Type", "application/json")
@@ -145,6 +154,10 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 					}
 					if rec.Code == http.StatusGatewayTimeout && errMsg == servicehttp.AgentTimeoutMessage {
 						writeAgentTimeout(w)
+						return
+					}
+					if rec.Code == http.StatusUnprocessableEntity && errMsg == servicehttp.AgentUnsupportedMessage {
+						WriteAgentUnsupported(w)
 						return
 					}
 					WriteError(w, rec.Code, errCode, errMsg)

@@ -34,6 +34,9 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileList) {
+		return
+	}
 
 	requestID := generateRequestID()
 
@@ -222,6 +225,9 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		d.writeAgentNotConnected(w, assetID)
+		return
+	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileWrite) {
 		return
 	}
 

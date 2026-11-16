@@ -9,6 +9,7 @@ import (
 
 	"github.com/labtether/labtether/internal/hubapi/shared"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/logs"
@@ -71,6 +72,13 @@ func (d *Deps) ProcessAgentHeartbeatInLifecycle(conn *agentmgr.AgentConn, msg ag
 		}
 		data.Metadata["platform"] = resolvedPlatform
 	}
+
+	if agentcaps.Explicit(data.Metadata) {
+		// Keep the capabilities list with the stored device: the heartbeat
+		// request has no field for it, and the rules read it from metadata.
+		data.Metadata[agentcaps.MetaCapabilities] = agentcaps.JoinCapabilities(data.Capabilities)
+	}
+	agentcaps.Record(conn, data.Metadata)
 
 	req := assets.HeartbeatRequest{
 		AssetID:  conn.AssetID,

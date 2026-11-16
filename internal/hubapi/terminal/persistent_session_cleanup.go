@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/terminal"
@@ -128,6 +129,9 @@ func (d *Deps) KillPersistentTerminalTmuxViaAgent(target, tmuxSessionName string
 	conn, ok := d.AgentMgr.Get(target)
 	if !ok {
 		return errors.New("agent not connected")
+	}
+	if err := agentcaps.Check(conn, agentmgr.MsgTerminalTmuxKill); err != nil {
+		return err
 	}
 
 	timeout := shared.EnvOrDefaultDuration("TERMINAL_COMMAND_TIMEOUT", 30*time.Second)

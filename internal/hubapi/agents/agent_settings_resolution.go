@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/runtimesettings"
@@ -368,7 +369,7 @@ func (d *Deps) LatestAgentVersionForPlatform(agentOS, arch string) (string, stri
 // trigger a self-update. This is a fire-and-forget push — the agent will
 // report progress and results via update.progress / update.result messages.
 func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
-	if conn == nil || d.AgentCache == nil {
+	if conn == nil || d.AgentCache == nil || !agentcaps.ConnOffersUpdate(conn, "self") {
 		return
 	}
 	manifest := d.AgentCache.Manifest()

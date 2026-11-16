@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/fileproto"
 	"io"
@@ -15,6 +16,9 @@ func (d *Deps) spoolAgentTransferSource(ctx context.Context, assetID, sourcePath
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		return nil, 0, nil, errors.New("source agent disconnected")
+	}
+	if err := agentcaps.Check(agentConn, agentmgr.MsgFileRead); err != nil {
+		return nil, 0, nil, err
 	}
 	requestID := generateRequestID()
 	bridge := newFileBridge(64, assetID)
@@ -112,6 +116,9 @@ func (d *Deps) writeAgentTransferDestination(
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		return 0, errors.New("destination agent disconnected")
+	}
+	if err := agentcaps.Check(agentConn, agentmgr.MsgFileWrite); err != nil {
+		return 0, err
 	}
 	requestID := generateRequestID()
 	bridge := newFileBridge(1, assetID)

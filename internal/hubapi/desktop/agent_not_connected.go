@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/agentcaps"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -30,4 +32,14 @@ func (d *Deps) writeNoDesktopRoute(w http.ResponseWriter, assetID string) {
 		}
 	}
 	servicehttp.WriteError(w, http.StatusConflict, "Remote View has no way to reach this device.")
+}
+
+// refuseUnadvertised answers 422 and returns true when conn's agent said its
+// advertisement is complete and left msgType out. Nothing is sent.
+func refuseUnadvertised(w http.ResponseWriter, conn *agentmgr.AgentConn, msgType string) bool {
+	if agentcaps.ConnOffers(conn, msgType) {
+		return false
+	}
+	servicehttp.WriteAgentUnsupported(w)
+	return true
 }

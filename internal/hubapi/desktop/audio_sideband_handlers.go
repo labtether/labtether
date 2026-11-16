@@ -41,6 +41,9 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 		d.writeAgentNotConnected(w, session.Target)
 		return
 	}
+	if refuseUnadvertised(w, agentConn, agentmgr.MsgDesktopAudioStart) {
+		return
+	}
 
 	rawBridge, ok := d.loadDesktopOwner(session.ID)
 	if !ok {

@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -55,6 +57,16 @@ func (d *Deps) executeViaAgent(ctx context.Context, cmdJob terminal.CommandJob, 
 			CommandID:   cmdJob.CommandID,
 			Status:      "failed",
 			Output:      "agent not connected",
+			CompletedAt: time.Now().UTC(),
+		}
+	}
+	if !agentcaps.ConnOffers(conn, agentmgr.MsgCommandRequest) {
+		return terminal.CommandResult{
+			JobID:       cmdJob.JobID,
+			SessionID:   cmdJob.SessionID,
+			CommandID:   cmdJob.CommandID,
+			Status:      "failed",
+			Output:      servicehttp.AgentUnsupportedMessage,
 			CompletedAt: time.Now().UTC(),
 		}
 	}
@@ -216,6 +228,9 @@ func (d *Deps) executeUpdateViaAgent(ctx context.Context, jobID, target, mode st
 	conn, ok := d.AgentMgr.Get(target)
 	if !ok {
 		return failed("agent not connected")
+	}
+	if !agentcaps.ConnOffersUpdate(conn, mode) {
+		return failed(servicehttp.AgentUnsupportedMessage)
 	}
 
 	if timeout <= 0 {

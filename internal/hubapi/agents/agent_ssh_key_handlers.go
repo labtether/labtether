@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -20,7 +21,7 @@ func (d *Deps) ProcessAgentSSHKeyRemoved(conn *agentmgr.AgentConn, _ agentmgr.Me
 // with the comment uninstall uses to find every Hub key.
 func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	identity := d.currentHubIdentity()
-	if identity == nil {
+	if identity == nil || !agentcaps.ConnOffers(conn, agentmgr.MsgSSHKeyInstall) {
 		return
 	}
 	msg, _ := agentmgr.NewMessage(agentmgr.MsgSSHKeyInstall, "", agentmgr.SSHKeyInstallData{
@@ -38,6 +39,9 @@ func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 	identity := d.currentHubIdentity()
 	if identity == nil {
 		return nil
+	}
+	if err := agentcaps.Check(conn, agentmgr.MsgSSHKeyRemove); err != nil {
+		return err
 	}
 	for _, line := range shared.HubAuthorizedKeyRemovals(identity.PublicKey) {
 		msg, _ := agentmgr.NewMessage(agentmgr.MsgSSHKeyRemove, "", agentmgr.SSHKeyRemoveData{PublicKey: line})

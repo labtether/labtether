@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
@@ -245,6 +246,9 @@ func (d *Deps) EligibleWoLRelays(targetAssetID string, target assets.Asset) []Wo
 			continue
 		}
 		if targetGroupID != "" && !strings.EqualFold(strings.TrimSpace(agentAsset.GroupID), targetGroupID) {
+			continue
+		}
+		if !agentcaps.Offers(agentAsset.Metadata, agentmgr.MsgWoLSend) {
 			continue
 		}
 		candidates = append(candidates, WoLRelayCandidate{

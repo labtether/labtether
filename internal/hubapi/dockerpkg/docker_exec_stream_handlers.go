@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -40,6 +41,10 @@ func (d *Deps) HandleDockerExecTerminalStream(
 	agentConn, ok := d.AgentMgr.Get(agentID)
 	if !ok {
 		servicehttp.WriteError(w, http.StatusBadGateway, "container host agent disconnected")
+		return
+	}
+	if !agentcaps.ConnOffers(agentConn, agentmgr.MsgDockerExecStart) {
+		servicehttp.WriteAgentUnsupported(w)
 		return
 	}
 
