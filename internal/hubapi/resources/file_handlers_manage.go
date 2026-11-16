@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -36,15 +35,11 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileMkdirData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileMkdir, requestID, agentmgr.FileMkdirData{
 		RequestID: requestID,
 		Path:      dirPath,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileMkdir,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -55,8 +50,8 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileResultData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}
@@ -98,15 +93,11 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileDeleteData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileDelete, requestID, agentmgr.FileDeleteData{
 		RequestID: requestID,
 		Path:      filePath,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileDelete,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -117,8 +108,8 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileResultData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}
@@ -161,16 +152,12 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileRenameData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileRename, requestID, agentmgr.FileRenameData{
 		RequestID: requestID,
 		OldPath:   oldPath,
 		NewPath:   newPath,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileRename,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -181,8 +168,8 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileResultData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}
@@ -225,16 +212,12 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileCopyData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileCopy, requestID, agentmgr.FileCopyData{
 		RequestID: requestID,
 		SrcPath:   srcPath,
 		DstPath:   dstPath,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileCopy,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -245,8 +228,8 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileResultData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}

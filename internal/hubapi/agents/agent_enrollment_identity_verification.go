@@ -3,7 +3,6 @@ package agents
 import (
 	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +26,7 @@ func (d *Deps) SendPendingEnrollmentChallenge(agent *PendingAgent) error {
 		return fmt.Errorf("pending agent is no longer available for challenge")
 	}
 
-	payload, err := json.Marshal(agentmgr.EnrollmentChallengeData{
+	msg, err := agentmgr.NewMessage(agentmgr.MsgEnrollmentChallenge, "", agentmgr.EnrollmentChallengeData{
 		ConnectionID: agent.AssetID,
 		Nonce:        nonce,
 		ExpiresAt:    expiresAt.Format(time.RFC3339),
@@ -40,10 +39,7 @@ func (d *Deps) SendPendingEnrollmentChallenge(agent *PendingAgent) error {
 	defer agent.ConnMu.Unlock()
 
 	_ = agent.Conn.SetWriteDeadline(time.Now().Add(agentmgr.AgentWriteDeadline))
-	if err := agent.Conn.WriteJSON(agentmgr.Message{
-		Type: agentmgr.MsgEnrollmentChallenge,
-		Data: payload,
-	}); err != nil {
+	if err := agent.Conn.WriteJSON(msg); err != nil {
 		return fmt.Errorf("write challenge: %w", err)
 	}
 	return nil
@@ -54,8 +50,8 @@ func (d *Deps) VerifyPendingEnrollmentProof(agent *PendingAgent, msg agentmgr.Me
 		return fmt.Errorf("agent is nil")
 	}
 
-	var proof agentmgr.EnrollmentProofData
-	if err := json.Unmarshal(msg.Data, &proof); err != nil {
+	proof, err := agentmgr.Decode[agentmgr.EnrollmentProofData](msg)
+	if err != nil {
 		return fmt.Errorf("decode proof: %w", err)
 	}
 

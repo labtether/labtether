@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -136,7 +135,7 @@ func (d *Deps) KillPersistentTerminalTmuxViaAgent(target, tmuxSessionName string
 	sessionID := shared.GenerateRequestID()
 	commandID := "persistent.tmux.kill"
 
-	payload, err := json.Marshal(agentmgr.TerminalTmuxKillData{
+	msg, err := agentmgr.NewMessage(agentmgr.MsgTerminalTmuxKill, jobID, agentmgr.TerminalTmuxKillData{
 		JobID:       jobID,
 		SessionID:   sessionID,
 		CommandID:   commandID,
@@ -160,11 +159,7 @@ func (d *Deps) KillPersistentTerminalTmuxViaAgent(target, tmuxSessionName string
 	}
 	defer d.PendingAgentCmds.CompareAndDelete(jobID, pending)
 
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgTerminalTmuxKill,
-		ID:   jobID,
-		Data: payload,
-	}); err != nil {
+	if err := conn.Send(msg); err != nil {
 		return fmt.Errorf("send tmux kill request to agent: %w", err)
 	}
 

@@ -101,12 +101,8 @@ func (b *DockerExecBridge) stop() {
 		return
 	}
 	b.started = false
-	data, _ := json.Marshal(agentmgr.DockerExecCloseData{SessionID: b.WireSessionID})
-	_ = b.AgentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDockerExecClose,
-		ID:   b.WireSessionID,
-		Data: data,
-	})
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgDockerExecClose, b.WireSessionID, agentmgr.DockerExecCloseData{SessionID: b.WireSessionID})
+	_ = b.AgentConn.Send(msg)
 }
 
 // An old socket's deferred disconnect must leave the replacement socket's
@@ -125,8 +121,8 @@ func (d *Deps) CloseDockerExecBridgesForConnection(conn *agentmgr.AgentConn) {
 
 // ProcessAgentDockerExecStarted handles the docker.exec.started agent message.
 func (d *Deps) ProcessAgentDockerExecStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DockerExecStartedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerExecStartedData](msg)
+	if err != nil {
 		return
 	}
 	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
@@ -141,8 +137,8 @@ func (d *Deps) ProcessAgentDockerExecStarted(conn *agentmgr.AgentConn, msg agent
 
 // ProcessAgentDockerExecData handles the docker.exec.data agent message.
 func (d *Deps) ProcessAgentDockerExecData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.DockerExecDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.DockerExecDataPayload](msg)
+	if err != nil {
 		return
 	}
 	decoded, err := base64.StdEncoding.DecodeString(payload.Data)
@@ -161,8 +157,8 @@ func (d *Deps) ProcessAgentDockerExecData(conn *agentmgr.AgentConn, msg agentmgr
 
 // ProcessAgentDockerExecClosed handles the docker.exec.closed agent message.
 func (d *Deps) ProcessAgentDockerExecClosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DockerExecCloseData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerExecCloseData](msg)
+	if err != nil {
 		return
 	}
 	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
@@ -207,8 +203,8 @@ func (d *Deps) broadcastDockerExecMessage(conn *agentmgr.AgentConn, msg agentmgr
 	if d.Broadcast == nil || d.DockerExecBridges == nil {
 		return
 	}
-	var payload map[string]json.RawMessage
-	if json.Unmarshal(msg.Data, &payload) != nil {
+	payload, err := agentmgr.Decode[map[string]json.RawMessage](msg)
+	if err != nil {
 		return
 	}
 	var wireID string

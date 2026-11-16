@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"strings"
 	"time"
@@ -53,15 +52,12 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 		Values:              remoteValues,
 		ExpectedFingerprint: expectedFingerprint,
 	}
-	data, err := json.Marshal(payload)
+	msg, err := agentmgr.NewMessage(agentmgr.MsgAgentSettingsApply, "", payload)
 	if err != nil {
 		return
 	}
 
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgAgentSettingsApply,
-		Data: data,
-	}); err != nil {
+	if err := conn.Send(msg); err != nil {
 		securityruntime.Logf("agent settings: failed to send apply request: %v", err)
 		d.SetAgentSettingsRuntimeState(assetID, AgentSettingsRuntimeState{
 			Status:      "send_failed",
@@ -105,8 +101,8 @@ func (d *Deps) SendAgentSettingsApply(conn *agentmgr.AgentConn) {
 }
 
 func (d *Deps) ProcessAgentSettingsApplied(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.AgentSettingsAppliedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.AgentSettingsAppliedData](msg)
+	if err != nil {
 		return
 	}
 	status := "applied"
@@ -134,8 +130,8 @@ func (d *Deps) ProcessAgentSettingsApplied(conn *agentmgr.AgentConn, msg agentmg
 }
 
 func (d *Deps) ProcessAgentSettingsState(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.AgentSettingsStateData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.AgentSettingsStateData](msg)
+	if err != nil {
 		return
 	}
 	state := AgentSettingsRuntimeState{

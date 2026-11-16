@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -21,15 +20,11 @@ func SendTerminalCloseWithError(agentConn *agentmgr.AgentConn, sessionID string)
 	if agentConn == nil || sessionID == "" {
 		return errors.New("agent connection and terminal session id are required")
 	}
-	closeData, err := json.Marshal(agentmgr.TerminalCloseData{SessionID: sessionID})
+	msg, err := agentmgr.NewMessage(agentmgr.MsgTerminalClose, sessionID, agentmgr.TerminalCloseData{SessionID: sessionID})
 	if err != nil {
 		return fmt.Errorf("marshal terminal close request: %w", err)
 	}
-	return agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgTerminalClose,
-		ID:   sessionID,
-		Data: closeData,
-	})
+	return agentConn.Send(msg)
 }
 
 func (d *Deps) FinalizeAgentTerminalSession(
@@ -204,8 +199,8 @@ func (b *TerminalBridge) AcceptsAgentMessage(conn *agentmgr.AgentConn, wireID st
 
 // ProcessAgentTerminalStarted handles terminal.started from agent.
 func (d *Deps) ProcessAgentTerminalStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.TerminalStartedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.TerminalStartedData](msg)
+	if err != nil {
 		return
 	}
 
@@ -235,8 +230,8 @@ func (d *Deps) ProcessAgentTerminalStarted(conn *agentmgr.AgentConn, msg agentmg
 
 // ProcessAgentTerminalData handles terminal.data (output) from agent.
 func (d *Deps) ProcessAgentTerminalData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.TerminalDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.TerminalDataPayload](msg)
+	if err != nil {
 		return
 	}
 
@@ -257,8 +252,8 @@ func (d *Deps) ProcessAgentTerminalData(conn *agentmgr.AgentConn, msg agentmgr.M
 
 // ProcessAgentTerminalClosed handles terminal.closed from agent.
 func (d *Deps) ProcessAgentTerminalClosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.TerminalCloseData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.TerminalCloseData](msg)
+	if err != nil {
 		return
 	}
 

@@ -22,12 +22,8 @@ func sendDesktopAudioStop(agentConn *agentmgr.AgentConn, sessionID string) {
 	if agentConn == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	payload, _ := json.Marshal(agentmgr.DesktopAudioStopData{SessionID: sessionID})
-	_ = agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDesktopAudioStop,
-		ID:   sessionID,
-		Data: payload,
-	})
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgDesktopAudioStop, sessionID, agentmgr.DesktopAudioStopData{SessionID: sessionID})
+	_ = agentConn.Send(msg)
 }
 
 // HandleDesktopAudioStream handles the desktop audio sideband WebSocket.
@@ -84,10 +80,10 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 		return
 	default:
 	}
-	payload, _ := json.Marshal(agentmgr.DesktopAudioStartData{SessionID: audio.WireSessionID, Bitrate: desktopAudioDefaultBitrate})
+	startMsg, _ := agentmgr.NewMessage(agentmgr.MsgDesktopAudioStart, audio.WireSessionID, agentmgr.DesktopAudioStartData{SessionID: audio.WireSessionID, Bitrate: desktopAudioDefaultBitrate})
 	var startErr error
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		startErr = audio.start(agentmgr.Message{Type: agentmgr.MsgDesktopAudioStart, ID: audio.WireSessionID, Data: payload})
+		startErr = audio.start(startMsg)
 	}) {
 		return
 	}
@@ -161,8 +157,8 @@ func (d *Deps) BridgeDesktopAudioOutput(
 
 // ProcessAgentDesktopAudioData handles desktop.audio.data from agent.
 func (d *Deps) ProcessAgentDesktopAudioData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.DesktopAudioDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.DesktopAudioDataPayload](msg)
+	if err != nil {
 		return
 	}
 
@@ -185,8 +181,8 @@ func (d *Deps) ProcessAgentDesktopAudioData(conn *agentmgr.AgentConn, msg agentm
 
 // ProcessAgentDesktopAudioState handles desktop.audio.state from agent.
 func (d *Deps) ProcessAgentDesktopAudioState(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.DesktopAudioStateData
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.DesktopAudioStateData](msg)
+	if err != nil {
 		return
 	}
 

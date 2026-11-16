@@ -190,8 +190,8 @@ func (c *Coordinator) HandleResult(conn *agentmgr.AgentConn, msg agentmgr.Messag
 		return false
 	}
 
-	var result agentmgr.PowerResultData
-	if err := agentmgr.DecodeData(msg.Data, &result, agentmgr.DecodeStrict); err != nil || result.Validate() != nil {
+	result, err := agentmgr.DecodeStrictly[agentmgr.PowerResultData](msg)
+	if err != nil || result.Validate() != nil {
 		return false
 	}
 	return c.pending.Deliver(powerResultMatch, agentmgr.Reply[agentmgr.PowerResultData]{

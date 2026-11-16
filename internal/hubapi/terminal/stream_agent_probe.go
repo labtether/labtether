@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"strconv"
@@ -78,7 +77,8 @@ func (d *Deps) StartAgentTmuxProbeAsync(agentConn *agentmgr.AgentConn) bool {
 				conn.SetMeta("terminal.tmux.probe_pending", "false")
 			}
 		}()
-		if err := conn.Send(agentmgr.Message{Type: agentmgr.MsgTerminalProbe}); err != nil {
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgTerminalProbe, "", nil)
+		if err := conn.Send(msg); err != nil {
 			log.Printf("terminal: failed to send async tmux probe to %s: %v", assetID, err)
 			conn.SetMeta("terminal.tmux.probe_pending", "false")
 			return
@@ -91,8 +91,8 @@ func (d *Deps) StartAgentTmuxProbeAsync(agentConn *agentmgr.AgentConn) bool {
 
 // ProcessAgentTerminalProbed handles terminal.probed from agent.
 func (d *Deps) ProcessAgentTerminalProbed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var resp agentmgr.TerminalProbeResponse
-	if err := json.Unmarshal(msg.Data, &resp); err != nil {
+	resp, err := agentmgr.Decode[agentmgr.TerminalProbeResponse](msg)
+	if err != nil {
 		log.Printf("terminal: failed to unmarshal tmux probe response: %v", err)
 		return
 	}

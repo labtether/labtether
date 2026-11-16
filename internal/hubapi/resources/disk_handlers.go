@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -50,8 +49,8 @@ func (d *Deps) handleDiskList(w http.ResponseWriter, r *http.Request, assetID st
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.DiskListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.DiskListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -63,8 +62,8 @@ func (d *Deps) handleDiskList(w http.ResponseWriter, r *http.Request, assetID st
 }
 
 func (d *Deps) ProcessAgentDiskListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DiskListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DiskListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid disk listed data: %v", err)
 		return
 	}

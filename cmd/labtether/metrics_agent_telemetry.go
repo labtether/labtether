@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/labtether/labtether/internal/agentmgr"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -189,8 +188,11 @@ func (a *agentTelemetryAdapter) collectProcesses(assetID string, topN int) []bri
 	requestID := generateRequestID()
 	msg, ok := a.request(a.processReplies, conn, agentmgr.MsgProcessList, requestID,
 		agentmgr.ProcessListData{RequestID: requestID, SortBy: "cpu", Limit: topN}, assetID)
-	var response agentmgr.ProcessListedData
-	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
+	if !ok {
+		return nil
+	}
+	response, err := agentmgr.Decode[agentmgr.ProcessListedData](msg)
+	if err != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawProcesses := telemetry.MaxBridgeProcessesPerAsset * 10
@@ -246,8 +248,11 @@ func (a *agentTelemetryAdapter) collectNetworkInterfaces(assetID string) []bridg
 	requestID := generateRequestID()
 	msg, ok := a.request(a.networkReplies, conn, agentmgr.MsgNetworkList, requestID,
 		agentmgr.NetworkListData{RequestID: requestID}, assetID)
-	var response agentmgr.NetworkListedData
-	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
+	if !ok {
+		return nil
+	}
+	response, err := agentmgr.Decode[agentmgr.NetworkListedData](msg)
+	if err != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawInterfaces := telemetry.MaxBridgeInterfacesPerAsset * 10
@@ -318,8 +323,11 @@ func (a *agentTelemetryAdapter) collectDiskMounts(assetID string) []bridge.DiskM
 	requestID := generateRequestID()
 	msg, ok := a.request(a.diskReplies, conn, agentmgr.MsgDiskList, requestID,
 		agentmgr.DiskListData{RequestID: requestID}, assetID)
-	var response agentmgr.DiskListedData
-	if !ok || json.Unmarshal(msg.Data, &response) != nil || strings.TrimSpace(response.Error) != "" {
+	if !ok {
+		return nil
+	}
+	response, err := agentmgr.Decode[agentmgr.DiskListedData](msg)
+	if err != nil || strings.TrimSpace(response.Error) != "" {
 		return nil
 	}
 	maxRawMounts := telemetry.MaxBridgeMountsPerAsset * 10

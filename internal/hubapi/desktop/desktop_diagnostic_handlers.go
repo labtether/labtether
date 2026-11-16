@@ -2,7 +2,6 @@ package desktop
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -57,8 +56,8 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 
 // ProcessAgentDesktopDiagnosed handles desktop.diagnosed messages from the agent.
 func (d *Deps) ProcessAgentDesktopDiagnosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DesktopDiagnosticData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DesktopDiagnosticData](msg)
+	if err != nil {
 		log.Printf("desktop_diagnose: invalid desktop.diagnosed payload: %v", err)
 		return
 	}

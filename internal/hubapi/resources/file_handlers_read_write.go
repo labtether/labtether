@@ -3,7 +3,6 @@ package resources
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,16 +43,12 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileListData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileList, requestID, agentmgr.FileListData{
 		RequestID:  requestID,
 		Path:       dirPath,
 		ShowHidden: showHidden,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileList,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -64,8 +59,8 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var listed agentmgr.FileListedData
-		if err := json.Unmarshal(msg.Data, &listed); err != nil {
+		listed, err := agentmgr.Decode[agentmgr.FileListedData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}
@@ -91,8 +86,8 @@ func receiveFileDownloadChunk(ctx context.Context, bridge *FileBridge, timeout t
 	case <-ctx.Done():
 		return agentmgr.FileDataPayload{}, ctx.Err()
 	case msg := <-bridge.Ch:
-		var chunk agentmgr.FileDataPayload
-		if err := json.Unmarshal(msg.Data, &chunk); err != nil {
+		chunk, err := agentmgr.Decode[agentmgr.FileDataPayload](msg)
+		if err != nil {
 			return agentmgr.FileDataPayload{}, err
 		}
 		return chunk, nil
@@ -243,8 +238,8 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 		}
 		select {
 		case msg := <-bridge.Ch:
-			var result agentmgr.FileWrittenData
-			if err := json.Unmarshal(msg.Data, &result); err != nil {
+			result, err := agentmgr.Decode[agentmgr.FileWrittenData](msg)
+			if err != nil {
 				return UploadAgentResponseError{err: err}
 			}
 			if result.Error != "" {
@@ -253,12 +248,8 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 			return UploadAgentWriteError{message: "agent completed upload before hub finished relaying request body"}
 		default:
 		}
-		data, _ := json.Marshal(payload)
-		return agentConn.Send(agentmgr.Message{
-			Type: agentmgr.MsgFileWrite,
-			ID:   requestID,
-			Data: data,
-		})
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgFileWrite, requestID, payload)
+		return agentConn.Send(msg)
 	})
 	if err != nil {
 		if r.Context().Err() != nil {
@@ -275,8 +266,8 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	case <-bridge.Done:
 		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileWrittenData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileWrittenData](msg)
+		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 			return
 		}

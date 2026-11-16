@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -50,8 +49,8 @@ func (d *Deps) handleCronList(w http.ResponseWriter, r *http.Request, assetID st
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.CronListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.CronListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -65,8 +64,8 @@ func (d *Deps) handleCronList(w http.ResponseWriter, r *http.Request, assetID st
 }
 
 func (d *Deps) ProcessAgentCronListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.CronListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.CronListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid cron listed data: %v", err)
 		return
 	}

@@ -2,7 +2,6 @@ package desktop
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -106,8 +105,8 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 
 // ProcessAgentDesktopDisplays handles desktop.displays from agent.
 func (d *Deps) ProcessAgentDesktopDisplays(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DisplayListData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DisplayListData](msg)
+	if err != nil {
 		log.Printf("display: invalid desktop.displays payload: %v", err)
 		return
 	}

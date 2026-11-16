@@ -2,7 +2,6 @@ package alerting
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"strings"
 	"time"
@@ -34,8 +33,8 @@ func (d *Deps) ReplayAlertsToAgent(ctx context.Context, conn *agentmgr.AgentConn
 	}
 	// First what it missed while away: alerts it showed that have ended.
 	for _, data := range d.AgentAlertDevices.takeForLater(assetID) {
-		payload, _ := json.Marshal(data)
-		if err := conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: payload}); err != nil {
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgAlertNotify, "", data)
+		if err := conn.SendContext(ctx, msg); err != nil {
 			d.AgentAlertDevices.keepForLater(assetID, data)
 			return
 		}
@@ -74,11 +73,11 @@ func (d *Deps) ReplayAlertsToAgent(ctx context.Context, conn *agentmgr.AgentConn
 			if status == alerts.InstanceStatusResolved {
 				state, at = "resolved", *inst.ResolvedAt
 			}
-			data, _ := json.Marshal(agentmgr.AlertNotifyData{
+			msg, _ := agentmgr.NewMessage(agentmgr.MsgAlertNotify, "", agentmgr.AlertNotifyData{
 				ID: inst.ID, Severity: rule.Severity, Title: rule.Name, Summary: rule.Description,
 				State: state, Timestamp: at.UTC().Format(time.RFC3339),
 			})
-			if err := conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: data}); err != nil {
+			if err := conn.SendContext(ctx, msg); err != nil {
 				return
 			}
 		}

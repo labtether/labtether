@@ -2,7 +2,6 @@ package alerting
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ func (d *Deps) sendAlertState(ctx context.Context, rule alerts.Rule, instanceID,
 	if d.AgentMgr == nil {
 		return data, deviceIDs
 	}
-	payload, _ := json.Marshal(data)
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgAlertNotify, "", data)
 	var missed []string
 	for _, raw := range deviceIDs {
 		deviceID := strings.TrimSpace(raw)
@@ -34,7 +33,7 @@ func (d *Deps) sendAlertState(ctx context.Context, rule alerts.Rule, instanceID,
 			continue
 		}
 		conn, ok := d.AgentMgr.Get(deviceID)
-		if !ok || ctx.Err() != nil || conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: payload}) != nil {
+		if !ok || ctx.Err() != nil || conn.SendContext(ctx, msg) != nil {
 			missed = append(missed, deviceID)
 		}
 	}

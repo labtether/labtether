@@ -123,11 +123,11 @@ func sendHubSSHKeyMessage(conn *agentmgr.AgentConn, messageType, publicKey strin
 		return fmt.Errorf("unsupported SSH key message type")
 	}
 	for _, payload := range payloads {
-		data, err := json.Marshal(payload)
+		msg, err := agentmgr.NewMessage(messageType, "", payload)
 		if err != nil {
 			return fmt.Errorf("failed to encode SSH key message: %w", err)
 		}
-		if err := conn.Send(agentmgr.Message{Type: messageType, Data: data}); err != nil {
+		if err := conn.Send(msg); err != nil {
 			return err
 		}
 	}

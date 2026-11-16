@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -110,8 +109,8 @@ func (d *Deps) handlePackageList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed packageListedResponseWire
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[packageListedResponseWire](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -209,8 +208,8 @@ func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, a
 	if err := ctx.Err(); err != nil {
 		return failed("package update preview canceled; no changes applied: " + err.Error())
 	}
-	var listed packageListedResponseWire
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[packageListedResponseWire](msg)
+	if err != nil {
 		return failed("invalid package update preview response; no changes applied")
 	}
 	if err := validatePackageListedResponse(listed, wireID, packageInventoryUpgradable); err != nil {
@@ -305,8 +304,8 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var result agentmgr.PackageResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil {
+	result, err := agentmgr.Decode[agentmgr.PackageResultData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -322,8 +321,8 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 }
 
 func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data packageListedResponseWire
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[packageListedResponseWire](msg)
+	if err != nil {
 		log.Printf("agentws: invalid package listed data: %v", err)
 		return
 	}
@@ -335,8 +334,8 @@ func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.
 }
 
 func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.PackageResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.PackageResultData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid package result data: %v", err)
 		return
 	}
