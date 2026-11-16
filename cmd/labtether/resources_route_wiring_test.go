@@ -237,3 +237,30 @@ func (resourcesWiringTransfers) ListFileTransfers(_ context.Context, actorID, _ 
 func (resourcesWiringTransfers) GetFileTransfer(context.Context, string) (*persistence.FileTransfer, error) {
 	return nil, persistence.ErrNotFound
 }
+
+// TestResourcesRoutesBuildDepsPerRequest catches a route bound to a
+// resources Deps built once, when the route table was built. cmd builds the
+// resources Deps for each request (ensureResourcesDeps), so a store set on
+// the server after start is the one a request reads. A route that took
+// s.ensureResourcesDeps().H as a method value would keep the first store.
+func TestResourcesRoutesBuildDepsPerRequest(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.groupProfileStore = resourcesWiringProfiles{}
+	admin := createRoleSessionToken(t, sut, "admin-resources-per-request", auth.RoleAdmin)
+	call := routeWiringCaller(t, sut.buildHTTPHandlers(nil, nil, nil), admin)
+
+	call("/group-profiles", http.MethodGet, "/group-profiles", "", http.StatusOK, `"name":"Wiring profile"`)
+	sut.groupProfileStore = resourcesLaterProfiles{}
+	call("/group-profiles", http.MethodGet, "/group-profiles", "", http.StatusOK, `"name":"Later profile"`)
+	call("/group-profiles/", http.MethodGet, "/group-profiles/gp-later", "", http.StatusOK, `"name":"Later profile"`)
+}
+
+type resourcesLaterProfiles struct{ persistence.GroupProfileStore }
+
+func (resourcesLaterProfiles) ListGroupProfiles(int) ([]groupprofiles.Profile, error) {
+	return []groupprofiles.Profile{{ID: "gp-later", Name: "Later profile"}}, nil
+}
+
+func (resourcesLaterProfiles) GetGroupProfile(id string) (groupprofiles.Profile, bool, error) {
+	return groupprofiles.Profile{ID: id, Name: "Later profile"}, id == "gp-later", nil
+}
