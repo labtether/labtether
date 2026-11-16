@@ -50,6 +50,32 @@ setting.
 - The demo data loads with times relative to the load, so it does not go out
   of date.
 
+### Device requests
+
+These cover the requests the hub answers by asking a device's agent: disks,
+scheduled jobs, signed-in users, logs, processes, services, network,
+packages, displays, clipboard, the desktop check, the Docker endpoint test
+and reboot or shut down.
+
+- A device that does not answer in time now says "device did not answer in
+  time" (504). It used to say "An internal error occurred." The v2 API gives
+  the code `agent_timeout` with the same words.
+- When a device's agent disconnects while the hub waits for its answer, the
+  request ends at once with "agent is not connected" (409). It used to wait
+  out its full time, up to ten minutes for a package action, and then report a
+  timeout. This also happens when the agent reconnects during the wait, since
+  the answer can only come back on the connection the request went out on.
+  Reboot and shut down are the exception: the device going down closes the
+  connection, so they still wait and report a timeout.
+- The hub takes an answer only from the device the request was sent to, on
+  its own connection, with the device ID matching exactly. The desktop check
+  used to take an answer from any device, disk, scheduled jobs and users took
+  one that came without a connection, and most requests treated two device
+  IDs that differ only in letter case as the same device.
+- An answer of the wrong kind no longer answers a request: for example a
+  process list can no longer answer a process kill, or a clipboard read a
+  clipboard write.
+
 ## [2.0.0] - unreleased
 
 Hub 2.0.0 ships a rebuilt console. Every page has a new design, and the

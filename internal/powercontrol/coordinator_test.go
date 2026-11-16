@@ -3,54 +3,76 @@ package powercontrol
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
+// fakeSender stands in for the agent manager. A connected one hands out a
+// real WebSocket connection; its agent end passes each action to onSend,
+// with the connection it came on, and runs nothing.
 type fakeSender struct {
-	connected bool
-	sendErr   error
-	onSend    func(assetID string, msg agentmgr.Message)
-	sentCh    chan agentmgr.Message
-	mu        sync.Mutex
-	sent      []agentmgr.Message
+	peer   *testutil.AgentPeer // nil: the agent is not connected
+	onSend func(conn *agentmgr.AgentConn, msg agentmgr.Message)
+	sentCh chan agentmgr.Message
+	mu     sync.Mutex // guards onSend, sentCh and sent
+	sent   []agentmgr.Message
 }
 
-func (s *fakeSender) IsConnected(string) bool { return s.connected }
-
-func (s *fakeSender) SendToAgent(assetID string, msg agentmgr.Message) error {
-	s.mu.Lock()
-	s.sent = append(s.sent, msg)
-	s.mu.Unlock()
-	if s.sentCh != nil {
-		select {
-		case s.sentCh <- msg:
-		default:
+func connectedSender(t *testing.T) *fakeSender {
+	s := &fakeSender{peer: testutil.NewAgentPeer(t, "node-1")}
+	go func() {
+		for msg := range s.peer.Sent() {
+			s.mu.Lock()
+			s.sent = append(s.sent, msg)
+			onSend, sentCh := s.onSend, s.sentCh
+			s.mu.Unlock()
+			if sentCh != nil {
+				select {
+				case sentCh <- msg:
+				default:
+				}
+			}
+			if onSend != nil {
+				onSend(s.peer.Conn, msg)
+			}
 		}
+	}()
+	return s
+}
+
+func (s *fakeSender) Get(string) (*agentmgr.AgentConn, bool) {
+	if s.peer == nil {
+		return nil, false
 	}
-	if s.sendErr != nil {
-		return s.sendErr
-	}
-	if s.onSend != nil {
-		s.onSend(assetID, msg)
-	}
-	return nil
+	return s.peer.Conn, true
+}
+
+func (s *fakeSender) respond(onSend func(*agentmgr.AgentConn, agentmgr.Message)) {
+	s.mu.Lock()
+	s.onSend = onSend
+	s.mu.Unlock()
+}
+
+func (s *fakeSender) notify(sentCh chan agentmgr.Message) {
+	s.mu.Lock()
+	s.sentCh = sentCh
+	s.mu.Unlock()
 }
 
 func TestCoordinatorAcceptsStrictlyCorrelatedResult(t *testing.T) {
-	sender := &fakeSender{connected: true}
+	sender := connectedSender(t)
 	coordinator := New(sender, time.Second)
-	sender.onSend = func(assetID string, msg agentmgr.Message) {
+	sender.respond(func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		var action agentmgr.PowerActionData
 		if err := json.Unmarshal(msg.Data, &action); err != nil {
-			t.Fatalf("decode action: %v", err)
+			t.Errorf("decode action: %v", err)
 		}
-		if msg.Type != agentmgr.MsgPowerAction || msg.ID != action.RequestID || assetID != action.AssetID {
-			t.Fatalf("uncorrelated outbound action: asset=%q msg=%+v action=%+v", assetID, msg, action)
+		if msg.Type != agentmgr.MsgPowerAction || msg.ID != action.RequestID || conn.AssetID != action.AssetID {
+			t.Errorf("uncorrelated outbound action: asset=%q msg=%+v action=%+v", conn.AssetID, msg, action)
 		}
 		result := agentmgr.PowerResultData{
 			RequestID: action.RequestID,
@@ -60,10 +82,10 @@ func TestCoordinatorAcceptsStrictlyCorrelatedResult(t *testing.T) {
 			Message:   "operating system accepted reboot",
 		}
 		raw, _ := json.Marshal(result)
-		if !coordinator.HandleResult(assetID, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw}) {
-			t.Fatal("expected result delivery")
+		if !coordinator.HandleResult(conn, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw}) {
+			t.Error("expected result delivery")
 		}
-	}
+	})
 
 	result, err := coordinator.Execute(context.Background(), "node-1", agentmgr.PowerActionReboot)
 	if err != nil {
@@ -90,9 +112,9 @@ func TestCoordinatorRejectsCrossAssetAndCrossRequestResults(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			sender := &fakeSender{connected: true}
+			sender := connectedSender(t)
 			coordinator := New(sender, 20*time.Millisecond)
-			sender.onSend = func(_ string, msg agentmgr.Message) {
+			sender.respond(func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 				var action agentmgr.PowerActionData
 				_ = json.Unmarshal(msg.Data, &action)
 				result := agentmgr.PowerResultData{
@@ -114,10 +136,13 @@ func TestCoordinatorRejectsCrossAssetAndCrossRequestResults(t *testing.T) {
 				} else {
 					raw, _ = json.Marshal(result)
 				}
-				if coordinator.HandleResult(tc.connAsset, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: messageID, Data: raw}) {
-					t.Fatal("mismatched result was delivered")
+				if tc.connAsset != conn.AssetID {
+					conn = &agentmgr.AgentConn{AssetID: tc.connAsset}
 				}
-			}
+				if coordinator.HandleResult(conn, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: messageID, Data: raw}) {
+					t.Error("mismatched result was delivered")
+				}
+			})
 
 			_, err := coordinator.Execute(context.Background(), "node-1", agentmgr.PowerActionReboot)
 			if KindOf(err) != ErrorTimedOut {
@@ -139,9 +164,9 @@ func TestCoordinatorMapsAgentFailures(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.status), func(t *testing.T) {
-			sender := &fakeSender{connected: true}
+			sender := connectedSender(t)
 			coordinator := New(sender, time.Second)
-			sender.onSend = func(assetID string, msg agentmgr.Message) {
+			sender.respond(func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 				var action agentmgr.PowerActionData
 				_ = json.Unmarshal(msg.Data, &action)
 				result := agentmgr.PowerResultData{
@@ -153,8 +178,8 @@ func TestCoordinatorMapsAgentFailures(t *testing.T) {
 					Message:   "safe failure",
 				}
 				raw, _ := json.Marshal(result)
-				coordinator.HandleResult(assetID, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw})
-			}
+				coordinator.HandleResult(conn, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw})
+			})
 
 			_, err := coordinator.Execute(context.Background(), "node-1", agentmgr.PowerActionReboot)
 			if KindOf(err) != tc.kind {
@@ -170,21 +195,24 @@ func TestCoordinatorOfflineSendAndCancellation(t *testing.T) {
 		t.Fatalf("offline kind=%q err=%v", KindOf(err), err)
 	}
 
-	coordinator = New(&fakeSender{connected: true, sendErr: errors.New("closed")}, time.Second)
+	failing := connectedSender(t)
+	failing.peer.Conn.Close() // stays the asset's connection; every send fails
+	coordinator = New(failing, time.Second)
 	if _, err := coordinator.Execute(context.Background(), "node-1", agentmgr.PowerActionReboot); KindOf(err) != ErrorSendFailed {
 		t.Fatalf("send kind=%q err=%v", KindOf(err), err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	coordinator = New(&fakeSender{connected: true}, time.Second)
+	coordinator = New(connectedSender(t), time.Second)
 	if _, err := coordinator.Execute(ctx, "node-1", agentmgr.PowerActionShutdown); KindOf(err) != ErrorCanceled {
 		t.Fatalf("cancel kind=%q err=%v", KindOf(err), err)
 	}
 }
 
 func TestCoordinatorGloballyBoundsPendingActions(t *testing.T) {
-	sender := &fakeSender{connected: true, sentCh: make(chan agentmgr.Message, 1)}
+	sender := connectedSender(t)
+	sender.notify(make(chan agentmgr.Message, 1))
 	coordinator := NewWithLimit(sender, time.Second, 1)
 	firstCtx, cancelFirst := context.WithCancel(context.Background())
 	defer cancelFirst()

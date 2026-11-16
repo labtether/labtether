@@ -64,6 +64,11 @@ func NewAgentPeer(t testing.TB, assetID string) *AgentPeer {
 	return peer
 }
 
+// Sent delivers every message the Hub sends to the agent, in order, for a
+// test that answers from its own goroutine. It closes with the socket. Use
+// either Sent or Next in one test, not both.
+func (p *AgentPeer) Sent() <-chan agentmgr.Message { return p.sent }
+
 // Next waits up to two seconds for the next message the Hub sends.
 func (p *AgentPeer) Next(t testing.TB) agentmgr.Message {
 	t.Helper()

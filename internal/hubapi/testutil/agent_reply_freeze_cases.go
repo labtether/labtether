@@ -10,7 +10,7 @@ import (
 )
 
 // RunReplyTimeouts: with no reply, each request asks for its own default wait
-// and answers 504 "agent did not respond in time". A reply that comes after
+// and answers 504 "device did not answer in time". A reply that comes after
 // that is dropped without blocking, and no waiter is left behind.
 func RunReplyTimeouts(t *testing.T, sites []ReplySite) {
 	for _, site := range sites {
@@ -115,8 +115,8 @@ var replyVariants = map[string]replyVariant{
 
 // RunReplyVariants: for each variant a site lists, the variant reply comes
 // first and the right reply second. The answer shows which one the request
-// took, so a variant that is accepted today must stay accepted and one that
-// is dropped must stay dropped.
+// took, so a variant the site's rule accepts must be accepted and one it
+// drops must be dropped.
 func RunReplyVariants(t *testing.T, sites []ReplySite) {
 	for _, site := range sites {
 		t.Run(site.Name, func(t *testing.T) {
@@ -145,9 +145,9 @@ func RunReplyVariants(t *testing.T, sites []ReplySite) {
 				body := AwaitAnswer(t, done).Body.String()
 				switch {
 				case accepted && !strings.Contains(body, replyVariantMarker):
-					t.Errorf("%s: dropped, but it is accepted today; answer %s", name, body)
+					t.Errorf("%s: dropped, but the rule accepts it; answer %s", name, body)
 				case !accepted && !strings.Contains(body, replyMarker):
-					t.Errorf("%s: accepted, but it is dropped today; answer %s", name, body)
+					t.Errorf("%s: accepted, but the rule drops it; answer %s", name, body)
 				}
 				wantNoWaiters(t, h)
 			}
@@ -171,5 +171,71 @@ func RunReplyRouting(t *testing.T, sites []ReplySite) {
 			}
 			wantNoWaiters(t, h)
 		})
+	}
+}
+
+// RunReplyForeignTypes: in a registry shared by several reply types, a reply
+// of another type that carries the request's ID is dropped, and the
+// request's own reply still answers it.
+func RunReplyForeignTypes(t *testing.T, sites []ReplySite) {
+	for _, site := range sites {
+		if len(site.Foreign) == 0 {
+			continue
+		}
+		t.Run(site.Name, func(t *testing.T) {
+			peer := NewAgentPeer(t, ReplyDevice)
+			h := site.Bind(t, peer.Manager)
+			h.SetTimeout(func(time.Duration) time.Duration { return 2 * time.Second })
+			for _, foreign := range site.Foreign {
+				done := site.serve(h)
+				key := site.requestKey(t, peer.Next(t))
+				other := ReplySite{ReplyType: foreign.Type, Reply: foreign.Reply}.message(t, key, key, replyVariantMarker)
+				DeliverPromptly(t, foreign.Type, func() { h.Route(peer.Conn, other) })
+				DeliverPromptly(t, "right reply", func() { h.Deliver(peer.Conn, site.message(t, key, key, replyMarker)) })
+				body := AwaitAnswer(t, done).Body.String()
+				if !strings.Contains(body, replyMarker) || strings.Contains(body, replyVariantMarker) {
+					t.Errorf("%s answered the request; answer %s", foreign.Type, body)
+				}
+				wantNoWaiters(t, h)
+			}
+		})
+	}
+}
+
+// The ways the connection a request went out on can end during the wait.
+var replyConnEndings = []struct {
+	name string
+	end  func(*AgentPeer)
+}{
+	// The Hub's read loop drops a connection this way when the agent goes.
+	{"agent disconnects", func(p *AgentPeer) { p.Manager.UnregisterIfMatch(ReplyDevice, p.Conn) }},
+	// The same device connects again; its old connection is closed.
+	{"agent reconnects", func(p *AgentPeer) { p.Manager.Register(agentmgr.NewAgentConn(nil, ReplyDevice, "linux")) }},
+}
+
+// RunReplyDisconnects: when the connection the request was sent on closes
+// during the wait, the request ends at once with 409 "agent is not
+// connected", as a failed send does, instead of waiting out its timeout.
+func RunReplyDisconnects(t *testing.T, sites []ReplySite) {
+	const wait = 3 * time.Second
+	for _, site := range sites {
+		for _, ending := range replyConnEndings {
+			t.Run(site.Name+"/"+ending.name, func(t *testing.T) {
+				peer := NewAgentPeer(t, ReplyDevice)
+				h := site.Bind(t, peer.Manager)
+				h.SetTimeout(func(time.Duration) time.Duration { return wait })
+				done := site.serve(h)
+				key := site.requestKey(t, peer.Next(t))
+				began := time.Now()
+				ending.end(peer)
+				rec := AwaitAnswer(t, done)
+				wantErrorAnswer(t, rec, http.StatusConflict, replyNotConnectedText)
+				if took := time.Since(began); took >= wait {
+					t.Fatalf("request ended %v after the disconnect, not at once", took)
+				}
+				DeliverPromptly(t, "late reply", func() { h.Deliver(peer.Conn, site.message(t, key, key, replyMarker)) })
+				wantNoWaiters(t, h)
+			})
+		}
 	}
 }

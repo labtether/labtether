@@ -44,7 +44,9 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 		ID:          requestID,
 		Payload:     agentmgr.DesktopDiagnosticRequest{RequestID: requestID},
 		Send:        agentConn.Send,
+		Device:      assetID,
 		TimeoutFunc: d.replyWaitFunc(desktopDiagnoseTimeout),
+		Disconnect:  agentConn.Done(),
 	})
 	if err != nil {
 		d.writeAgentRequestFailure(w, assetID, err)

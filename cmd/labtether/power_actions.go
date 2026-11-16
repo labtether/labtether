@@ -31,7 +31,7 @@ func (s *apiServer) processAgentPowerResult(conn *agentmgr.AgentConn, msg agentm
 	}
 	// The coordinator fails closed for malformed, stale, duplicate, or
 	// cross-asset results. Avoid logging agent-provided payloads here.
-	s.ensurePowerCoordinator().HandleResult(conn.AssetID, msg)
+	s.ensurePowerCoordinator().HandleResult(conn, msg)
 }
 
 func (s *apiServer) handleV2AssetPowerAction(w http.ResponseWriter, r *http.Request, assetID string, rawAction string) {

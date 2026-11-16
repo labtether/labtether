@@ -68,5 +68,5 @@ func (d *Deps) ProcessAgentDiskListed(conn *agentmgr.AgentConn, msg agentmgr.Mes
 		log.Printf("agentws: invalid disk listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.DiskReplies, matchListAcceptsNoConn, conn, msg, data.RequestID)
+	deliverAgentReply(d.DiskReplies, matchPayloadID, agentmgr.MsgDiskListed, conn, msg, data.RequestID)
 }

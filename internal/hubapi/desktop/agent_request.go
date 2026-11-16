@@ -17,14 +17,14 @@ type (
 	ClipboardReplies  = agentmgr.Pending[agentmgr.Message]
 )
 
-// How each reply finds its waiting request: today's behaviour, pinned by
-// agent_reply_freeze_test.go. Each checks the replying device differently.
+// How each reply finds its waiting request, pinned by
+// agent_reply_freeze_test.go. Every reply must come on a connection whose
+// device ID equals the request's exactly: two devices may differ only in
+// letter case.
 var (
-	matchDisplays = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceFold}
-	// The diagnostic checks no device at all.
-	matchDiagnostic = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceAny}
-	// Clipboard compares the trimmed device ID exactly, so letter case counts.
-	matchClipboard = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceExactTrim}
+	matchDisplays   = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceExact}
+	matchDiagnostic = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceExact}
+	matchClipboard  = agentmgr.Match{Key: agentmgr.KeyPayload, Device: agentmgr.DeviceExact}
 )
 
 // replyWaitFunc reads the wait after the send through agentReplyTimeout, and
@@ -40,10 +40,10 @@ func (d *Deps) replyWaitFunc(defaultTimeout time.Duration) func() time.Duration 
 
 // writeAgentRequestFailure writes the answer for a request that got no reply:
 // 504 when the agent did not answer in time, otherwise "agent is not
-// connected" (the send failed).
+// connected" (the send failed or the connection closed during the wait).
 func (d *Deps) writeAgentRequestFailure(w http.ResponseWriter, assetID string, err error) {
 	if agentmgr.RequestKind(err) == agentmgr.RequestTimedOut {
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+		servicehttp.WriteAgentTimeout(w)
 		return
 	}
 	d.writeAgentNotConnected(w, assetID)

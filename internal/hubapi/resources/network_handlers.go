@@ -146,7 +146,7 @@ func (d *Deps) ProcessAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid network listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.NetworkReplies, matchPayloadID, conn, msg, data.RequestID)
+	deliverAgentReply(d.NetworkReplies, matchPayloadID, agentmgr.MsgNetworkListed, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -155,5 +155,5 @@ func (d *Deps) ProcessAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid network result data: %v", err)
 		return
 	}
-	deliverAgentReply(d.NetworkReplies, matchPayloadID, conn, msg, data.RequestID)
+	deliverAgentReply(d.NetworkReplies, matchPayloadID, agentmgr.MsgNetworkResult, conn, msg, data.RequestID)
 }

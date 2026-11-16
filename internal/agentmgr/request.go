@@ -97,7 +97,8 @@ type Call[Req, Resp any] struct {
 	// send succeeds and while the waiter is registered.
 	TimeoutFunc func() time.Duration
 	// Disconnect ends the wait with RequestDisconnected when it closes;
-	// usually conn.Done(). Nil means a disconnect is not watched.
+	// usually conn.Done(). A reply delivered before it closed still wins.
+	// Nil means a disconnect is not watched.
 	Disconnect <-chan struct{}
 }
 
@@ -150,6 +151,13 @@ func Request[Req, Resp any](ctx context.Context, p *Pending[Resp], call Call[Req
 	case <-ctx.Done():
 		return fail(RequestCanceled, ctx.Err())
 	case <-call.Disconnect:
+		// A reply that came in before the connection closed still answers:
+		// an agent may reply and then disconnect, as a reboot does.
+		select {
+		case reply := <-w.ch:
+			return reply, nil
+		default:
+		}
 		return fail(RequestDisconnected, nil)
 	case <-timer.C:
 		return fail(RequestTimedOut, nil)

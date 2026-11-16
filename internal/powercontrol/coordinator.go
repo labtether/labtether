@@ -17,9 +17,9 @@ const (
 
 // Sender is the narrow agent-manager surface used by the power coordinator.
 // It is deliberately injectable so tests never execute a real power command.
+// Get returns the asset's current connection; the action is sent on it.
 type Sender interface {
-	IsConnected(assetID string) bool
-	SendToAgent(assetID string, msg agentmgr.Message) error
+	Get(assetID string) (*agentmgr.AgentConn, bool)
 }
 
 type ErrorKind string
@@ -94,13 +94,20 @@ func NewWithLimit(sender Sender, timeout time.Duration, maxConcurrent int) *Coor
 }
 
 // Execute sends one typed action to exactly one connected agent and waits for
-// a strictly correlated power.result. Only an accepted result returns nil.
+// a strictly correlated power.result from the connection it was sent on. It
+// does not end when that connection closes: a device going down after a
+// reboot or shut down closes it, so a missing result stays a timeout ("no
+// confirmation"), never "not connected". Only an accepted result returns nil.
 func (c *Coordinator) Execute(ctx context.Context, assetID string, action agentmgr.PowerAction) (agentmgr.PowerResultData, error) {
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" || len(assetID) > 256 || !action.Valid() {
 		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorInvalid, Message: "invalid power action request"}
 	}
-	if c == nil || c.sender == nil || !c.sender.IsConnected(assetID) {
+	var conn *agentmgr.AgentConn
+	if c != nil && c.sender != nil {
+		conn, _ = c.sender.Get(assetID)
+	}
+	if conn == nil {
 		return agentmgr.PowerResultData{}, &ActionError{Kind: ErrorAgentOffline, Message: "asset agent is not connected"}
 	}
 	if ctx == nil {
@@ -115,8 +122,9 @@ func (c *Coordinator) Execute(ctx context.Context, assetID string, action agentm
 			AssetID:   assetID,
 			Action:    action,
 		},
-		Send:   func(msg agentmgr.Message) error { return c.sender.SendToAgent(assetID, msg) },
-		Device: assetID,
+		Send:      conn.Send,
+		Device:    assetID,
+		ExactConn: conn,
 		Accept: func(result agentmgr.PowerResultData) bool {
 			return result.AssetID == assetID && result.Action == action
 		},
@@ -170,13 +178,15 @@ func requestFailure(err error, requestID, assetID string, action agentmgr.PowerA
 
 // powerResultMatch is the reply rule for power.result: the envelope ID must
 // equal the payload request ID and the result must come from the exact asset.
+// Execute also requires the exact connection the action was sent on.
 var powerResultMatch = agentmgr.Match{Key: agentmgr.KeyBoth, Device: agentmgr.DeviceExact}
 
-// HandleResult validates and delivers an agent result. It returns false for
-// malformed, stale, duplicate, or cross-asset results; those never unblock an
-// HTTP request and therefore can never create false success.
-func (c *Coordinator) HandleResult(connAssetID string, msg agentmgr.Message) bool {
-	if c == nil || msg.Type != agentmgr.MsgPowerResult {
+// HandleResult validates and delivers an agent result that came in on conn.
+// It returns false for malformed, stale, duplicate, cross-asset or
+// other-connection results; those never unblock an HTTP request and
+// therefore can never create false success.
+func (c *Coordinator) HandleResult(conn *agentmgr.AgentConn, msg agentmgr.Message) bool {
+	if c == nil || conn == nil || msg.Type != agentmgr.MsgPowerResult {
 		return false
 	}
 
@@ -184,12 +194,10 @@ func (c *Coordinator) HandleResult(connAssetID string, msg agentmgr.Message) boo
 	if err := agentmgr.DecodeData(msg.Data, &result, agentmgr.DecodeStrict); err != nil || result.Validate() != nil {
 		return false
 	}
-	// The router passes only the asset ID; the coordinator never checks the
-	// connection value, so a connection carrying that ID stands in for it.
 	return c.pending.Deliver(powerResultMatch, agentmgr.Reply[agentmgr.PowerResultData]{
 		EnvelopeID: msg.ID,
 		PayloadID:  result.RequestID,
-		Conn:       &agentmgr.AgentConn{AssetID: connAssetID},
+		Conn:       conn,
 		Value:      result,
 	})
 }

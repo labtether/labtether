@@ -13,16 +13,19 @@ import (
 
 const clipboardRequestTimeout = 10 * time.Second
 
-// requestClipboard sends one clipboard message and waits for the reply from
-// the connection's own device, until the HTTP request ends.
-func (d *Deps) requestClipboard(r *http.Request, agentConn *agentmgr.AgentConn, msgType, requestID string, payload any) (agentmgr.Message, error) {
+// requestClipboard sends one clipboard message and waits for the reply of
+// replyType from the connection's own device, until the HTTP request ends or
+// the connection closes.
+func (d *Deps) requestClipboard(r *http.Request, agentConn *agentmgr.AgentConn, msgType, replyType, requestID string, payload any) (agentmgr.Message, error) {
 	return agentmgr.Request(r.Context(), d.ClipboardReplies, agentmgr.Call[any, agentmgr.Message]{
 		Type:        msgType,
 		ID:          requestID,
 		Payload:     payload,
 		Send:        agentConn.Send,
 		Device:      strings.TrimSpace(agentConn.AssetID),
+		Accept:      func(msg agentmgr.Message) bool { return msg.Type == replyType },
 		TimeoutFunc: d.replyWaitFunc(clipboardRequestTimeout),
+		Disconnect:  agentConn.Done(),
 	})
 }
 
@@ -92,7 +95,7 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 
 	requestID := d.GenerateRequestID()
 
-	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardGet, requestID,
+	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardGet, agentmgr.MsgClipboardData, requestID,
 		agentmgr.ClipboardGetData{RequestID: requestID, Format: format})
 	if err != nil {
 		// A request whose caller went away writes nothing.
@@ -133,7 +136,7 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 	requestID := d.GenerateRequestID()
 	body.RequestID = requestID
 
-	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardSet, requestID, body)
+	msg, err := d.requestClipboard(r, agentConn, agentmgr.MsgClipboardSet, agentmgr.MsgClipboardSetAck, requestID, body)
 	if err != nil {
 		if agentmgr.RequestKind(err) != agentmgr.RequestCanceled {
 			d.writeAgentRequestFailure(w, assetID, err)
@@ -158,7 +161,7 @@ func (d *Deps) ProcessAgentClipboardData(conn *agentmgr.AgentConn, msg agentmgr.
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		return
 	}
-	d.deliverClipboardResponse(data.RequestID, conn, msg)
+	d.deliverClipboardResponse(agentmgr.MsgClipboardData, data.RequestID, conn, msg)
 }
 
 // ProcessAgentClipboardSetAck handles clipboard.set_ack from agent.
@@ -167,11 +170,13 @@ func (d *Deps) ProcessAgentClipboardSetAck(conn *agentmgr.AgentConn, msg agentmg
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		return
 	}
-	d.deliverClipboardResponse(data.RequestID, conn, msg)
+	d.deliverClipboardResponse(agentmgr.MsgClipboardSetAck, data.RequestID, conn, msg)
 }
 
-// deliverClipboardResponse routes an agent clipboard response to the waiting HTTP handler.
-func (d *Deps) deliverClipboardResponse(requestID string, conn *agentmgr.AgentConn, msg agentmgr.Message) {
+// deliverClipboardResponse routes an agent clipboard response of replyType to
+// the waiting HTTP handler. The router calls each handler for its own type.
+func (d *Deps) deliverClipboardResponse(replyType, requestID string, conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	msg.Type = replyType
 	d.ClipboardReplies.Deliver(matchClipboard, agentmgr.Reply[agentmgr.Message]{
 		EnvelopeID: msg.ID, PayloadID: requestID, Conn: conn, Value: msg,
 	})

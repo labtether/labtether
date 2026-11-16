@@ -63,7 +63,11 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
+	var agentConn *agentmgr.AgentConn
+	if d.AgentMgr != nil {
+		agentConn, _ = d.AgentMgr.Get(assetID)
+	}
+	if agentConn == nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -77,11 +81,12 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		Type:    agentmgr.MsgDesktopListDisplays,
 		ID:      requestID,
 		Payload: map[string]string{"request_id": requestID},
-		Send: func(msg agentmgr.Message) error {
-			return d.AgentMgr.SendToAgent(assetID, msg)
-		},
+		// Sent on the connection looked up above, so the wait can watch
+		// the connection the request went out on.
+		Send:        agentConn.Send,
 		Device:      assetID,
 		TimeoutFunc: d.replyWaitFunc(displayRequestTimeout),
+		Disconnect:  agentConn.Done(),
 	})
 	if err != nil {
 		d.writeAgentRequestFailure(w, assetID, err)

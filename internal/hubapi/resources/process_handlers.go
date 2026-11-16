@@ -165,7 +165,7 @@ func (d *Deps) ProcessAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid process listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.ProcessReplies, matchProcessList, conn, msg, data.RequestID)
+	deliverAgentReply(d.ProcessReplies, matchProcessList, agentmgr.MsgProcessListed, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentProcessKillResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -174,7 +174,7 @@ func (d *Deps) ProcessAgentProcessKillResult(conn *agentmgr.AgentConn, msg agent
 		log.Printf("agentws: invalid process kill result data: %v", err)
 		return
 	}
-	deliverAgentReply(d.ProcessReplies, matchProcessKill, conn, msg, "")
+	deliverAgentReply(d.ProcessReplies, matchProcessKill, agentmgr.MsgProcessKillResult, conn, msg, "")
 }
 
 func (d *Deps) collectProcessListViaCommand(assetID, sortBy string, limit int) (agentmgr.ProcessListedData, error) {
