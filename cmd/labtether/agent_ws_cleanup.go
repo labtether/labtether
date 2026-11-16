@@ -28,7 +28,7 @@ func (s *apiServer) cleanupAgentConnectionState(assetID, sessionID string) {
 		s.broadcaster.Broadcast("agent.disconnected", map[string]any{"asset_id": assetID})
 	}
 	s.ensureDesktopDeps().CloseWebRTCBridgesForAsset(assetID)
-	s.closeDockerExecBridgesForAsset(assetID)
+	s.ensureDockerDeps().CloseDockerExecBridgesForAsset(assetID)
 	s.ensureDesktopDeps().CloseDesktopBridgesForAsset(assetID)
 	s.closeTerminalBridgesForAsset(assetID)
 	if s.presenceStore != nil {

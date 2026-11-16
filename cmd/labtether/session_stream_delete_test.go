@@ -292,8 +292,8 @@ func sessionDeleteReply(s *apiServer, conn *agentmgr.AgentConn, kind, event, wir
 	}
 	raw, _ := json.Marshal(map[string]any{"session_id": wire, "data": base64.StdEncoding.EncodeToString([]byte(data))})
 	if event == "started" {
-		s.processAgentDockerExecStarted(conn, agentmgr.Message{Data: raw})
+		s.ensureDockerDeps().ProcessAgentDockerExecStarted(conn, agentmgr.Message{Data: raw})
 	} else {
-		s.processAgentDockerExecData(conn, agentmgr.Message{Data: raw})
+		s.ensureDockerDeps().ProcessAgentDockerExecData(conn, agentmgr.Message{Data: raw})
 	}
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	dockerpkg "github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -74,12 +73,11 @@ func (s *apiServer) ensureDockerDeps() *dockerpkg.Deps {
 	return s.dockerDeps
 }
 
-// Forwarding methods from apiServer to dockerpkg.Deps so that existing
-// cmd/labtether/ callers keep compiling without changes.
-
-func (s *apiServer) handleDockerHosts(w http.ResponseWriter, r *http.Request) {
-	s.ensureDockerDeps().HandleDockerHosts(w, r)
-}
+// The three handlers below stay in cmd: each refuses a Docker write while
+// Settings › Integration actions is off (refuseIntegrationActionWhenOff, cmd
+// code) before the package handler runs. The v1 route and its v2 wrapper both
+// call them, so the check is in one place. Other callers call
+// ensureDockerDeps() themselves, when the request or call is made.
 
 func (s *apiServer) handleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 	if s.refuseIntegrationActionWhenOff(w, r) {
@@ -100,83 +98,4 @@ func (s *apiServer) handleDockerStackActions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.ensureDockerDeps().HandleDockerStackActions(w, r)
-}
-
-func (s *apiServer) resolveDockerExecSessionTarget(target string) (agentID, containerID string, ok bool) {
-	return s.ensureDockerDeps().ResolveDockerExecSessionTarget(target)
-}
-
-func (s *apiServer) handleDockerExecTerminalStream(w http.ResponseWriter, r *http.Request, session terminal.Session, agentID, containerID string) {
-	s.ensureDockerDeps().HandleDockerExecTerminalStream(w, r, session, agentID, containerID)
-}
-
-func (s *apiServer) processAgentDockerDiscovery(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerDiscovery(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerDiscoveryDelta(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerDiscoveryDelta(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerStats(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerStats(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerEvents(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerEvents(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerActionResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerActionResult(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecStartedMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecStartedMessage(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecDataMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecDataMessage(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecClosedMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecClosedMessage(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerLogsStreamMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerLogsStreamMessage(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerComposeResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerComposeResult(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecStarted(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecData(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerExecClosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureDockerDeps().ProcessAgentDockerExecClosed(conn, msg)
-}
-
-func (s *apiServer) closeDockerExecBridgesForAsset(assetID string) {
-	s.ensureDockerDeps().CloseDockerExecBridgesForAsset(assetID)
-}
-
-func (s *apiServer) closeDockerExecBridgesForConnection(conn *agentmgr.AgentConn) {
-	s.ensureDockerDeps().CloseDockerExecBridgesForConnection(conn)
-}
-
-// Type aliases for types used in cmd/labtether/ test files.
-type dockerExecBridge = dockerpkg.DockerExecBridge
-
-// Function aliases for exported dockerpkg functions.
-func normalizeDockerHostLookupID(value string) string {
-	return dockerpkg.NormalizeDockerHostLookupID(value)
-}
-func dockerExecCommandFromQuery(raw string) []string {
-	return dockerpkg.DockerExecCommandFromQuery(raw)
 }

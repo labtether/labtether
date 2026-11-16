@@ -5,6 +5,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -36,7 +37,7 @@ func disconnectTestBridges(s *apiServer, assetID string) []<-chan struct{} {
 	s.terminalBridges.Store("terminal", &terminalBridge{ExpectedAgentID: assetID, ClosedCh: terminalClosed})
 	s.desktopBridges.Store("desktop", &desktoppkg.DesktopBridge{ExpectedAgentID: assetID, ClosedCh: desktopClosed})
 	s.webrtcBridges.Store("webrtc", &desktoppkg.WebRTCSignalingBridge{ExpectedAgentID: assetID, ClosedCh: webrtcClosed})
-	s.dockerExecBridges.Store("docker", &dockerExecBridge{ExpectedAgentID: assetID, ClosedCh: dockerClosed})
+	s.dockerExecBridges.Store("docker", &dockerpkg.DockerExecBridge{ExpectedAgentID: assetID, ClosedCh: dockerClosed})
 	s.fileBridges.Store("file", file)
 	return []<-chan struct{}{terminalClosed, desktopClosed, webrtcClosed, dockerClosed, file.Done}
 }

@@ -97,10 +97,10 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		ResolveDockerExecSessionTarget: func(target string) (string, string, bool) {
-			return s.resolveDockerExecSessionTarget(target)
+			return s.ensureDockerDeps().ResolveDockerExecSessionTarget(target)
 		},
 		HandleDockerExecTerminalStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session, agentID, containerID string) {
-			s.handleDockerExecTerminalStream(w, r, session, agentID, containerID)
+			s.ensureDockerDeps().HandleDockerExecTerminalStream(w, r, session, agentID, containerID)
 		},
 		ResolveProxmoxSessionTarget: func(assetID string) (terminalpkg.ProxmoxSessionTarget, bool, error) {
 			target, ok, err := s.ensureProxmoxDeps().ResolveProxmoxSessionTarget(assetID)

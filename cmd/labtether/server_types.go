@@ -124,7 +124,7 @@ type apiServer struct {
 	collectorRunState             sync.Map // map[collectorID]*atomic.Bool
 	syntheticCheckRunState        sync.Map // map[checkID]struct{}
 	terminalBridges               sync.Map // map[sessionID]*terminalBridge
-	dockerExecBridges             sync.Map // map[sessionID]*dockerExecBridge
+	dockerExecBridges             sync.Map // map[sessionID]*dockerpkg.DockerExecBridge
 	desktopBridges                sync.Map // map[sessionID]*desktoppkg.DesktopBridge
 	webrtcBridges                 sync.Map // map[sessionID]*desktoppkg.WebRTCSignalingBridge
 	displayReplies                desktoppkg.DisplayReplies

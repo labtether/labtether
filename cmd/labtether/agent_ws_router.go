@@ -153,34 +153,34 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
 	}
 	router[agentmgr.MsgDockerDiscovery] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerDiscovery(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerDiscovery(conn, msg)
 	}
 	router[agentmgr.MsgDockerDiscoveryDelta] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerDiscoveryDelta(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerDiscoveryDelta(conn, msg)
 	}
 	router[agentmgr.MsgDockerStats] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerStats(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerStats(conn, msg)
 	}
 	router[agentmgr.MsgDockerEvents] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerEvents(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerEvents(conn, msg)
 	}
 	router[agentmgr.MsgDockerActionResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerActionResult(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerActionResult(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecStartedMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecStartedMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecDataMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecDataMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecClosedMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecClosedMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerLogsStream] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerLogsStreamMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerLogsStreamMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerComposeResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerComposeResult(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerComposeResult(conn, msg)
 	}
 	router[agentmgr.MsgWebServiceReport] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentWebServiceReport(conn, msg)

@@ -96,7 +96,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v1/services/web/never-group-rules":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceNeverGroupRules)),
 		"/api/v1/services/web/grouping-settings":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceGroupingSettings)),
 		"/api/v1/services/web/grouping-suggestions/": s.withAuth(requireScope("web-services:write", s.handleWebServiceGroupingSuggestionResponse)),
-		"/api/v1/docker/hosts":                       s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerHosts)),
+		"/api/v1/docker/hosts":                       s.withAuth(requireReadWriteScopes("docker:read", "docker:write", func(w http.ResponseWriter, r *http.Request) { s.ensureDockerDeps().HandleDockerHosts(w, r) })),
 		"/api/v1/docker/hosts/":                      s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerHostActions)),
 		"/api/v1/docker/containers/":                 s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerContainerActions)),
 		"/api/v1/docker/stacks/":                     s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerStackActions)),
