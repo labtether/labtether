@@ -62,14 +62,14 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 			return runtime.Client(), nil
 		},
 		LoadTrueNASRuntime: func(collectorID string) (*truenasconnector.Client, error) {
-			runtime, err := s.loadTrueNASRuntime(collectorID)
+			runtime, err := s.ensureTruenasDeps().LoadTrueNASRuntime(collectorID)
 			if err != nil {
 				return nil, err
 			}
 			return runtime.Client, nil
 		},
 		EnsureTrueNASSubscriptionWorker: func(ctx context.Context, collectorID string, client *truenasconnector.Client) {
-			runtime, err := s.loadTrueNASRuntime(collectorID)
+			runtime, err := s.ensureTruenasDeps().LoadTrueNASRuntime(collectorID)
 			if err != nil {
 				return
 			}
@@ -77,7 +77,7 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 			if loadErr != nil || !ok {
 				return
 			}
-			s.ensureTrueNASSubscriptionWorker(ctx, collector, runtime)
+			s.ensureTruenasDeps().EnsureTrueNASSubscriptionWorker(ctx, collector, runtime)
 		},
 
 		BuildKnownHostsHostKeyCallback: shared.BuildKnownHostsHostKeyCallback,

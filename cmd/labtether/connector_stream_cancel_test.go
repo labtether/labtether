@@ -10,6 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -54,7 +55,7 @@ func TestTrueNASPendingShellAuthStopsOnSessionCancel(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		done <- sut.tryTrueNASTerminalStream(w, r.WithContext(ctx), terminal.Session{ID: "cancel-nas"}, truenasShellTarget{
+		done <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r.WithContext(ctx), terminal.Session{ID: "cancel-nas"}, truenaspkg.TruenasShellTarget{
 			BaseURL: nas.URL, APIKey: "synthetic-api-key", Timeout: time.Second,
 		})
 	}))

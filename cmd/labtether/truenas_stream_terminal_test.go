@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/assets"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
@@ -43,7 +44,7 @@ func TestTrueNASShellEndpointVariants(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := truenasShellEndpoint(tc.base); got != tc.want {
+			if got := truenaspkg.TruenasShellEndpoint(tc.base); got != tc.want {
 				t.Fatalf("truenasShellEndpoint(%q) = %q, want %q", tc.base, got, tc.want)
 			}
 		})
@@ -129,7 +130,7 @@ func TestTryTrueNASTerminalStreamProxySuccess(t *testing.T) {
 
 	sut := newTestAPIServer(t)
 	session := terminal.Session{ID: "sess-truenas-1", Target: "truenas-host-1"}
-	target := truenasShellTarget{
+	target := truenaspkg.TruenasShellTarget{
 		BaseURL:    nas.URL,
 		APIKey:     "api-key",
 		SkipVerify: true,
@@ -139,7 +140,7 @@ func TestTryTrueNASTerminalStreamProxySuccess(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		errCh <- sut.tryTrueNASTerminalStream(w, r, session, target)
+		errCh <- sut.ensureTruenasDeps().TryTrueNASTerminalStream(w, r, session, target)
 	}))
 	defer proxy.Close()
 
@@ -176,7 +177,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 	t.Run("asset store unavailable", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		sut.assetStore = nil
-		target, ok, err := sut.resolveTrueNASSessionTarget("any")
+		target, ok, err := sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("any")
 		if err != nil || ok || target.BaseURL != "" || target.APIKey != "" || target.Options != nil {
 			t.Fatalf("expected unresolved target when asset store unavailable, got target=%+v ok=%v err=%v", target, ok, err)
 		}
@@ -211,7 +212,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 			t.Fatalf("failed to seed app asset: %v", err)
 		}
 
-		target, ok, err := sut.resolveTrueNASSessionTarget("truenas-app-portainer")
+		target, ok, err := sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("truenas-app-portainer")
 		if err != nil {
 			t.Fatalf("resolveTrueNASSessionTarget() error = %v", err)
 		}
@@ -230,7 +231,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 			AssetStore: sut.assetStore,
 			err:        errors.New("asset store unavailable"),
 		}
-		target, ok, err := sut.resolveTrueNASSessionTarget("truenas-host-1")
+		target, ok, err := sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("truenas-host-1")
 		if err == nil || !strings.Contains(err.Error(), "asset store unavailable") {
 			t.Fatalf("expected asset store error, got target=%+v ok=%v err=%v", target, ok, err)
 		}
@@ -248,7 +249,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to seed non-truenas asset: %v", err)
 		}
-		target, ok, err := sut.resolveTrueNASSessionTarget("docker-host-1")
+		target, ok, err := sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("docker-host-1")
 		if err != nil || ok || target.BaseURL != "" {
 			t.Fatalf("expected non-truenas target to be ignored, got target=%+v ok=%v err=%v", target, ok, err)
 		}
@@ -270,7 +271,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 			t.Fatalf("failed to seed truenas asset: %v", err)
 		}
 
-		_, _, err = sut.resolveTrueNASSessionTarget("truenas-host-stale")
+		_, _, err = sut.ensureTruenasDeps().ResolveTrueNASSessionTarget("truenas-host-stale")
 		if err == nil || !strings.Contains(err.Error(), "hub collector store unavailable") {
 			t.Fatalf("expected runtime fallback failure, got %v", err)
 		}
