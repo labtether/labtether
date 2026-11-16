@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"fmt"
@@ -104,12 +104,12 @@ func TestBuildProxmoxStoragePoolStatesBranches(t *testing.T) {
 		},
 	}
 
-	nodeStates := proxmoxpkg.BuildProxmoxStoragePoolStates(assetList, proxmoxSessionTarget{Kind: "node", Node: "pve01"}, "")
+	nodeStates := proxmoxpkg.BuildProxmoxStoragePoolStates(assetList, proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"}, "")
 	if len(nodeStates) != 1 || nodeStates[0].PoolName != "local-zfs" || !nodeStates[0].HasAsset {
 		t.Fatalf("unexpected node-filtered states: %+v", nodeStates)
 	}
 
-	storageStates := proxmoxpkg.BuildProxmoxStoragePoolStates(assetList, proxmoxSessionTarget{
+	storageStates := proxmoxpkg.BuildProxmoxStoragePoolStates(assetList, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "storage",
 		StorageName: "scratch-pool",
 	}, "pool-1")
@@ -148,28 +148,28 @@ func TestMedianAndStdDevHelpers(t *testing.T) {
 	if got := proxmoxpkg.StdDevFloat64([]float64{2, 2, 2}); got != 0 {
 		t.Fatalf("expected zero stddev for equal values, got %v", got)
 	}
-	if got := clampPercent(-5); got != 0 {
+	if got := proxmoxpkg.ClampPercent(-5); got != 0 {
 		t.Fatalf("expected clampPercent below 0 => 0, got %v", got)
 	}
-	if got := clampPercent(150); got != 100 {
+	if got := proxmoxpkg.ClampPercent(150); got != 100 {
 		t.Fatalf("expected clampPercent above 100 => 100, got %v", got)
 	}
-	if got := parseStorageInsightsWindow("0d"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("0d"); got != 7*24*time.Hour {
 		t.Fatalf("expected invalid zero-day window fallback, got %s", got)
 	}
-	if got := parseStorageInsightsWindow(""); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow(""); got != 7*24*time.Hour {
 		t.Fatalf("expected empty window fallback, got %s", got)
 	}
-	if got := parseStorageInsightsWindow("31d"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("31d"); got != 7*24*time.Hour {
 		t.Fatalf("expected over-max window fallback, got %s", got)
 	}
-	if got := parseStorageInsightsWindow("xd"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("xd"); got != 7*24*time.Hour {
 		t.Fatalf("expected non-numeric day window fallback, got %s", got)
 	}
-	if got := parseStorageInsightsWindow("badx"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("badx"); got != 7*24*time.Hour {
 		t.Fatalf("expected invalid non-day duration fallback, got %s", got)
 	}
-	if got := parseStorageInsightsWindow("bad"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("bad"); got != 7*24*time.Hour {
 		t.Fatalf("expected invalid duration fallback, got %s", got)
 	}
 }
@@ -207,7 +207,7 @@ func TestBuildProxmoxStorageInsightPoolAdditionalBranches(t *testing.T) {
 
 	t.Run("status fallback maxdisk and disk", func(t *testing.T) {
 		lastScrub := now.Add(-2 * time.Hour).Unix()
-		pool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxStoragePoolState{
+		pool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxpkg.ProxmoxStoragePoolState{
 			PoolName: "status-fallback",
 			Status: map[string]any{
 				"maxdisk":       int64(1000),
@@ -231,7 +231,7 @@ func TestBuildProxmoxStorageInsightPoolAdditionalBranches(t *testing.T) {
 	})
 
 	t.Run("metadata and disk series used percent fallbacks", func(t *testing.T) {
-		metadataPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxStoragePoolState{
+		metadataPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxpkg.ProxmoxStoragePoolState{
 			PoolName: "metadata-fallback",
 			HasAsset: true,
 			Asset: assets.Asset{
@@ -244,7 +244,7 @@ func TestBuildProxmoxStorageInsightPoolAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected metadata fallback used percent 88, got %+v", metadataPool.UsedPercent)
 		}
 
-		lastScrubPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxStoragePoolState{
+		lastScrubPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxpkg.ProxmoxStoragePoolState{
 			PoolName: "metadata-last-scrub",
 			HasAsset: true,
 			Asset: assets.Asset{
@@ -257,7 +257,7 @@ func TestBuildProxmoxStorageInsightPoolAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected metadata last_scrub timestamp to populate scrub.last_completed_at")
 		}
 
-		seriesPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxStoragePoolState{
+		seriesPool := proxmoxpkg.BuildProxmoxStorageInsightPool(proxmoxpkg.ProxmoxStoragePoolState{
 			PoolName: "series-fallback",
 			DiskSeries: []telemetry.Point{
 				{TS: time.Now().Add(-2 * time.Hour).Unix(), Value: 71},

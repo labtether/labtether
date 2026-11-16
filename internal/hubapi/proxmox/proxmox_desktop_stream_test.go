@@ -1,7 +1,9 @@
-package main
+package proxmox_test
 
 import (
 	"github.com/gorilla/websocket"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
 	"net/http/httptest"
@@ -11,11 +13,11 @@ import (
 )
 
 func TestHandleProxmoxDesktopStreamGuardsAndRuntimeFailure(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind: "node",
 		Node: "pve01",
 	})
@@ -24,7 +26,7 @@ func TestHandleProxmoxDesktopStreamGuardsAndRuntimeFailure(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind: "qemu",
 		Node: "pve01",
 		VMID: "101",
@@ -62,12 +64,12 @@ func TestHandleProxmoxDesktopStreamVNCAuthFailure(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -79,7 +81,7 @@ func TestHandleProxmoxDesktopStreamVNCAuthFailure(t *testing.T) {
 }
 
 func TestHandleProxmoxDesktopStreamProxyAndDialFailures(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	proxyFailure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api2/json/nodes/pve01/qemu/101/vncproxy" {
@@ -94,7 +96,7 @@ func TestHandleProxmoxDesktopStreamProxyAndDialFailures(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -121,7 +123,7 @@ func TestHandleProxmoxDesktopStreamProxyAndDialFailures(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -143,12 +145,12 @@ func TestHandleProxmoxDesktopStreamLXCProxyBranch(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "lxc",
 		Node:        "pve01",
 		VMID:        "200",
@@ -197,11 +199,11 @@ func TestHandleProxmoxDesktopStreamBrowserHandshakeFailure(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	handler := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleProxmoxDesktopStream(w, r, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		sut.ProxmoxDeps().HandleProxmoxDesktopStream(w, r, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -282,11 +284,11 @@ func TestHandleProxmoxDesktopStreamWebSocketBridge(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	handler := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleProxmoxDesktopStream(w, r, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		sut.ProxmoxDeps().HandleProxmoxDesktopStream(w, r, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -392,12 +394,12 @@ func TestHandleProxmoxDesktopStreamBrowserUpgradeFailure(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/desktop", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	sut.ProxmoxDeps().HandleProxmoxDesktopStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",

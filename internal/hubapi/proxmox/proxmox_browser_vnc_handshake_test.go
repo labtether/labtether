@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,7 +140,7 @@ func TestSendBrowserVNCNoAuthFailureBranches(t *testing.T) {
 
 func TestSendBrowserVNCNoAuthWriteFailureBranches(t *testing.T) {
 	t.Run("write RFB version failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 		_ = clientConn.Close()
 		_ = serverConn.Close()
@@ -150,7 +151,7 @@ func TestSendBrowserVNCNoAuthWriteFailureBranches(t *testing.T) {
 	})
 
 	t.Run("write security types failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		errCh := make(chan error, 1)
@@ -180,7 +181,7 @@ func TestSendBrowserVNCNoAuthWriteFailureBranches(t *testing.T) {
 
 func TestSendBrowserVNCNoAuthDeterministicWriteFailures(t *testing.T) {
 	t.Run("send security types failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -220,7 +221,7 @@ func TestSendBrowserVNCNoAuthDeterministicWriteFailures(t *testing.T) {
 	})
 
 	t.Run("send auth result failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage

@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestDialProxmoxProxySocketValidationAndErrorBranches(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	if _, err := proxmoxpkg.DialProxmoxProxySocket(nil, "pve01", "node", "", proxmox.ProxyTicket{
 		Port:   5900,
@@ -57,7 +58,7 @@ func TestDialProxmoxProxySocketValidationAndErrorBranches(t *testing.T) {
 }
 
 func TestDialProxmoxProxySocketAdditionalBranches(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/vncwebsocket") {
@@ -121,7 +122,7 @@ func TestDialProxmoxProxySocketBuildURLFailure(t *testing.T) {
 }
 
 func TestDialProxmoxProxySocketPasswordSessionTicketFailure(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api2/json/access/ticket" {
@@ -154,7 +155,7 @@ func TestDialProxmoxProxySocketPasswordSessionTicketFailure(t *testing.T) {
 }
 
 func TestDialProxmoxProxySocketTokenAndPasswordAuth(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
 	var tokenDialed bool

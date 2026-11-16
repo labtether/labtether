@@ -1,6 +1,9 @@
-package main
+package proxmox_test
 
 import (
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,7 +12,7 @@ import (
 )
 
 func TestHandleProxmoxTaskLogUsesCollectorQueryParam(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	var collectorOneCalls atomic.Int32
 
@@ -33,12 +36,12 @@ func TestHandleProxmoxTaskLogUsesCollectorQueryParam(t *testing.T) {
 	}))
 	defer collectorTwo.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureDualProxmoxCollectors(t, sut, collectorOne.URL, collectorTwo.URL)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve02/UPID-2/log?collector_id=collector-proxmox-2", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -74,13 +77,13 @@ func TestHandleProxmoxTaskStopUsesCollectorQueryParam(t *testing.T) {
 	}))
 	defer collectorTwo.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureDualProxmoxCollectors(t, sut, collectorOne.URL, collectorTwo.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve02/UPID-2/stop?collector_id=collector-proxmox-2", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -113,12 +116,12 @@ func TestHandleProxmoxClusterStatusUsesCollectorQueryParam(t *testing.T) {
 	}))
 	defer collectorTwo.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureDualProxmoxCollectors(t, sut, collectorOne.URL, collectorTwo.URL)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/cluster/status?collector_id=collector-proxmox-2", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxClusterStatus(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxClusterStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -151,12 +154,12 @@ func TestHandleProxmoxNodeNetworkUsesCollectorQueryParam(t *testing.T) {
 	}))
 	defer collectorTwo.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureDualProxmoxCollectors(t, sut, collectorOne.URL, collectorTwo.URL)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/nodes/pve02/network?collector_id=collector-proxmox-2", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -170,32 +173,32 @@ func TestHandleProxmoxNodeNetworkUsesCollectorQueryParam(t *testing.T) {
 }
 
 func TestHandleProxmoxRouteAndGuardBranches(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	taskReq := httptest.NewRequest(http.MethodGet, "/proxmox/tasks/", nil)
 	taskRec := httptest.NewRecorder()
-	sut.handleProxmoxTaskRoutes(taskRec, taskReq)
+	sut.ProxmoxDeps().HandleProxmoxTaskRoutes(taskRec, taskReq)
 	if taskRec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing task path, got %d", taskRec.Code)
 	}
 
 	taskReq = httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve01/UPID-1/log", nil)
 	taskRec = httptest.NewRecorder()
-	sut.handleProxmoxTaskRoutes(taskRec, taskReq)
+	sut.ProxmoxDeps().HandleProxmoxTaskRoutes(taskRec, taskReq)
 	if taskRec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected log route dispatch to enforce method guard (405), got %d", taskRec.Code)
 	}
 
 	taskReq = httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1/stop", nil)
 	taskRec = httptest.NewRecorder()
-	sut.handleProxmoxTaskRoutes(taskRec, taskReq)
+	sut.ProxmoxDeps().HandleProxmoxTaskRoutes(taskRec, taskReq)
 	if taskRec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected stop route dispatch to enforce method guard (405), got %d", taskRec.Code)
 	}
 
 	nodeReq := httptest.NewRequest(http.MethodGet, "/proxmox/nodes/", nil)
 	nodeRec := httptest.NewRecorder()
-	sut.handleProxmoxNodeRoutes(nodeRec, nodeReq)
+	sut.ProxmoxDeps().HandleProxmoxNodeRoutes(nodeRec, nodeReq)
 	if nodeRec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing node path, got %d", nodeRec.Code)
 	}
@@ -204,131 +207,131 @@ func TestHandleProxmoxRouteAndGuardBranches(t *testing.T) {
 	// collector, it returns 502 (bad gateway) instead of the old 405.
 	nodeReq = httptest.NewRequest(http.MethodPost, "/proxmox/nodes/pve01/network", nil)
 	nodeRec = httptest.NewRecorder()
-	sut.handleProxmoxNodeRoutes(nodeRec, nodeReq)
+	sut.ProxmoxDeps().HandleProxmoxNodeRoutes(nodeRec, nodeReq)
 	if nodeRec.Code != http.StatusBadGateway {
 		t.Fatalf("expected network POST to return 502 (no collector), got %d", nodeRec.Code)
 	}
 }
 
 func TestHandleProxmoxTaskAndNodeHandlersGuardBranches(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve01/UPID-1/log", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for task log method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for malformed task log path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/tasks//UPID-1/log", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing node in task log path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1/log", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when task log runtime is unavailable, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1/stop", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for task stop method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve01/UPID-1", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for malformed task stop path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/tasks//UPID-1/stop", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing node in task stop path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve01/UPID-1/stop", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when task stop runtime is unavailable, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/cluster/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxClusterStatus(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxClusterStatus(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for cluster status method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/cluster/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxClusterStatus(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxClusterStatus(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when cluster runtime is unavailable, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/nodes/pve01/network", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for node network method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/nodes/pve01/iface", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for malformed node network path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/nodes//network", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing node on network path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/nodes/pve01/network", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when node network runtime is unavailable, got %d", rec.Code)
 	}
 }
 
 func TestProxmoxTaskAndNodeHandlersAdditionalErrorBranches(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/tasks/", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing task-log path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/tasks/", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing task-stop path, got %d", rec.Code)
 	}
@@ -356,29 +359,29 @@ func TestProxmoxTaskAndNodeHandlersAdditionalErrorBranches(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1/log", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskLog(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskLog(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when proxmox task-log fetch fails, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/tasks/pve01/UPID-1/stop", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxTaskStop(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskStop(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when proxmox task stop fails, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/cluster/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxClusterStatus(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxClusterStatus(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when cluster status fetch fails, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/nodes/pve01/network", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeNetwork(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeNetwork(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when node network fetch fails, got %d", rec.Code)
 	}

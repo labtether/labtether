@@ -2,9 +2,6 @@ package proxmox_test
 
 import (
 	"crypto/cipher"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,17 +9,9 @@ import (
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 )
 
-// Test helpers for the Proxmox stream, VNC and proxy-dial tests in this
-// package. cmd/labtether keeps its own copies of allowInsecureTransport,
-// withProxmoxStreamHooks and newWebSocketPair for the tests that stay there.
-
-func allowInsecureTransportForConnectorTests(t *testing.T) {
-	t.Helper()
-	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOWLIST_MODE", "false")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
-}
+// Hooks for the Proxmox stream, VNC and proxy-dial tests in this package.
+// They swap the package's exported stream variables under
+// ProxmoxStreamHooksMu and restore them when the test ends.
 
 func withProxmoxStreamHooks(
 	t *testing.T,
@@ -76,38 +65,4 @@ func setProxmoxTerminalKeepaliveIntervalForTest(t *testing.T, interval time.Dura
 		proxmoxpkg.ProxmoxTerminalKeepaliveInterval = original
 		proxmoxpkg.ProxmoxStreamHooksMu.Unlock()
 	})
-}
-
-func newWebSocketPair(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
-	t.Helper()
-
-	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
-	serverConnCh := make(chan *websocket.Conn, 1)
-	done := make(chan struct{})
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Fatalf("websocket upgrade failed: %v", err)
-		}
-		serverConnCh <- conn
-		<-done
-		_ = conn.Close()
-	}))
-
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		close(done)
-		server.Close()
-		t.Fatalf("websocket dial failed: %v", err)
-	}
-
-	serverConn := <-serverConnCh
-	cleanup := func() {
-		_ = clientConn.Close()
-		close(done)
-		server.Close()
-	}
-	return serverConn, clientConn, cleanup
 }

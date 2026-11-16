@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"context"
@@ -6,8 +6,9 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/connectorsdk"
-	"github.com/labtether/labtether/internal/credentials"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -16,72 +17,15 @@ import (
 	"time"
 )
 
-type stubHubCollectorStore struct {
-	collectors []hubcollector.Collector
-}
-
-func (s *stubHubCollectorStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
-	return hubcollector.Collector{}, fmt.Errorf("not implemented")
-}
-
-func (s *stubHubCollectorStore) GetHubCollector(id string) (hubcollector.Collector, bool, error) {
-	for _, collector := range s.collectors {
-		if collector.ID == id {
-			return collector, true, nil
-		}
-	}
-	return hubcollector.Collector{}, false, nil
-}
-
-func (s *stubHubCollectorStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcollector.Collector, error) {
-	result := make([]hubcollector.Collector, 0, len(s.collectors))
-	for _, collector := range s.collectors {
-		if enabledOnly && !collector.Enabled {
-			continue
-		}
-		result = append(result, collector)
-	}
-	return result, nil
-}
-
-func (s *stubHubCollectorStore) UpdateHubCollector(id string, req hubcollector.UpdateCollectorRequest) (hubcollector.Collector, error) {
-	return hubcollector.Collector{}, fmt.Errorf("not implemented")
-}
-
-func (s *stubHubCollectorStore) DeleteHubCollector(id string) error {
-	return fmt.Errorf("not implemented")
-}
-
-func (s *stubHubCollectorStore) UpdateHubCollectorStatus(id, status, lastError string, collectedAt time.Time) error {
-	return nil
-}
-
-func createProxmoxCredentialProfile(t *testing.T, sut *apiServer, credentialID, username, secret, baseURL string) {
+// createProxmoxCredentialProfile keeps the cmd test helper's signature over
+// the shared testutil copy.
+func createProxmoxCredentialProfile(t *testing.T, sut *hubdeps.Hub, credentialID, username, secret, baseURL string) {
 	t.Helper()
-	allowInsecureTransportForConnectorTests(t)
-
-	secretCiphertext, err := sut.secretsManager.EncryptString(secret, credentialID)
-	if err != nil {
-		t.Fatalf("failed to encrypt credential %s: %v", credentialID, err)
-	}
-	_, err = sut.credentialStore.CreateCredentialProfile(credentials.Profile{
-		ID:               credentialID,
-		Name:             "proxmox " + credentialID,
-		Kind:             credentials.KindProxmoxAPIToken,
-		Username:         username,
-		Status:           "active",
-		SecretCiphertext: secretCiphertext,
-		Metadata:         map[string]string{"base_url": baseURL},
-		CreatedAt:        time.Now().UTC(),
-		UpdatedAt:        time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("failed to store credential profile %s: %v", credentialID, err)
-	}
+	testutil.CreateProxmoxCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, credentialID, username, secret, baseURL)
 }
 
 func TestInvokeProxmoxActionMappings(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/resize") {
@@ -201,19 +145,19 @@ func TestInvokeProxmoxActionMappings(t *testing.T) {
 }
 
 func TestResolveProxmoxActionTargetGuards(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	if _, _, _, err := sut.resolveProxmoxActionTarget("vm.start", ""); err == nil {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("vm.start", ""); err == nil {
 		t.Fatalf("expected empty target to fail")
 	}
-	if _, _, _, err := sut.resolveProxmoxActionTarget("vm.start", "pve01/"); err == nil || !strings.Contains(err.Error(), "node/vmid") {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("vm.start", "pve01/"); err == nil || !strings.Contains(err.Error(), "node/vmid") {
 		t.Fatalf("expected malformed node/vmid target error, got %v", err)
 	}
-	if _, _, _, err := sut.resolveProxmoxActionTarget("host.start", "proxmox-vm-101"); err == nil || !strings.Contains(err.Error(), "unsupported proxmox action prefix") {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("host.start", "proxmox-vm-101"); err == nil || !strings.Contains(err.Error(), "unsupported proxmox action prefix") {
 		t.Fatalf("expected unsupported action prefix error, got %v", err)
 	}
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "agent-host-1",
 		Type:    "server",
 		Name:    "agent-host-1",
@@ -223,11 +167,11 @@ func TestResolveProxmoxActionTargetGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed non-proxmox asset: %v", err)
 	}
-	if _, _, _, err := sut.resolveProxmoxActionTarget("vm.start", "agent-host-1"); err == nil || !strings.Contains(err.Error(), "not a proxmox asset") {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("vm.start", "agent-host-1"); err == nil || !strings.Contains(err.Error(), "not a proxmox asset") {
 		t.Fatalf("expected non-proxmox target error, got %v", err)
 	}
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-ct-200",
 		Type:    "container",
 		Name:    "ct-200",
@@ -242,11 +186,11 @@ func TestResolveProxmoxActionTargetGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed proxmox lxc asset: %v", err)
 	}
-	if _, _, _, err := sut.resolveProxmoxActionTarget("vm.start", "proxmox-ct-200"); err == nil || !strings.Contains(err.Error(), "does not match action") {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("vm.start", "proxmox-ct-200"); err == nil || !strings.Contains(err.Error(), "does not match action") {
 		t.Fatalf("expected target kind mismatch error, got %v", err)
 	}
 
-	node, vmid, collectorID, err := sut.resolveProxmoxActionTarget("ct.start", "proxmox-ct-200")
+	node, vmid, collectorID, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("ct.start", "proxmox-ct-200")
 	if err != nil {
 		t.Fatalf("expected ct target resolution to succeed, got %v", err)
 	}
@@ -254,7 +198,7 @@ func TestResolveProxmoxActionTargetGuards(t *testing.T) {
 		t.Fatalf("unexpected ct target resolution: node=%q vmid=%q collector=%q", node, vmid, collectorID)
 	}
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-vm-missing-node",
 		Type:    "vm",
 		Name:    " ",
@@ -268,14 +212,14 @@ func TestResolveProxmoxActionTargetGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed malformed proxmox asset: %v", err)
 	}
-	if _, _, _, err := sut.resolveProxmoxActionTarget("vm.start", "proxmox-vm-missing-node"); err == nil || !strings.Contains(err.Error(), "missing node metadata") {
+	if _, _, _, err := sut.ProxmoxDeps().ResolveProxmoxActionTarget("vm.start", "proxmox-vm-missing-node"); err == nil || !strings.Contains(err.Error(), "missing node metadata") {
 		t.Fatalf("expected resolve error for missing node metadata, got %v", err)
 	}
 }
 
 func TestExecuteProxmoxActionDirectErrorPropagation(t *testing.T) {
-	sut := newTestAPIServer(t)
-	_, err := sut.executeProxmoxActionDirect(context.Background(), "vm.start", connectorsdk.ActionRequest{
+	sut := hubdeps.New(t)
+	_, err := sut.ProxmoxDeps().ExecuteProxmoxActionDirect(context.Background(), "vm.start", connectorsdk.ActionRequest{
 		TargetID: "",
 	})
 	if err == nil || !strings.Contains(err.Error(), "target is required") {
@@ -284,9 +228,9 @@ func TestExecuteProxmoxActionDirectErrorPropagation(t *testing.T) {
 }
 
 func TestExecuteProxmoxActionRuntimeFailureAndInvokeValidation(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	if _, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/101", nil, false); err == nil {
+	if _, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.start", "pve01/101", nil, false); err == nil {
 		t.Fatalf("expected missing runtime failure")
 	}
 
@@ -296,8 +240,8 @@ func TestExecuteProxmoxActionRuntimeFailureAndInvokeValidation(t *testing.T) {
 	defer server.Close()
 
 	createProxmoxCredentialProfile(t, sut, "cred-invoke-validate", "labtether@pve!agent", "token-secret", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-proxmox-1",
 				CollectorType: hubcollector.CollectorTypeProxmox,
@@ -312,7 +256,7 @@ func TestExecuteProxmoxActionRuntimeFailureAndInvokeValidation(t *testing.T) {
 		},
 	}
 
-	if _, err := sut.executeProxmoxAction(context.Background(), "vm.snapshot.delete", "pve01/101", map[string]string{
+	if _, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.snapshot.delete", "pve01/101", map[string]string{
 		"collector_id": "collector-proxmox-1",
 	}, false); err == nil || !strings.Contains(err.Error(), "snapshot_name is required") {
 		t.Fatalf("expected invoke validation failure, got %v", err)
@@ -321,30 +265,30 @@ func TestExecuteProxmoxActionRuntimeFailureAndInvokeValidation(t *testing.T) {
 
 func TestProxmoxActionRuntimeHelpers(t *testing.T) {
 	blankErr := fmt.Errorf("   ")
-	if got := proxmoxActionErrorMessage(blankErr); got != "proxmox action execution failed" {
+	if got := proxmoxpkg.ProxmoxActionErrorMessage(blankErr); got != "proxmox action execution failed" {
 		t.Fatalf("expected fallback error message for blank error, got %q", got)
 	}
-	if got := proxmoxActionErrorMessage(nil); got != "proxmox action execution failed" {
+	if got := proxmoxpkg.ProxmoxActionErrorMessage(nil); got != "proxmox action execution failed" {
 		t.Fatalf("expected fallback error message for nil error, got %q", got)
 	}
-	if got := proxmoxActionErrorMessage(fmt.Errorf("boom")); got != "boom" {
+	if got := proxmoxpkg.ProxmoxActionErrorMessage(fmt.Errorf("boom")); got != "boom" {
 		t.Fatalf("expected concrete error message, got %q", got)
 	}
 
-	if got := proxmoxActionOutput(proxmoxActionExecution{Output: "  output text  ", Message: "ignored"}); got != "output text" {
+	if got := proxmoxpkg.ProxmoxActionOutput(proxmoxpkg.ProxmoxActionExecution{Output: "  output text  ", Message: "ignored"}); got != "output text" {
 		t.Fatalf("expected trimmed output, got %q", got)
 	}
-	if got := proxmoxActionOutput(proxmoxActionExecution{Output: " ", Message: " message text "}); got != "message text" {
+	if got := proxmoxpkg.ProxmoxActionOutput(proxmoxpkg.ProxmoxActionExecution{Output: " ", Message: " message text "}); got != "message text" {
 		t.Fatalf("expected message fallback output, got %q", got)
 	}
 
-	if err := validateResolvedProxmoxActionTarget(proxmoxSessionTarget{Kind: "lxc", Node: "pve01", VMID: "101"}, "qemu", "vm.start"); err == nil || !strings.Contains(err.Error(), "does not match action") {
+	if err := proxmoxpkg.ValidateResolvedProxmoxActionTarget(proxmoxpkg.ProxmoxSessionTarget{Kind: "lxc", Node: "pve01", VMID: "101"}, "qemu", "vm.start"); err == nil || !strings.Contains(err.Error(), "does not match action") {
 		t.Fatalf("expected kind mismatch validation error, got %v", err)
 	}
-	if err := validateResolvedProxmoxActionTarget(proxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: ""}, "qemu", "vm.start"); err == nil || !strings.Contains(err.Error(), "incomplete") {
+	if err := proxmoxpkg.ValidateResolvedProxmoxActionTarget(proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: ""}, "qemu", "vm.start"); err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("expected incomplete target validation error, got %v", err)
 	}
-	if err := validateResolvedProxmoxActionTarget(proxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"}, "qemu", "vm.start"); err != nil {
+	if err := proxmoxpkg.ValidateResolvedProxmoxActionTarget(proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"}, "qemu", "vm.start"); err != nil {
 		t.Fatalf("expected valid resolved target, got %v", err)
 	}
 }

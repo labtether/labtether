@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 // writeProxmoxStatusLine answers the way Proxmox does: its own message in
@@ -39,7 +41,7 @@ func proxmoxErrorText(t *testing.T, rec *httptest.ResponseRecorder) string {
 // The Ceph pools route asked Proxmox for /cluster/ceph/pools, which Proxmox
 // does not have, so it always failed as "An internal error occurred.".
 func TestProxmoxCephPoolsReadsANodesPools(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api2/json/cluster/resources":
@@ -52,18 +54,18 @@ func TestProxmoxCephPoolsReadsANodesPools(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
 
 	rec := httptest.NewRecorder()
-	sut.ensureProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
+	sut.ProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"pool_name":"rbd"`) {
 		t.Fatalf("got %d %s, want the node's pools", rec.Code, rec.Body.String())
 	}
 }
 
 func TestProxmoxCephSaysWhenCephIsNotSetUp(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api2/json/cluster/resources":
@@ -75,15 +77,15 @@ func TestProxmoxCephSaysWhenCephIsNotSetUp(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
 
 	for name, call := range map[string]func(*httptest.ResponseRecorder){
 		"pools": func(rec *httptest.ResponseRecorder) {
-			sut.ensureProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
+			sut.ProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
 		},
 		"status": func(rec *httptest.ResponseRecorder) {
-			sut.handleProxmoxCephStatus(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/status", nil))
+			sut.ProxmoxDeps().HandleProxmoxCephStatus(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/status", nil))
 		},
 	} {
 		rec := httptest.NewRecorder()
@@ -95,7 +97,7 @@ func TestProxmoxCephSaysWhenCephIsNotSetUp(t *testing.T) {
 }
 
 func TestProxmoxCephPoolsWithoutAVisibleNodeSaysSo(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api2/json/cluster/resources" {
 			t.Errorf("unexpected proxmox path: %s", r.URL.Path)
@@ -103,11 +105,11 @@ func TestProxmoxCephPoolsWithoutAVisibleNodeSaysSo(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"type":"qemu","node":"pve01","vmid":100,"status":"running"}]}`))
 	}))
 	defer server.Close()
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
 
 	rec := httptest.NewRecorder()
-	sut.ensureProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
+	sut.ProxmoxDeps().HandleProxmoxCeph(rec, httptest.NewRequest(http.MethodGet, "/proxmox/ceph/pools", nil))
 	if rec.Code != http.StatusConflict || !strings.Contains(proxmoxErrorText(t, rec), "cannot see an online Proxmox node") {
 		t.Fatalf("got %d %s, want 409 in words", rec.Code, rec.Body.String())
 	}
@@ -116,7 +118,7 @@ func TestProxmoxCephPoolsWithoutAVisibleNodeSaysSo(t *testing.T) {
 // A login that may read the guests but not the node status lost the whole
 // device page with "Could not reach Proxmox".
 func TestProxmoxDetailsKeepWhatTheLoginMayRead(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api2/json/version":
@@ -131,9 +133,9 @@ func TestProxmoxDetailsKeepWhatTheLoginMayRead(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-node-pve01", Type: "hypervisor-node", Name: "pve01", Source: "proxmox", Status: "online",
 		Metadata: map[string]string{"proxmox_type": "node", "node": "pve01", "collector_id": "collector-proxmox-1"},
 	}); err != nil {
@@ -141,7 +143,7 @@ func TestProxmoxDetailsKeepWhatTheLoginMayRead(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil))
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("got %d %s, want the page with what the login may read", rec.Code, rec.Body.String())
 	}

@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"github.com/labtether/labtether/internal/assets"
@@ -10,13 +10,13 @@ import (
 )
 
 func TestParseStorageInsightsWindow(t *testing.T) {
-	if got := parseStorageInsightsWindow("7d"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("7d"); got != 7*24*time.Hour {
 		t.Fatalf("parseStorageInsightsWindow(7d) = %s", got)
 	}
-	if got := parseStorageInsightsWindow("36h"); got != 36*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("36h"); got != 36*time.Hour {
 		t.Fatalf("parseStorageInsightsWindow(36h) = %s", got)
 	}
-	if got := parseStorageInsightsWindow("1h"); got != 7*24*time.Hour {
+	if got := proxmoxpkg.ParseStorageInsightsWindow("1h"); got != 7*24*time.Hour {
 		t.Fatalf("parseStorageInsightsWindow(1h) should clamp to fallback 7d, got %s", got)
 	}
 }
@@ -95,10 +95,10 @@ func TestProxmoxStoragePoolNameFromAsset(t *testing.T) {
 }
 
 func TestStorageInsightsWindowHelpers(t *testing.T) {
-	if got := formatStorageInsightsWindow(48 * time.Hour); got != "2d" {
+	if got := proxmoxpkg.FormatStorageInsightsWindow(48 * time.Hour); got != "2d" {
 		t.Fatalf("expected 48h => 2d, got %q", got)
 	}
-	if got := formatStorageInsightsWindow(90 * time.Minute); got != "1h30m0s" {
+	if got := proxmoxpkg.FormatStorageInsightsWindow(90 * time.Minute); got != "1h30m0s" {
 		t.Fatalf("expected 90m => 1h30m0s, got %q", got)
 	}
 
@@ -177,7 +177,7 @@ func TestProxmoxStoragePoolStateAndNameEdgeBranches(t *testing.T) {
 				"storage_id": "storage/pve01/",
 			},
 		},
-	}, proxmoxSessionTarget{Kind: "node", Node: "pve01"}, "")
+	}, proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"}, "")
 	if len(states) != 0 {
 		t.Fatalf("expected empty pool name asset to be skipped, got %+v", states)
 	}

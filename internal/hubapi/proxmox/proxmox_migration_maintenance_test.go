@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"net/http"
@@ -12,6 +12,8 @@ import (
 	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/groupmaintenance"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -52,10 +54,10 @@ func TestProxmoxHAMigrationChecksMaintenanceBeforeProvider(t *testing.T) {
 					_, _ = w.Write([]byte(`{"data":"UPID:task-migration"}`))
 				}))
 				defer upstream.Close()
-				sut := newTestAPIServer(t)
-				sut.groupMaintenanceStore = migrationMaintenanceStore{}
+				sut := hubdeps.New(t)
+				sut.GroupMaintenanceStore = migrationMaintenanceStore{}
 				createProxmoxCredentialProfile(t, sut, "migration-credential", "fixture@pve!test", "fixture-secret", upstream.URL)
-				sut.hubCollectorStore = &stubHubCollectorStore{collectors: []hubcollector.Collector{{
+				sut.HubCollectorStore = &testutil.StubHubCollectorStore{Collectors: []hubcollector.Collector{{
 					ID: "pve-a", CollectorType: "proxmox", Enabled: true,
 					Config: map[string]any{"base_url": upstream.URL, "credential_id": "migration-credential"},
 				}}}
@@ -69,11 +71,11 @@ func TestProxmoxHAMigrationChecksMaintenanceBeforeProvider(t *testing.T) {
 					{AssetID: scoped("proxmox-node-node-a"), Source: "proxmox", Type: "hypervisor-node", GroupID: tc.sourceGroup, Metadata: map[string]string{"collector_id": "pve-a", "node": "node-a"}},
 					{AssetID: scoped("proxmox-node-node-b"), Source: "proxmox", Type: "hypervisor-node", GroupID: tc.destinationGroup, Metadata: map[string]string{"collector_id": "pve-a", "node": "NODE-B"}},
 				} {
-					if _, err := sut.assetStore.UpsertAssetHeartbeat(asset); err != nil {
+					if _, err := sut.AssetStore.UpsertAssetHeartbeat(asset); err != nil {
 						t.Fatal(err)
 					}
 				}
-				deps := sut.ensureProxmoxDeps()
+				deps := sut.ProxmoxDeps()
 				deps.RequireAdminAuth = func(http.ResponseWriter, *http.Request) bool { return true }
 				req := httptest.NewRequest(http.MethodPost, "/proxmox/assets/"+scoped(native)+"/ha/migrate", strings.NewReader(`{"target_node":" NODE-B "}`))
 				if tc.restricted {

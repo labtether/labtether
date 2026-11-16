@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/telemetry"
@@ -76,7 +78,7 @@ func TestSortProxmoxSnapshots(t *testing.T) {
 		{Name: "newer", SnapTime: 30},
 	}
 
-	sorted := sortProxmoxSnapshots(snapshots)
+	sorted := proxmoxpkg.SortProxmoxSnapshots(snapshots)
 	if len(sorted) != 2 {
 		t.Fatalf("expected 2 snapshots, got %d", len(sorted))
 	}
@@ -107,7 +109,7 @@ func TestFilterAndSortProxmoxTasks(t *testing.T) {
 		},
 	}
 
-	filtered := filterAndSortProxmoxTasks(tasks, "pve01", "101", 10)
+	filtered := proxmoxpkg.FilterAndSortProxmoxTasks(tasks, "pve01", "101", 10)
 	if len(filtered) != 1 {
 		t.Fatalf("expected 1 filtered task, got %d", len(filtered))
 	}
@@ -123,8 +125,8 @@ func TestSelectProxmoxHAForVMAndNode(t *testing.T) {
 		{SID: "vm:999", Node: "pve02", State: "started"},
 	}
 
-	vmTarget := proxmoxSessionTarget{Kind: "qemu", VMID: "101", Node: "pve01"}
-	match, related := selectProxmoxHA(resources, vmTarget)
+	vmTarget := proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", VMID: "101", Node: "pve01"}
+	match, related := proxmoxpkg.SelectProxmoxHA(resources, vmTarget)
 	if match == nil || match.SID != "vm:101" {
 		t.Fatalf("expected vm ha match, got %+v", match)
 	}
@@ -132,8 +134,8 @@ func TestSelectProxmoxHAForVMAndNode(t *testing.T) {
 		t.Fatalf("expected 1 related vm ha resource, got %d", len(related))
 	}
 
-	nodeTarget := proxmoxSessionTarget{Kind: "node", Node: "pve01"}
-	match, related = selectProxmoxHA(resources, nodeTarget)
+	nodeTarget := proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"}
+	match, related = proxmoxpkg.SelectProxmoxHA(resources, nodeTarget)
 	if match == nil || match.Node != "pve01" {
 		t.Fatalf("expected node ha match for pve01, got %+v", match)
 	}
@@ -169,7 +171,7 @@ func TestParseMetadataFloatAndParseAnyInt64(t *testing.T) {
 		{value: "nope", want: 0, ok: false},
 	}
 	for _, tc := range cases {
-		got, ok := parseAnyInt64(tc.value)
+		got, ok := proxmoxpkg.ParseAnyInt64(tc.value)
 		if ok != tc.ok || got != tc.want {
 			t.Fatalf("parseAnyInt64(%v) => (%d,%v), expected (%d,%v)", tc.value, got, ok, tc.want, tc.ok)
 		}
@@ -187,41 +189,41 @@ func TestProxmoxTaskVMIDAndRouteDispatch(t *testing.T) {
 		t.Fatalf("expected vmid parse fallback to 0, got %d", got)
 	}
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/tasks/pve01/UPID-1/unknown", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxTaskRoutes(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxTaskRoutes(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown task route, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/nodes/pve01/unknown", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxNodeRoutes(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxNodeRoutes(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown node route, got %d", rec.Code)
 	}
 }
 
 func TestHandleProxmoxAssetsGuards(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/assets/", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing asset path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/proxmox/assets/asset-1/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for non-GET, got %d", rec.Code)
 	}
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "agent-host-01",
 		Type:    "server",
 		Name:    "agent-host-01",
@@ -234,7 +236,7 @@ func TestHandleProxmoxAssetsGuards(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/agent-host-01/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for non-proxmox asset, got %d", rec.Code)
 	}
@@ -242,29 +244,29 @@ func TestHandleProxmoxAssetsGuards(t *testing.T) {
 
 func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 	t.Run("path parsing and resolve errors", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 
 		req := httptest.NewRequest(http.MethodGet, "/proxmox/assets//details", nil)
 		rec := httptest.NewRecorder()
-		sut.handleProxmoxAssets(rec, req)
+		sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 for empty asset id, got %d", rec.Code)
 		}
 
 		req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01", nil)
 		rec = httptest.NewRecorder()
-		sut.handleProxmoxAssets(rec, req)
+		sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 for missing asset action, got %d", rec.Code)
 		}
 
-		sut.assetStore = &proxmoxAssetStoreWithErrors{
-			inner:  sut.assetStore,
+		sut.AssetStore = &proxmoxAssetStoreWithErrors{
+			inner:  sut.AssetStore,
 			getErr: errors.New("asset store unavailable"),
 		}
 		req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil)
 		rec = httptest.NewRecorder()
-		sut.handleProxmoxAssets(rec, req)
+		sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
 			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
@@ -291,10 +293,10 @@ func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 		}))
 		defer detailsServer.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		configureSingleProxmoxCollector(t, sut, detailsServer.URL, "collector-proxmox-1")
 
-		_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 			AssetID: "proxmox-node-pve01",
 			Type:    "hypervisor-node",
 			Name:    "pve01",
@@ -312,23 +314,23 @@ func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil)
 		rec := httptest.NewRecorder()
-		sut.handleProxmoxAssets(rec, req)
+		sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
 			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
 
-		sut.assetStore = &proxmoxAssetStoreWithErrors{
-			inner:   sut.assetStore,
+		sut.AssetStore = &proxmoxAssetStoreWithErrors{
+			inner:   sut.AssetStore,
 			listErr: errors.New("list assets failed"),
 		}
 		req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/storage/insights", nil)
 		rec = httptest.NewRecorder()
-		sut.handleProxmoxAssets(rec, req)
+		sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
 			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
 		// Restore the underlying store so global cleanup hooks keep working.
-		sut.assetStore = sut.assetStore.(*proxmoxAssetStoreWithErrors).inner
+		sut.AssetStore = sut.AssetStore.(*proxmoxAssetStoreWithErrors).inner
 	})
 }
 
@@ -340,7 +342,7 @@ func TestFilterAndSortProxmoxTasksLimitAndTieBreak(t *testing.T) {
 		{UPID: "UPID:pve02:...:103:", Node: "pve02", ID: "103", StartTime: 300},
 	}
 
-	filtered := filterAndSortProxmoxTasks(tasks, "pve01", "", 2)
+	filtered := proxmoxpkg.FilterAndSortProxmoxTasks(tasks, "pve01", "", 2)
 	if len(filtered) != 2 {
 		t.Fatalf("expected limit to reduce results to 2, got %d", len(filtered))
 	}
@@ -368,7 +370,7 @@ func TestProxmoxTaskMatchesVMIDVariants(t *testing.T) {
 }
 
 func TestProxmoxSnapshotTaskAndHAEdgeBranches(t *testing.T) {
-	snapshots := sortProxmoxSnapshots([]proxmox.Snapshot{
+	snapshots := proxmoxpkg.SortProxmoxSnapshots([]proxmox.Snapshot{
 		{Name: "z-snap", SnapTime: 50},
 		{Name: "a-snap", SnapTime: 50},
 	})
@@ -380,16 +382,16 @@ func TestProxmoxSnapshotTaskAndHAEdgeBranches(t *testing.T) {
 		t.Fatalf("expected empty VMID filter to match all tasks")
 	}
 
-	match, related := selectProxmoxHA([]proxmox.HAResource{
+	match, related := proxmoxpkg.SelectProxmoxHA([]proxmox.HAResource{
 		{SID: "ct:202", Node: "pve01", State: "started"},
 		{SID: "vm:202", Node: "pve01", State: "started"},
-	}, proxmoxSessionTarget{Kind: "lxc", VMID: "202"})
+	}, proxmoxpkg.ProxmoxSessionTarget{Kind: "lxc", VMID: "202"})
 	if match == nil || match.SID != "ct:202" || len(related) != 1 {
 		t.Fatalf("expected LXC HA SID ct:202 selection, got match=%+v related=%+v", match, related)
 	}
 }
 
-func configureDualProxmoxCollectors(t *testing.T, sut *apiServer, collectorOneURL, collectorTwoURL string) {
+func configureDualProxmoxCollectors(t *testing.T, sut *hubdeps.Hub, collectorOneURL, collectorTwoURL string) {
 	t.Helper()
 
 	createProxmoxCredentialProfile(
@@ -409,8 +411,8 @@ func configureDualProxmoxCollectors(t *testing.T, sut *apiServer, collectorOneUR
 		collectorTwoURL,
 	)
 
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-proxmox-1",
 				AssetID:       "proxmox-cluster-one",
@@ -439,7 +441,7 @@ func configureDualProxmoxCollectors(t *testing.T, sut *apiServer, collectorOneUR
 	}
 }
 
-func configureSingleProxmoxCollector(t *testing.T, sut *apiServer, collectorURL, collectorID string) {
+func configureSingleProxmoxCollector(t *testing.T, sut *hubdeps.Hub, collectorURL, collectorID string) {
 	t.Helper()
 
 	credentialID := "cred-" + collectorID
@@ -452,8 +454,8 @@ func configureSingleProxmoxCollector(t *testing.T, sut *apiServer, collectorURL,
 		collectorURL,
 	)
 
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            collectorID,
 				AssetID:       "proxmox-cluster-test",

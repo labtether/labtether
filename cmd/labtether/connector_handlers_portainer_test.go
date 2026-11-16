@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,10 +15,7 @@ import (
 
 func allowInsecureTransportForConnectorTests(t *testing.T) {
 	t.Helper()
-	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOWLIST_MODE", "false")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+	testutil.AllowInsecureTransportForConnectorTests(t)
 }
 
 func TestHandlePortainerConnectorTestInvalidPayload(t *testing.T) {
