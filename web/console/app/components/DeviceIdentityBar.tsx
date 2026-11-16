@@ -10,13 +10,15 @@ type DeviceIdentityBarProps = {
   asset: Asset;
   /** The connect buttons and the ⋯ menu, right of the name. */
   actions?: ReactNode;
+  /** A short label after the OS, such as "Monitoring only" for the agent's monitoring edition. */
+  note?: string;
 };
 
 /**
  * The device page's title row: the device's kind in a quiet tile, its name, its state as a word and a time only when
  * something is wrong ("Offline since 21:12"), its address and OS underneath, and the actions on the right.
  */
-export function DeviceIdentityBar({ asset, actions }: DeviceIdentityBarProps) {
+export function DeviceIdentityBar({ asset, actions, note }: DeviceIdentityBarProps) {
   const t = useTranslations("devices.page.state");
   const locale = useLocale();
   const Icon = deviceIcon(asset);
@@ -42,11 +44,11 @@ export function DeviceIdentityBar({ asset, actions }: DeviceIdentityBarProps) {
               </span>
             ) : null}
           </div>
-          {address || os ? (
+          {address || os || note ? (
             <p className="dv-sub">
-              {address ? <span className="mono">{address}</span> : null}
-              {address && os ? <span aria-hidden="true"> · </span> : null}
-              {os ? <span>{os}</span> : null}
+              {[address ? <span key="a" className="mono">{address}</span> : null, os ? <span key="o">{os}</span> : null, note ? <span key="n">{note}</span> : null]
+                .filter((part) => part !== null)
+                .flatMap((part, index) => (index === 0 ? [part] : [<span key={`s${index}`} aria-hidden="true"> · </span>, part]))}
             </p>
           ) : null}
         </div>

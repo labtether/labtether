@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -263,6 +264,11 @@ func SanitizeNextPath(next string) string {
 		return "/"
 	}
 	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") || strings.Contains(parsed.Path, "\\") {
+		return "/"
+	}
+	// The path is returned decoded. Browsers drop tabs and newlines, so a
+	// decoded "/<tab>/host" would be read as "//host" and leave the Hub.
+	if strings.IndexFunc(parsed.Path, unicode.IsControl) >= 0 {
 		return "/"
 	}
 	lower := strings.ToLower(parsed.Path)

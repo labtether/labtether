@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -50,6 +51,11 @@ func safeLocalDemoRedirectTarget(raw string) string {
 		return "/"
 	}
 	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") {
+		return "/"
+	}
+	// Parsing decoded the path once more. Browsers read "\" as "/" and drop
+	// tabs and newlines, so "/\host" or "/<tab>/host" would leave the Hub.
+	if strings.ContainsRune(parsed.Path, '\\') || strings.IndexFunc(parsed.Path, unicode.IsControl) >= 0 {
 		return "/"
 	}
 	redirectTarget := parsed.Path
@@ -157,5 +163,5 @@ func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 	// Redirect to the requested path, defaulting to "/".
 	next := sanitizeNextPath(r.URL.Query().Get("redirect"))
 	redirectTarget := safeLocalDemoRedirectTarget(next)
-	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther) // #nosec G710 -- safeLocalDemoRedirectTarget returns only a local path.
 }

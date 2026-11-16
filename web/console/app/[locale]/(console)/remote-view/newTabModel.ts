@@ -1,4 +1,5 @@
 // The Remote View new tab page's lists: which devices can be opened, how a row reads, and the "Connect to…" search.
+import { agentWithholds, type AgentAdvertisements } from "../../../console/agentOffers";
 import type { Asset } from "../../../console/models";
 import { isDeviceTier } from "../../../console/taxonomy";
 import type { RemoteBookmark } from "./remoteBookmarksClient";
@@ -13,9 +14,13 @@ export type RemoteDevice = {
   lastSeen: string;
 };
 
-/** Devices (not services or containers) in the order the hub lists them. */
-export function remoteDevices(assets: Asset[] | undefined): RemoteDevice[] {
-  return (assets ?? []).filter(isDeviceTier).map((asset) => {
+/**
+ * Devices (not services or containers) in the order the hub lists them, leaving out a device whose agent lists what it
+ * offers without Remote View (console/agentOffers).
+ */
+export function remoteDevices(assets: Asset[] | undefined, advertisements: AgentAdvertisements = {}): RemoteDevice[] {
+  const offered = (asset: Asset) => !agentWithholds(advertisements[asset.id], "remoteView", asset.platform);
+  return (assets ?? []).filter((asset) => isDeviceTier(asset) && offered(asset)).map((asset) => {
     const meta = asset.metadata ?? {};
     return {
       id: asset.id,

@@ -30,6 +30,8 @@ function formatBytes(bytes: number): string {
 
 export function buildCorePanels(ctx: PanelContext): PanelDef[] {
   const panels: PanelDef[] = [];
+  // Agent panels follow what the agent offers: every Go agent offers them all while connected (today's rule).
+  const offers = ctx.agentOffers;
 
   if (ctx.isHomeAssistantAsset) {
     return panels;
@@ -102,7 +104,7 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     },
   });
 
-  if (ctx.nodeHasAgent) {
+  if (offers.terminal) {
     panels.push({
       id: "terminal",
       label: "Terminal",
@@ -145,7 +147,7 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     },
   });
 
-  if (ctx.nodeHasAgent) {
+  if (offers.processes) {
     panels.push({
       id: "processes",
       label: "Processes",
@@ -169,7 +171,7 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     });
   }
 
-  if (ctx.nodeHasAgent) {
+  if (offers.files) {
     panels.push({
       id: "files",
       label: "Files",
@@ -219,13 +221,16 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     });
   }
 
-  if (ctx.nodeHasAgent) {
+  if (offers.disks) {
     panels.push({
       id: "disks",
       label: "Disks",
       icon: HardDrive,
       summary: () => ["Disk management"],
     });
+  }
+
+  if (offers.users) {
     panels.push({
       id: "users",
       label: "Users",
@@ -234,7 +239,7 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     });
   }
 
-  if (ctx.nodeHasAgent) {
+  if (offers.agentSettings) {
     panels.push({
       id: "agent-settings",
       label: "Agent Settings",

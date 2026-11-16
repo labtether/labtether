@@ -1,3 +1,5 @@
+import type { AgentFeature, DeviceAgentOffers } from "../../../../console/agentOffers";
+
 // The device page's tab row. The open panel stays in the address (?panel=…) so Back and shared links return to it;
 // older panel names keep working because each one belongs to a tab: Overview, what the device holds (its
 // integration's tabs), System, Logs and Settings. Terminal, Files and Remote view open from the header and show as an
@@ -113,6 +115,32 @@ export function buildDeviceTabs(input: DeviceTabsInput): DeviceTab[] {
   const open = tabOfPanel(activePanel, categorySlugs);
   if (activePanel && !tabs.some((tab) => tab.key === open)) add(open, activePanel);
   return tabs;
+}
+
+/** Agent panels and the agent feature each needs (console/agentOffers). */
+const AGENT_PANEL_FEATURE: Readonly<Record<string, AgentFeature>> = {
+  terminal: "terminal",
+  files: "files",
+  desktop: "remoteView",
+  processes: "processes",
+  network: "network",
+  services: "services",
+  packages: "packages",
+  cron: "schedules",
+  disks: "disks",
+  users: "users",
+  "agent-settings": "agentSettings",
+};
+
+/**
+ * Whether an open agent panel needs something this device's agent does not offer. Only an explicit agent withholds
+ * a panel; for every other device the panel opens as it does today. An infra host's category list is not an agent
+ * panel, even where it has the same name ("network", "services").
+ */
+export function withheldAgentPanel(panel: string | null, offers: DeviceAgentOffers, categorySlugs: Set<string>): boolean {
+  if (!panel || !offers.explicit || categorySlugs.has(panel)) return false;
+  const feature = AGENT_PANEL_FEATURE[panel];
+  return feature !== undefined && !offers[feature];
 }
 
 /** The address of a panel on this device ("/nodes/pve-01?panel=processes"); Overview has no panel. */

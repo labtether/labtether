@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DesktopProtocol } from "../../../../components/SessionPanel";
+import { deviceAgentOffers, type AgentAdvertisement, type DeviceAgentOffers } from "../../../../console/agentOffers";
 import type { SessionConnectionState } from "../../../../hooks/useSession";
 
 export interface DesktopProtocolAsset {
@@ -26,11 +27,24 @@ function metadataFlag(
 /**
  * The protocols to offer for a device, the recommended one first. rdpGateway is what the Hub said about its RDP
  * gateway: false means this Hub cannot serve RDP, so RDP is not offered; null means the Hub has not said.
+ * agentOffers (console/agentOffers): VNC and WebRTC go through the agent, so they stay only where it offers them;
+ * RDP goes through the Hub's gateway and SPICE through Proxmox, so the agent does not decide those.
  */
 export function computeAvailableDesktopProtocols(
   targetAsset: DesktopProtocolAsset | null | undefined,
   targetHasAgent: boolean,
   rdpGateway: boolean | null = null,
+  agentOffers: Pick<DeviceAgentOffers, "vnc" | "webrtc"> | null = null,
+): DesktopProtocol[] {
+  const all = protocolsBeforeAgentOffers(targetAsset, targetHasAgent, rdpGateway);
+  if (!agentOffers) return all;
+  return all.filter((protocol) => (protocol === "vnc" ? agentOffers.vnc : protocol === "webrtc" ? agentOffers.webrtc : true));
+}
+
+function protocolsBeforeAgentOffers(
+  targetAsset: DesktopProtocolAsset | null | undefined,
+  targetHasAgent: boolean,
+  rdpGateway: boolean | null,
 ): DesktopProtocol[] {
   const options: DesktopProtocol[] = ["vnc"];
   const source = normalizeLower(targetAsset?.source);
@@ -122,6 +136,8 @@ interface UseDesktopProtocolStateOptions {
   connectedAgentIds: Set<string>;
   connectionState: SessionConnectionState;
   rdpGateway?: boolean | null;
+  /** The Hub's agentAdvertisements entry for this device, if any. */
+  advertisement?: AgentAdvertisement | null;
 }
 
 interface SetDesktopProtocolOptions {
@@ -134,15 +150,21 @@ export function useDesktopProtocolState({
   connectedAgentIds,
   connectionState,
   rdpGateway = null,
+  advertisement = null,
 }: UseDesktopProtocolStateOptions) {
   const [protocol, setProtocolState] = useState<DesktopProtocol>("vnc");
   const requestedProtocolRef = useRef<DesktopProtocol | null>(null);
   const targetHasAgent = connectedAgentIds.has(nodeId);
 
-  const availableProtocols = useMemo(
-    () => computeAvailableDesktopProtocols(targetAsset, targetHasAgent, rdpGateway),
-    [targetAsset, targetHasAgent, rdpGateway],
-  );
+  const availableProtocols = useMemo(() => {
+    const offers = deviceAgentOffers({
+      metadata: (targetAsset?.metadata ?? undefined) as Record<string, string> | undefined,
+      hasAgent: targetHasAgent,
+      platform: targetAsset?.platform ?? undefined,
+      advertisement,
+    });
+    return computeAvailableDesktopProtocols(targetAsset, targetHasAgent, rdpGateway, offers.explicit ? offers : null);
+  }, [targetAsset, targetHasAgent, rdpGateway, advertisement]);
 
   useEffect(() => {
     if (availableProtocols.length === 0) return;

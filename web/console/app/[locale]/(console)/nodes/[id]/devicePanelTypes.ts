@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { DeviceAgentOffers } from "../../../../console/agentOffers";
 import type { Asset } from "../../../../console/models";
 
 export type ConnectionBadge = {
@@ -18,6 +19,8 @@ export type PanelDef = {
 export type PanelContext = {
   asset: Asset;
   nodeHasAgent: boolean;
+  /** What the device's agent offers (console/agentOffers): agent panels show only when offered. */
+  agentOffers: DeviceAgentOffers;
   mergedDockerHost: Asset | null;
   metadata: Record<string, string>;
   infraCategories: Map<string, { count: number }>;

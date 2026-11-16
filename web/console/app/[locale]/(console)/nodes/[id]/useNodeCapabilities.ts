@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { deviceAgentOffers, type AgentAdvertisement, type DeviceAgentOffers } from "../../../../console/agentOffers";
 
 type NetworkMethodOption = {
   value: string;
@@ -11,9 +12,13 @@ type UseNodeCapabilitiesArgs = {
   metadata: Record<string, string>;
   nodeHasAgent: boolean;
   nodePlatform: string;
+  /** The Hub's agentAdvertisements entry for this device, if any. */
+  advertisement?: AgentAdvertisement | null;
 };
 
 type UseNodeCapabilitiesResult = {
+  /** Every agent feature this device offers (console/agentOffers); the flags below are read from it. */
+  agentOffers: DeviceAgentOffers;
   isLinuxAgentNode: boolean;
   supportsServiceListing: boolean;
   supportsPackageListing: boolean;
@@ -34,37 +39,23 @@ export function logQueryModeLabelFor(logBackend: string | undefined): string {
   return "Journal";
 }
 
-export function supportsCapability(
-  metadata: Record<string, string>,
-  capabilityKey: string,
-  capability: string,
-  legacyDefault: boolean,
-): boolean {
-  const raw = metadata[capabilityKey];
-  if (typeof raw !== "string" || raw.trim() === "") {
-    return legacyDefault;
-  }
-  const values = new Set(
-    raw
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter((value) => value !== ""),
-  );
-  return values.has(capability.toLowerCase());
-}
-
 export function useNodeCapabilities({
   metadata,
   nodeHasAgent,
   nodePlatform,
+  advertisement = null,
 }: UseNodeCapabilitiesArgs): UseNodeCapabilitiesResult {
   const isLinuxAgentNode = nodeHasAgent && nodePlatform === "linux";
-  const supportsServiceListing = nodeHasAgent && supportsCapability(metadata, "cap_services", "list", true);
-  const supportsPackageListing = nodeHasAgent && supportsCapability(metadata, "cap_packages", "list", true);
-  const supportsScheduleListing = nodeHasAgent && supportsCapability(metadata, "cap_schedules", "list", true);
-  const supportsNetworkListing = nodeHasAgent && supportsCapability(metadata, "cap_network", "list", true);
-  const supportsNetworkActions = nodeHasAgent && supportsCapability(metadata, "cap_network", "action", isLinuxAgentNode);
-  const supportsLogQuery = nodeHasAgent && supportsCapability(metadata, "cap_logs", "query", true);
+  const agentOffers = useMemo(
+    () => deviceAgentOffers({ metadata, hasAgent: nodeHasAgent, platform: nodePlatform, advertisement }),
+    [metadata, nodeHasAgent, nodePlatform, advertisement],
+  );
+  const supportsServiceListing = agentOffers.services;
+  const supportsPackageListing = agentOffers.packages;
+  const supportsScheduleListing = agentOffers.schedules;
+  const supportsNetworkListing = agentOffers.network;
+  const supportsNetworkActions = agentOffers.networkActions;
+  const supportsLogQuery = agentOffers.logQuery;
 
   const networkActionBackend = (metadata["network_action_backend"] ?? "").trim().toLowerCase();
   const logQueryModeLabel = logQueryModeLabelFor(metadata["log_backend"]);
@@ -107,6 +98,7 @@ export function useNodeCapabilities({
       : "For Netplan, save a snapshot before editing /etc/netplan. Then apply. Rollback restores those saved files. Auto prefers Netplan, then NMCLI.";
 
   return {
+    agentOffers,
     isLinuxAgentNode,
     supportsServiceListing,
     supportsPackageListing,

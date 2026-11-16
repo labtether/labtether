@@ -1,6 +1,7 @@
 import { TerminalSquare, Monitor, Info, FolderOpen, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PaletteItem, PaletteProvider } from "../../../contexts/PaletteContext";
+import { deviceAgentOffers } from "../../../console/agentOffers";
 import type { FastStatusSlice } from "../../../contexts/StatusContext";
 
 interface ActionDef {
@@ -81,9 +82,19 @@ export function createDeviceActionsProvider(
           asset.id.toLowerCase().includes(q);
 
         if (!deviceMatches) continue;
+        // An agent that lists what it offers loses Terminal, Desktop and Files when it does not offer them. Every
+        // other device keeps all three, as before (the palette never checked the connection).
+        const offers = deviceAgentOffers({
+          metadata: asset.metadata,
+          hasAgent: true,
+          platform: asset.platform,
+          advertisement: status.agentAdvertisements?.[asset.id],
+        });
+        const withheld = { terminal: !offers.terminal, desktop: !offers.remoteView, files: !offers.files } as Record<string, boolean>;
 
         for (const actionDef of DEVICE_ACTIONS) {
           if (actionDef.writeRequired && !canWrite) continue;
+          if (withheld[actionDef.key]) continue;
           const actionMatches =
             q === "" ||
             deviceName.toLowerCase().includes(q) ||

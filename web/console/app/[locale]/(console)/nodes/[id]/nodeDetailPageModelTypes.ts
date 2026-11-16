@@ -6,6 +6,7 @@ import type {
   Asset,
   TelemetryOverviewAsset,
 } from "../../../../console/models";
+import type { AgentAdvertisement, DeviceAgentOffers } from "../../../../console/agentOffers";
 import type { CategoryDef, CategorySlug } from "../../../../console/taxonomy";
 import { buildAvailablePanels } from "./devicePanels";
 import type { PanelContext } from "./devicePanels";
@@ -19,6 +20,8 @@ export type UseNodeDetailPageModelArgs = {
   telemetry: TelemetryOverviewAsset[] | undefined;
   groupLabelByID: GroupLabels;
   nodeHasAgent: boolean;
+  /** The Hub's agentAdvertisements entry for this device, if any. */
+  advertisement?: AgentAdvertisement | null;
 };
 
 export type UseNodeDetailPageModelResult = {
@@ -47,6 +50,7 @@ export type UseNodeDetailPageModelResult = {
   proxmoxTarget: string;
   isInfra: boolean;
   isLinuxAgentNode: boolean;
+  agentOffers: DeviceAgentOffers;
   supportsServiceListing: boolean;
   supportsPackageListing: boolean;
   supportsScheduleListing: boolean;

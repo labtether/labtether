@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 import { Button } from "../../../../components/ui/Button";
+import { isAgentUnsupported } from "../../../../console/agentOffers";
 import { telemetryWindows } from "../../../../console/models";
 import type { LogEvent, TelemetryWindow } from "../../../../console/models";
 import { cleanLoadError, formatLogTime, fullTime, normalizeLogLevel } from "./logsViewParts";
@@ -81,9 +82,10 @@ export function NodeLogsTabCard({
   onRefresh,
 }: NodeLogsTabCardProps) {
   const t = useTranslations("devices.logsTab");
+  const tOffers = useTranslations("devices.agentOffers");
   const journal = logMode === "journal" && supportsLogQuery;
   const filtered = logEvents.filter((event) => logLevelFilter === "all" || normalizeLogLevel(event.level) === logLevelFilter);
-  const detail = cleanLoadError(logsError);
+  const detail = isAgentUnsupported(logsError) ? tOffers("notOffered") : cleanLoadError(logsError);
 
   return (
     <div className="dst-logs">

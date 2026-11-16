@@ -926,5 +926,9 @@
     "reject": "Refuser",
     "approveFailed": "Impossible d'approuver {name}. Réessayez.",
     "rejectFailed": "Impossible de refuser {name}. Réessayez."
+  },
+  "agentOffers": {
+    "monitoringOnly": "Surveillance uniquement",
+    "notOffered": "Non proposé par l’agent de cet appareil"
   }
 }

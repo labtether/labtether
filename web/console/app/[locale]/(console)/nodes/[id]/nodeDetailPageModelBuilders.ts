@@ -9,6 +9,7 @@ import {
   hostParentKey,
   isInfraHost,
 } from "../../../../console/taxonomy";
+import type { DeviceAgentOffers } from "../../../../console/agentOffers";
 import type { CategoryDef, CategorySlug } from "../../../../console/taxonomy";
 import type { Asset } from "../../../../console/models";
 import type { PanelContext, ConnectionBadge } from "./devicePanels";
@@ -143,6 +144,7 @@ export function deriveShouldShowDesktop({
 export function buildNodePanelContext({
   asset,
   nodeHasAgent,
+  agentOffers,
   mergedDockerHost,
   infraCategories,
   isProxmoxAsset,
@@ -161,6 +163,7 @@ export function buildNodePanelContext({
 }: {
   asset: Asset;
   nodeHasAgent: boolean;
+  agentOffers: DeviceAgentOffers;
   mergedDockerHost: Asset | null;
   infraCategories: Map<CategorySlug, { def: CategoryDef; count: number }>;
   isProxmoxAsset: boolean;
@@ -183,6 +186,7 @@ export function buildNodePanelContext({
   return {
     asset,
     nodeHasAgent,
+    agentOffers,
     mergedDockerHost,
     metadata: asset.metadata ?? {},
     infraCategories: new Map(
@@ -200,7 +204,7 @@ export function buildNodePanelContext({
     supportsPackageListing,
     supportsScheduleListing,
     supportsNetworkListing,
-    desktopEligible: shouldShowDesktop,
+    desktopEligible: shouldShowDesktop && agentOffers.remoteView,
     protocolCount,
     webServiceCount,
     connectionBadges,

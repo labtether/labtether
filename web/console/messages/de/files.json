@@ -17,6 +17,7 @@
     "notAvailable": "Nicht verfügbar",
     "offline": "Offline",
     "noAgent": "Kein Agent",
+    "notOffered": "Agent bietet keine Dateien an",
     "noDevices": "Kein Gerät hat einen verbundenen Agenten",
     "noDeviceMatch": "Kein Gerät passt zu „{query}“",
     "noConnections": "Keine gespeicherten Verbindungen",
