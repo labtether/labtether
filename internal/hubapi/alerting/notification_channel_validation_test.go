@@ -1,8 +1,9 @@
-package main
+package alerting_test
 
 import (
 	"testing"
 
+	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
 	"github.com/labtether/labtether/internal/notifications"
 )
 
@@ -27,7 +28,7 @@ func TestValidateCreateChannelRequestAcceptsNtfyAndGotify(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		err := validateCreateChannelRequest(notifications.CreateChannelRequest{
+		err := alertingpkg.ValidateCreateChannelRequest(notifications.CreateChannelRequest{
 			Name:   "ops",
 			Type:   test.channelType,
 			Config: test.config,

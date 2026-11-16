@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/alerts"
-	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/telemetry"
@@ -79,28 +78,6 @@ func (c *countingUpdateStore) ListUpdateRunsPage(limit, offset int, status strin
 		return store.ListUpdateRunsPage(limit, offset, status)
 	}
 	return c.UpdateStore.ListUpdateRuns(limit, status)
-}
-
-type countingIncidentStore struct {
-	persistence.IncidentStore
-	listIncidentAlertLinksCalls int
-	hasAutoIncidentCalls        int
-	createAutoIncidentCalls     int
-}
-
-func (c *countingIncidentStore) ListIncidentAlertLinks(incidentID string, limit int) ([]incidents.AlertLink, error) {
-	c.listIncidentAlertLinksCalls++
-	return c.IncidentStore.ListIncidentAlertLinks(incidentID, limit)
-}
-
-func (c *countingIncidentStore) HasAutoIncidentForAlertInstance(alertInstanceID string) (bool, error) {
-	c.hasAutoIncidentCalls++
-	if store, ok := c.IncidentStore.(interface {
-		HasAutoIncidentForAlertInstance(alertInstanceID string) (bool, error)
-	}); ok {
-		return store.HasAutoIncidentForAlertInstance(alertInstanceID)
-	}
-	return false, nil
 }
 
 type countingTelemetryStore struct {

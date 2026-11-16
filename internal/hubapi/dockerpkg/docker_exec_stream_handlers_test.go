@@ -1,4 +1,4 @@
-package main
+package dockerpkg_test
 
 import (
 	"encoding/json"
@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestDockerExecBridgeReasonLifecycle(t *testing.T) {
-	bridge := &dockerExecBridge{
+	bridge := &dockerpkg.DockerExecBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -36,19 +38,19 @@ func TestDockerExecBridgeReasonLifecycle(t *testing.T) {
 }
 
 func TestProcessAgentDockerExecClosedStoresReason(t *testing.T) {
-	s := &apiServer{}
-	bridge := &dockerExecBridge{
+	s := hubdeps.NewEmpty(t)
+	bridge := &dockerpkg.DockerExecBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	s.dockerExecBridges.Store("sess-1", bridge)
+	s.DockerExecBridges.Store("sess-1", bridge)
 
 	raw, _ := json.Marshal(agentmgr.DockerExecCloseData{
 		SessionID: "sess-1",
 		Reason:    "stdin write failed: broken pipe",
 	})
-	s.processAgentDockerExecClosed(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
+	s.DockerDeps().ProcessAgentDockerExecClosed(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
 		Type: agentmgr.MsgDockerExecClosed,
 		ID:   "sess-1",
 		Data: raw,
@@ -65,13 +67,13 @@ func TestProcessAgentDockerExecClosedStoresReason(t *testing.T) {
 }
 
 func TestProcessAgentDockerExecHandlersIgnoreMismatchedSender(t *testing.T) {
-	s := &apiServer{}
-	bridge := &dockerExecBridge{
+	s := hubdeps.NewEmpty(t)
+	bridge := &dockerpkg.DockerExecBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	s.dockerExecBridges.Store("sess-mismatch", bridge)
+	s.DockerExecBridges.Store("sess-mismatch", bridge)
 
 	started, _ := json.Marshal(agentmgr.DockerExecStartedData{SessionID: "sess-mismatch"})
 	data, _ := json.Marshal(agentmgr.DockerExecDataPayload{
@@ -84,9 +86,9 @@ func TestProcessAgentDockerExecHandlersIgnoreMismatchedSender(t *testing.T) {
 	})
 
 	conn := &agentmgr.AgentConn{AssetID: "node-2"}
-	s.processAgentDockerExecStarted(conn, agentmgr.Message{Data: started})
-	s.processAgentDockerExecData(conn, agentmgr.Message{Data: data})
-	s.processAgentDockerExecClosed(conn, agentmgr.Message{Data: closed})
+	s.DockerDeps().ProcessAgentDockerExecStarted(conn, agentmgr.Message{Data: started})
+	s.DockerDeps().ProcessAgentDockerExecData(conn, agentmgr.Message{Data: data})
+	s.DockerDeps().ProcessAgentDockerExecClosed(conn, agentmgr.Message{Data: closed})
 
 	select {
 	case <-bridge.OutputCh:
@@ -117,7 +119,7 @@ func TestDockerExecCommandFromQuery(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := dockerExecCommandFromQuery(tc.raw)
+			got := dockerpkg.DockerExecCommandFromQuery(tc.raw)
 			if len(got) != len(tc.want) {
 				t.Fatalf("len(command)=%d want %d (%v)", len(got), len(tc.want), got)
 			}
@@ -131,23 +133,23 @@ func TestDockerExecCommandFromQuery(t *testing.T) {
 }
 
 func TestCloseDockerExecBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
-	var s apiServer
-	matching := &dockerExecBridge{
+	s := hubdeps.NewEmpty(t)
+	matching := &dockerpkg.DockerExecBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	nonMatching := &dockerExecBridge{
+	nonMatching := &dockerpkg.DockerExecBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-2",
 	}
 
-	s.dockerExecBridges.Store("sess-node-1", matching)
-	s.dockerExecBridges.Store("sess-node-2", nonMatching)
-	s.dockerExecBridges.Store("non-bridge-entry", "ignore-me")
+	s.DockerExecBridges.Store("sess-node-1", matching)
+	s.DockerExecBridges.Store("sess-node-2", nonMatching)
+	s.DockerExecBridges.Store("non-bridge-entry", "ignore-me")
 
-	s.closeDockerExecBridgesForAsset("node-1")
+	s.DockerDeps().CloseDockerExecBridgesForAsset("node-1")
 
 	select {
 	case <-matching.ClosedCh:

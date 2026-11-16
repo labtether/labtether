@@ -1,4 +1,4 @@
-package main
+package desktop_test
 
 import (
 	"context"
@@ -8,12 +8,14 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
 func TestStartRecordingRequestRejectsNonBridgeEntry(t *testing.T) {
-	sut := newTestAPIServer(t)
-	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+	sut := hubdeps.New(t)
+	session, err := sut.TerminalStore.CreateSession(terminal.CreateSessionRequest{
 		ActorID: "owner",
 		Target:  "desktop-node-01",
 		Mode:    "desktop",
@@ -21,14 +23,14 @@ func TestStartRecordingRequestRejectsNonBridgeEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create desktop session: %v", err)
 	}
-	sut.desktopBridges.Store(session.ID, "ignore-me")
+	sut.DesktopBridges.Store(session.ID, "ignore-me")
 
 	req := httptest.NewRequest(http.MethodPost, "/recordings", strings.NewReader(`{"session_id":"`+session.ID+`"}`))
-	req = req.WithContext(contextWithPrincipal(context.Background(), "owner", "owner"))
+	req = req.WithContext(apiv2.ContextWithPrincipal(context.Background(), "owner", "owner"))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	sut.startRecordingRequest(rr, req)
+	sut.DesktopDeps().HandleRecordings(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", rr.Code)
@@ -39,17 +41,17 @@ func TestStartRecordingRequestRejectsNonBridgeEntry(t *testing.T) {
 }
 
 func TestStopRecordingBySessionIgnoresNonBridgeEntry(t *testing.T) {
-	var sut apiServer
-	sut.desktopBridges.Store("sess-non-bridge", "ignore-me")
+	sut := hubdeps.NewEmpty(t)
+	sut.DesktopBridges.Store("sess-non-bridge", "ignore-me")
 
-	if stopped := sut.stopRecordingBySession("sess-non-bridge"); stopped {
+	if stopped := sut.DesktopDeps().StopRecordingBySession("sess-non-bridge"); stopped {
 		t.Fatal("expected stopRecordingBySession to return false for non-bridge entries")
 	}
 }
 
 func TestAuthorizeRecordingSessionAccessHonorsOwnerAndAdminSemantics(t *testing.T) {
-	sut := newTestAPIServer(t)
-	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+	sut := hubdeps.New(t)
+	session, err := sut.TerminalStore.CreateSession(terminal.CreateSessionRequest{
 		ActorID: "actor-a",
 		Target:  "desktop-node-01",
 		Mode:    "desktop",
@@ -59,9 +61,9 @@ func TestAuthorizeRecordingSessionAccessHonorsOwnerAndAdminSemantics(t *testing.
 	}
 
 	operatorReq := httptest.NewRequest(http.MethodPost, "/recordings/"+session.ID, nil)
-	operatorReq = operatorReq.WithContext(contextWithPrincipal(operatorReq.Context(), "actor-b", "operator"))
+	operatorReq = operatorReq.WithContext(apiv2.ContextWithPrincipal(operatorReq.Context(), "actor-b", "operator"))
 	operatorRec := httptest.NewRecorder()
-	if sut.authorizeRecordingSessionAccess(operatorRec, operatorReq, session.ID) {
+	if sut.DesktopDeps().AuthorizeRecordingSessionAccess(operatorRec, operatorReq, session.ID) {
 		t.Fatal("expected cross-actor operator access to be denied")
 	}
 	if operatorRec.Code != http.StatusForbidden {
@@ -69,16 +71,16 @@ func TestAuthorizeRecordingSessionAccessHonorsOwnerAndAdminSemantics(t *testing.
 	}
 
 	adminReq := httptest.NewRequest(http.MethodPost, "/recordings/"+session.ID, nil)
-	adminReq = adminReq.WithContext(contextWithPrincipal(adminReq.Context(), "actor-b", "admin"))
+	adminReq = adminReq.WithContext(apiv2.ContextWithPrincipal(adminReq.Context(), "actor-b", "admin"))
 	adminRec := httptest.NewRecorder()
-	if !sut.authorizeRecordingSessionAccess(adminRec, adminReq, session.ID) {
+	if !sut.DesktopDeps().AuthorizeRecordingSessionAccess(adminRec, adminReq, session.ID) {
 		t.Fatal("expected admin recording access to be allowed")
 	}
 }
 
 func TestAuthorizeRecordingSessionAccessEnforcesAPIKeyAssetAllowlist(t *testing.T) {
-	sut := newTestAPIServer(t)
-	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+	sut := hubdeps.New(t)
+	session, err := sut.TerminalStore.CreateSession(terminal.CreateSessionRequest{
 		ActorID: "actor-a",
 		Target:  "srv2",
 		Mode:    "desktop",
@@ -88,11 +90,11 @@ func TestAuthorizeRecordingSessionAccessEnforcesAPIKeyAssetAllowlist(t *testing.
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/recordings/"+session.ID, nil)
-	ctx := contextWithPrincipal(req.Context(), "apikey:key-a", "admin")
+	ctx := apiv2.ContextWithPrincipal(req.Context(), "apikey:key-a", "admin")
 	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"srv1"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
-	if sut.authorizeRecordingSessionAccess(rec, req, session.ID) {
+	if sut.DesktopDeps().AuthorizeRecordingSessionAccess(rec, req, session.ID) {
 		t.Fatal("asset-restricted admin API key accessed another asset's recording")
 	}
 	if rec.Code != http.StatusForbidden {
@@ -101,8 +103,8 @@ func TestAuthorizeRecordingSessionAccessEnforcesAPIKeyAssetAllowlist(t *testing.
 }
 
 func TestCanAccessRecordingMetadataUsesDesktopSessionOwnership(t *testing.T) {
-	sut := newTestAPIServer(t)
-	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+	sut := hubdeps.New(t)
+	session, err := sut.TerminalStore.CreateSession(terminal.CreateSessionRequest{
 		ActorID: "actor-a",
 		Target:  "desktop-node-01",
 		Mode:    "desktop",
@@ -111,19 +113,19 @@ func TestCanAccessRecordingMetadataUsesDesktopSessionOwnership(t *testing.T) {
 		t.Fatalf("create desktop session: %v", err)
 	}
 
-	ownerCtx := contextWithPrincipal(context.Background(), "actor-a", "operator")
-	if !sut.canAccessRecordingMetadata(ownerCtx, session.ID, "admin-user") {
+	ownerCtx := apiv2.ContextWithPrincipal(context.Background(), "actor-a", "operator")
+	if !sut.DesktopDeps().CanAccessRecordingMetadata(ownerCtx, session.ID, "admin-user") {
 		t.Fatal("expected session owner to access recording metadata even when another actor started the recording")
 	}
 
-	otherCtx := contextWithPrincipal(context.Background(), "actor-b", "operator")
-	if sut.canAccessRecordingMetadata(otherCtx, session.ID, "admin-user") {
+	otherCtx := apiv2.ContextWithPrincipal(context.Background(), "actor-b", "operator")
+	if sut.DesktopDeps().CanAccessRecordingMetadata(otherCtx, session.ID, "admin-user") {
 		t.Fatal("expected unrelated operator to be denied recording metadata")
 	}
 }
 
 func TestRecordingResponsePayloadOmitsSensitiveMetadata(t *testing.T) {
-	payload := recordingResponsePayload(recordingMetadata{
+	payload := desktoppkg.RecordingResponsePayload(desktoppkg.RecordingMetadata{
 		ID:        "rec-1",
 		SessionID: "sess-1",
 		AssetID:   "asset-1",

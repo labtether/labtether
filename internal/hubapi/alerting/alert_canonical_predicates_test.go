@@ -1,4 +1,4 @@
-package main
+package alerting_test
 
 import (
 	"context"
@@ -9,14 +9,15 @@ import (
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/telemetry"
 )
 
 func TestResolveRuleTargetAssets_CanonicalKinds(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-vm-101",
 		Type:    "vm",
 		Name:    "vm-101",
@@ -30,7 +31,7 @@ func TestResolveRuleTargetAssets_CanonicalKinds(t *testing.T) {
 		t.Fatalf("upsert vm heartbeat: %v", err)
 	}
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-ct-202",
 		Type:    "container",
 		Name:    "ct-202",
@@ -53,7 +54,7 @@ func TestResolveRuleTargetAssets_CanonicalKinds(t *testing.T) {
 		},
 	}
 
-	resolvedTargets, err := sut.resolveRuleTargetAssets(rule, nil, false)
+	resolvedTargets, err := sut.AlertingDeps().ResolveRuleTargetAssets(rule, nil, false)
 	if err != nil {
 		t.Fatalf("resolve rule target assets: %v", err)
 	}
@@ -69,9 +70,9 @@ func TestResolveRuleTargetAssets_CanonicalKinds(t *testing.T) {
 }
 
 func TestResolveRuleTargetAssets_GlobalRuleWithNonMatchingTargetsDoesNotFallbackToAllAssets(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "node-a",
 		Type:    "host",
 		Name:    "node-a",
@@ -85,7 +86,7 @@ func TestResolveRuleTargetAssets_GlobalRuleWithNonMatchingTargetsDoesNotFallback
 		t.Fatalf("upsert node-a heartbeat: %v", err)
 	}
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "node-b",
 		Type:    "host",
 		Name:    "node-b",
@@ -107,7 +108,7 @@ func TestResolveRuleTargetAssets_GlobalRuleWithNonMatchingTargetsDoesNotFallback
 		},
 	}
 
-	resolvedTargets, err := sut.resolveRuleTargetAssets(rule, nil, true)
+	resolvedTargets, err := sut.AlertingDeps().ResolveRuleTargetAssets(rule, nil, true)
 	if err != nil {
 		t.Fatalf("resolve rule target assets: %v", err)
 	}
@@ -117,10 +118,10 @@ func TestResolveRuleTargetAssets_GlobalRuleWithNonMatchingTargetsDoesNotFallback
 }
 
 func TestEvaluateMetricThreshold_WithCapabilitySelectorPredicate(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	now := time.Now().UTC()
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "cap-node-1",
 		Type:    "host",
 		Name:    "cap-node-1",
@@ -131,7 +132,7 @@ func TestEvaluateMetricThreshold_WithCapabilitySelectorPredicate(t *testing.T) {
 		t.Fatalf("upsert heartbeat: %v", err)
 	}
 
-	_, err = sut.canonicalStore.UpsertCapabilitySet(model.CapabilitySet{
+	_, err = sut.CanonicalStore.UpsertCapabilitySet(model.CapabilitySet{
 		SubjectType: "resource",
 		SubjectID:   "cap-node-1",
 		Capabilities: []model.CapabilitySpec{
@@ -143,7 +144,7 @@ func TestEvaluateMetricThreshold_WithCapabilitySelectorPredicate(t *testing.T) {
 		t.Fatalf("upsert capability set: %v", err)
 	}
 
-	err = sut.telemetryStore.AppendSamples(context.Background(), []telemetry.MetricSample{
+	err = sut.TelemetryStore.AppendSamples(context.Background(), []telemetry.MetricSample{
 		{
 			AssetID:     "cap-node-1",
 			Metric:      telemetry.MetricCPUUsedPercent,
@@ -172,7 +173,7 @@ func TestEvaluateMetricThreshold_WithCapabilitySelectorPredicate(t *testing.T) {
 		},
 	}
 
-	triggered, err := sut.evaluateMetricThreshold(context.Background(), rule)
+	triggered, err := sut.AlertingDeps().EvaluateMetricThreshold(context.Background(), rule)
 	if err != nil {
 		t.Fatalf("evaluate metric threshold: %v", err)
 	}
@@ -182,9 +183,9 @@ func TestEvaluateMetricThreshold_WithCapabilitySelectorPredicate(t *testing.T) {
 }
 
 func TestValidateAlertRuleTargets_RejectsDeprecatedSelectorKeys(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	err := sut.validateAlertRuleTargets([]alerts.RuleTargetInput{
+	err := sut.AlertingDeps().ValidateAlertRuleTargets([]alerts.RuleTargetInput{
 		{
 			AssetID: "",
 			Selector: map[string]any{
