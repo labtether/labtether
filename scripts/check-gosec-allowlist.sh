@@ -3,7 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOWLIST_FILE="${ROOT_DIR}/security/gosec_allowlist.tsv"
-GOSEC_VERSION="${GOSEC_VERSION:-v2.30.0}"
+# gosec commit 359a2c3 (securego/gosec#1803), not the v2.30.0 tag. v2.30.0
+# loads a package as a list of absolute file paths; go/packages splits a list
+# over 16383 characters into separate partial packages. At CI's checkout path
+# internal/persistence crossed that, failed to type-check and lost its SSA
+# rules (securego/gosec#1828). Move to the next tagged release once it exists.
+GOSEC_VERSION="${GOSEC_VERSION:-v2.30.1-0.20261026094559-359a2c3f87db}"
 
 if [[ ! -f "${ALLOWLIST_FILE}" ]]; then
   echo "missing allowlist: ${ALLOWLIST_FILE}" >&2
