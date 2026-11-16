@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"encoding/json"
@@ -6,22 +6,24 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestSendConfigUpdateSendsStoredRuntimeOverrides(t *testing.T) {
-	sut := newTestAPIServer(t)
-	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
+	sut := hubdeps.New(t)
+	if _, err := sut.RuntimeStore.SaveRuntimeSettingOverrides(map[string]string{
 		"agent_collect_interval_sec":   "30",
 		"agent_heartbeat_interval_sec": "45",
 	}); err != nil {
 		t.Fatalf("save runtime overrides: %v", err)
 	}
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
 	conn := agentmgr.NewAgentConn(serverConn, "node-runtime", "linux")
-	sut.sendConfigUpdate(conn)
+	sut.AgentsDeps().SendConfigUpdate(conn)
 
 	if err := clientConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Fatalf("set read deadline: %v", err)
@@ -48,13 +50,13 @@ func TestSendConfigUpdateSendsStoredRuntimeOverrides(t *testing.T) {
 }
 
 func TestSendConfigUpdateSendsExplicitZeroesWhenOverridesAreCleared(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
 	conn := agentmgr.NewAgentConn(serverConn, "node-runtime", "linux")
-	sut.sendConfigUpdate(conn)
+	sut.AgentsDeps().SendConfigUpdate(conn)
 
 	if err := clientConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Fatalf("set read deadline: %v", err)

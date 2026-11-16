@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"encoding/json"
@@ -12,16 +12,19 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/assets"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestNormalizeAgentSettingValuesRejectsLocalOnlyForHubApply(t *testing.T) {
-	if _, err := normalizeAgentSettingValues(map[string]string{
+	if _, err := agentspkg.NormalizeAgentSettingValues(map[string]string{
 		agentsettings.SettingKeyTLSSkipVerify: "true",
 	}, true); err == nil {
 		t.Fatalf("expected local-only setting to be rejected for hub apply")
 	}
 
-	values, err := normalizeAgentSettingValues(map[string]string{
+	values, err := agentspkg.NormalizeAgentSettingValues(map[string]string{
 		agentsettings.SettingKeyTLSSkipVerify: "true",
 	}, false)
 	if err != nil {
@@ -33,10 +36,10 @@ func TestNormalizeAgentSettingValuesRejectsLocalOnlyForHubApply(t *testing.T) {
 }
 
 func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "node-apply",
 		Type:    "device",
 		Name:    "node-apply",
@@ -50,11 +53,11 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 		t.Fatalf("seed asset: %v", err)
 	}
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-apply", "linux"))
-	defer sut.agentMgr.Unregister("node-apply")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-apply", "linux"))
+	defer sut.AgentMgr.Unregister("node-apply")
 
 	done := make(chan agentmgr.Message, 1)
 	go func() {
@@ -66,7 +69,7 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 		done <- outbound
 	}()
 
-	sut.pushAgentSettingsApply("node-apply", map[string]string{
+	sut.AgentsDeps().PushAgentSettingsApply("node-apply", map[string]string{
 		agentsettings.SettingKeyLogLevel: "debug",
 	})
 
@@ -93,7 +96,7 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 		t.Fatal("timed out waiting for outbound settings apply")
 	}
 
-	state, ok := sut.getAgentSettingsRuntimeState("node-apply")
+	state, ok := sut.AgentsDeps().GetAgentSettingsRuntimeState("node-apply")
 	if !ok {
 		t.Fatalf("expected pending runtime state")
 	}
@@ -109,13 +112,13 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 }
 
 func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-settings-filter", "linux"))
-	defer sut.agentMgr.Unregister("node-settings-filter")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-settings-filter", "linux"))
+	defer sut.AgentMgr.Unregister("node-settings-filter")
 
 	readApply := func() agentmgr.AgentSettingsApplyData {
 		t.Helper()
@@ -149,7 +152,7 @@ func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T)
 		strings.NewReader(`{"values":{"collect_interval_sec":"11"}}`),
 	)
 	patchRec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(patchRec, patchReq)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(patchRec, patchReq)
 	if patchRec.Code != http.StatusOK {
 		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
 	}
@@ -163,7 +166,7 @@ func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T)
 		strings.NewReader(`{"keys":["collect_interval_sec"]}`),
 	)
 	resetRec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(resetRec, resetReq)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(resetRec, resetReq)
 	if resetRec.Code != http.StatusOK {
 		t.Fatalf("reset status=%d body=%s", resetRec.Code, resetRec.Body.String())
 	}
@@ -175,21 +178,21 @@ func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T)
 // Agents save pushed values over their install-time settings, so the push on
 // every connect must carry only operator-set values, never built-in defaults.
 func TestAgentSettingsConnectPushSendsOnlyOperatorSetValues(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
-	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
+	if _, err := sut.RuntimeStore.SaveRuntimeSettingOverrides(map[string]string{
 		"agent_heartbeat_interval_sec": "45",
 	}); err != nil {
 		t.Fatalf("save global agent default: %v", err)
 	}
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 	conn := agentmgr.NewAgentConn(serverConn, "node-connect-push", "linux")
-	sut.agentMgr.Register(conn)
-	defer sut.agentMgr.Unregister("node-connect-push")
+	sut.AgentMgr.Register(conn)
+	defer sut.AgentMgr.Unregister("node-connect-push")
 
-	sut.sendAgentSettingsApply(conn)
+	sut.AgentsDeps().SendAgentSettingsApply(conn)
 
 	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var outbound agentmgr.Message
@@ -207,21 +210,21 @@ func TestAgentSettingsConnectPushSendsOnlyOperatorSetValues(t *testing.T) {
 }
 
 func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	assetID := "node-lifecycle"
 	appliedAt := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC)
 	reportedAt := time.Date(2026, 3, 8, 10, 1, 0, 0, time.UTC)
 
 	tests := []struct {
 		name                string
-		previous            agentSettingsRuntimeState
+		previous            agentspkg.AgentSettingsRuntimeState
 		wantStatus          string
 		wantLastError       string
 		wantRestartRequired bool
 	}{
 		{
 			name: "applied result survives state report",
-			previous: agentSettingsRuntimeState{
+			previous: agentspkg.AgentSettingsRuntimeState{
 				Status:          "applied",
 				Revision:        "rev-1",
 				AppliedAt:       appliedAt,
@@ -233,7 +236,7 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 		},
 		{
 			name: "failed result survives state report",
-			previous: agentSettingsRuntimeState{
+			previous: agentspkg.AgentSettingsRuntimeState{
 				Status:          "failed",
 				Revision:        "rev-1",
 				AppliedAt:       appliedAt,
@@ -248,7 +251,7 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sut.setAgentSettingsRuntimeState(assetID, tt.previous)
+			sut.AgentsDeps().SetAgentSettingsRuntimeState(assetID, tt.previous)
 
 			payload, err := json.Marshal(agentmgr.AgentSettingsStateData{
 				Revision:             "rev-1",
@@ -261,9 +264,9 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 				t.Fatalf("marshal state payload: %v", err)
 			}
 
-			sut.processAgentSettingsState(&agentmgr.AgentConn{AssetID: assetID}, agentmgr.Message{Data: payload})
+			sut.AgentsDeps().ProcessAgentSettingsState(&agentmgr.AgentConn{AssetID: assetID}, agentmgr.Message{Data: payload})
 
-			state, ok := sut.getAgentSettingsRuntimeState(assetID)
+			state, ok := sut.AgentsDeps().GetAgentSettingsRuntimeState(assetID)
 			if !ok {
 				t.Fatalf("expected runtime state")
 			}
@@ -296,29 +299,29 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 }
 
 func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	assetID := "node-drift"
 	wantTURNURL := "turn:turn.example.com:3478"
 
-	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
-		agentSettingStoreKey(assetID, agentsettings.SettingKeyWebRTCTURNURL): wantTURNURL,
+	if _, err := sut.RuntimeStore.SaveRuntimeSettingOverrides(map[string]string{
+		agentspkg.AgentSettingStoreKey(assetID, agentsettings.SettingKeyWebRTCTURNURL): wantTURNURL,
 	}); err != nil {
 		t.Fatalf("save runtime override: %v", err)
 	}
 
-	sut.setAgentSettingsRuntimeState(assetID, agentSettingsRuntimeState{
+	sut.AgentsDeps().SetAgentSettingsRuntimeState(assetID, agentspkg.AgentSettingsRuntimeState{
 		Status: "reported",
 		Values: map[string]string{
 			agentsettings.SettingKeyWebRTCTURNURL: "",
 		},
 	})
 
-	payload, err := sut.buildAgentSettingsPayload(assetID)
+	payload, err := sut.AgentsDeps().BuildAgentSettingsPayload(assetID)
 	if err != nil {
 		t.Fatalf("build payload: %v", err)
 	}
 
-	var found agentSettingEntry
+	var found agentspkg.AgentSettingEntry
 	for _, setting := range payload.Settings {
 		if setting.Key == agentsettings.SettingKeyWebRTCTURNURL {
 			found = setting
@@ -342,12 +345,12 @@ func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testin
 // A setting the Hub never set must show what the agent runs with, such as
 // docker_enabled=true from the installer, not the Hub's "auto" default.
 func TestBuildAgentSettingsPayloadShowsAgentValueForHubUnsetSetting(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.setAgentSettingsRuntimeState("node-installed", agentSettingsRuntimeState{
+	sut := hubdeps.New(t)
+	sut.AgentsDeps().SetAgentSettingsRuntimeState("node-installed", agentspkg.AgentSettingsRuntimeState{
 		Status: "reported",
 		Values: map[string]string{agentsettings.SettingKeyDockerEnabled: "true"},
 	})
-	payload, err := sut.buildAgentSettingsPayload("node-installed")
+	payload, err := sut.AgentsDeps().BuildAgentSettingsPayload("node-installed")
 	if err != nil {
 		t.Fatalf("build payload: %v", err)
 	}
@@ -365,11 +368,11 @@ func TestBuildAgentSettingsPayloadShowsAgentValueForHubUnsetSetting(t *testing.T
 }
 
 func TestHandleAgentSettingsHistoryPreservesApplyFailureAfterStateReport(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	appliedAt := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC)
 	reportedAt := time.Date(2026, 3, 8, 10, 1, 0, 0, time.UTC)
 
-	sut.setAgentSettingsRuntimeState("node-history", agentSettingsRuntimeState{
+	sut.AgentsDeps().SetAgentSettingsRuntimeState("node-history", agentspkg.AgentSettingsRuntimeState{
 		Status:    "failed",
 		Revision:  "rev-2",
 		LastError: "fingerprint mismatch",
@@ -384,11 +387,11 @@ func TestHandleAgentSettingsHistoryPreservesApplyFailureAfterStateReport(t *test
 	if err != nil {
 		t.Fatalf("marshal state payload: %v", err)
 	}
-	sut.processAgentSettingsState(&agentmgr.AgentConn{AssetID: "node-history"}, agentmgr.Message{Data: payload})
+	sut.AgentsDeps().ProcessAgentSettingsState(&agentmgr.AgentConn{AssetID: "node-history"}, agentmgr.Message{Data: payload})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/node-history/settings/history", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAgentSettingsHistory(rec, req, "node-history")
+	sut.AgentsDeps().HandleAgentSettingsHistory(rec, req, "node-history")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())

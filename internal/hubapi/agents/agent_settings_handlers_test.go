@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/runtimesettings"
 )
 
@@ -33,7 +35,7 @@ func TestAgentSettingGlobalDefaultKeyServiceDiscoveryMappings(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, ok := agentSettingGlobalDefaultKey(tt.key)
+		got, ok := agentspkg.AgentSettingGlobalDefaultKey(tt.key)
 		if !ok {
 			t.Fatalf("expected mapping for %s", tt.key)
 		}
@@ -44,12 +46,12 @@ func TestAgentSettingGlobalDefaultKeyServiceDiscoveryMappings(t *testing.T) {
 }
 
 func TestHandleAgentSettingsUpdateAgentInvalidPayload(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/update-agent", bytes.NewBufferString("{"))
 	rec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(rec, req)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid payload, got %d", rec.Code)
@@ -57,12 +59,12 @@ func TestHandleAgentSettingsUpdateAgentInvalidPayload(t *testing.T) {
 }
 
 func TestHandleAgentSettingsUpdateAgentRequiresConnectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/update-agent", bytes.NewBufferString(`{"force":true}`))
 	rec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(rec, req)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 when agent is disconnected, got %d", rec.Code)
@@ -73,12 +75,12 @@ func TestHandleAgentSettingsUpdateAgentRequiresConnectedAgent(t *testing.T) {
 }
 
 func TestHandleAgentSettingsUpdateAgentRequiresAgentManager(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = nil
+	sut := hubdeps.New(t)
+	sut.AgentMgr = nil
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/update-agent", bytes.NewBufferString(`{"force":false}`))
 	rec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(rec, req)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when agent manager is unavailable, got %d", rec.Code)
@@ -86,12 +88,12 @@ func TestHandleAgentSettingsUpdateAgentRequiresAgentManager(t *testing.T) {
 }
 
 func TestHandleAgentSettingsRoutesRejectsExtraPathSegments(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/update-agent/extra", bytes.NewBufferString(`{"force":true}`))
 	rec := httptest.NewRecorder()
-	sut.handleAgentSettingsRoutes(rec, req)
+	sut.AgentsDeps().HandleAgentSettingsRoutes(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for extra path segments, got %d", rec.Code)
@@ -99,16 +101,16 @@ func TestHandleAgentSettingsRoutesRejectsExtraPathSegments(t *testing.T) {
 }
 
 func TestDetermineAgentVersionStatus(t *testing.T) {
-	if got := determineAgentVersionStatus("", "v1.2.3"); got != "unknown" {
+	if got := agentspkg.DetermineAgentVersionStatus("", "v1.2.3"); got != "unknown" {
 		t.Fatalf("expected unknown when current is empty, got %q", got)
 	}
-	if got := determineAgentVersionStatus("v1.2.3", ""); got != "unknown" {
+	if got := agentspkg.DetermineAgentVersionStatus("v1.2.3", ""); got != "unknown" {
 		t.Fatalf("expected unknown when latest is empty, got %q", got)
 	}
-	if got := determineAgentVersionStatus("v1.2.3", "v1.2.3"); got != "up_to_date" {
+	if got := agentspkg.DetermineAgentVersionStatus("v1.2.3", "v1.2.3"); got != "up_to_date" {
 		t.Fatalf("expected up_to_date, got %q", got)
 	}
-	if got := determineAgentVersionStatus("v1.2.2", "v1.2.3"); got != "update_available" {
+	if got := agentspkg.DetermineAgentVersionStatus("v1.2.2", "v1.2.3"); got != "update_available" {
 		t.Fatalf("expected update_available, got %q", got)
 	}
 }
@@ -123,7 +125,7 @@ func TestNormalizeAgentReleaseOS(t *testing.T) {
 		"":        "",
 	}
 	for input, want := range cases {
-		if got := normalizeAgentReleaseOS(input); got != want {
+		if got := agentspkg.NormalizeAgentReleaseOS(input); got != want {
 			t.Fatalf("normalizeAgentReleaseOS(%q)=%q, want %q", input, got, want)
 		}
 	}
@@ -140,7 +142,7 @@ func TestNormalizeAgentReleaseArch(t *testing.T) {
 		"":        "",
 	}
 	for input, want := range cases {
-		if got := normalizeAgentReleaseArch(input); got != want {
+		if got := agentspkg.NormalizeAgentReleaseArch(input); got != want {
 			t.Fatalf("normalizeAgentReleaseArch(%q)=%q, want %q", input, got, want)
 		}
 	}
@@ -148,14 +150,14 @@ func TestNormalizeAgentReleaseArch(t *testing.T) {
 
 func TestAgentVersionFromBuildInfo(t *testing.T) {
 	t.Run("prefers semantic version", func(t *testing.T) {
-		got := agentVersionFromBuildInfo("v1.2.3", nil)
+		got := agentspkg.AgentVersionFromBuildInfo("v1.2.3", nil)
 		if got != "v1.2.3" {
 			t.Fatalf("agentVersionFromBuildInfo() = %q, want %q", got, "v1.2.3")
 		}
 	})
 
 	t.Run("falls back to vcs revision", func(t *testing.T) {
-		got := agentVersionFromBuildInfo("(devel)", []debug.BuildSetting{
+		got := agentspkg.AgentVersionFromBuildInfo("(devel)", []debug.BuildSetting{
 			{Key: "vcs.revision", Value: "0123456789abcdef0123456789abcdef01234567"},
 			{Key: "vcs.modified", Value: "false"},
 		})
@@ -165,7 +167,7 @@ func TestAgentVersionFromBuildInfo(t *testing.T) {
 	})
 
 	t.Run("includes dirty suffix", func(t *testing.T) {
-		got := agentVersionFromBuildInfo("", []debug.BuildSetting{
+		got := agentspkg.AgentVersionFromBuildInfo("", []debug.BuildSetting{
 			{Key: "vcs.revision", Value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 			{Key: "vcs.modified", Value: "true"},
 		})
@@ -175,7 +177,7 @@ func TestAgentVersionFromBuildInfo(t *testing.T) {
 	})
 
 	t.Run("returns empty when unavailable", func(t *testing.T) {
-		got := agentVersionFromBuildInfo("(devel)", []debug.BuildSetting{})
+		got := agentspkg.AgentVersionFromBuildInfo("(devel)", []debug.BuildSetting{})
 		if got != "" {
 			t.Fatalf("agentVersionFromBuildInfo() = %q, want empty", got)
 		}

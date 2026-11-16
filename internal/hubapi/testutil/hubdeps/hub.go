@@ -19,6 +19,7 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/edges"
 	"github.com/labtether/labtether/internal/fileproto"
+	"github.com/labtether/labtether/internal/hubapi/agents"
 	"github.com/labtether/labtether/internal/hubapi/alerting"
 	"github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
@@ -132,6 +133,17 @@ type Hub struct {
 	CronReplies           resources.AgentReplies
 	UsersReplies          resources.AgentReplies
 
+	// State cmd's apiServer holds for the agents Deps. New sets
+	// PendingAgents as newTestAPIServer does; PresenceStore and AgentCache
+	// are nil until a test sets them, as on cmd's test server. The agents
+	// Deps is built once and kept, as cmd keeps apiServer.agentsDeps; see
+	// AgentsDeps.
+	PendingAgents *agents.PendingAgents
+	PresenceStore persistence.PresenceStore
+	AgentCache    *agents.AgentCache
+	agentsOnce    sync.Once
+	agentsDeps    *agents.Deps
+
 	t            *testing.T
 	desktopSPICE struct {
 		mu      sync.RWMutex
@@ -147,6 +159,7 @@ func New(t *testing.T) *Hub {
 	h.NotificationDispatcher.Adapters = notificationSendersNotTested(t)
 	h.NotificationDispatcher.DispatchSem = make(chan struct{}, 32)
 	h.WebServiceCoordinator = webservice.NewCoordinator(persistence.NewMemoryWebServiceStore())
+	h.PendingAgents = agents.NewPendingAgents()
 	return h
 }
 

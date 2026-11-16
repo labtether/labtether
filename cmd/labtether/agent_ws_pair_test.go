@@ -12,3 +12,8 @@ import (
 func createWSPairForNetworkTest(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
 	return testutil.CreateWSPairForNetworkTest(t)
 }
+
+// createWSPairForPendingEnrollmentTest: the same helper, one implementation in testutil.
+func createWSPairForPendingEnrollmentTest(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
+	return testutil.CreateWSPairForNetworkTest(t)
+}
