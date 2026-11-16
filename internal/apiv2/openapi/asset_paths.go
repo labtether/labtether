@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIAssetPaths documents this domain of the v2 API.
 const v2OpenAPIAssetPaths = `    "/api/v2/assets": {

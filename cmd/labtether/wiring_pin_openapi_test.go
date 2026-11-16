@@ -8,7 +8,7 @@ import (
 
 // TestWiringPinOpenAPIDocument pins the served v2 OpenAPI document byte for
 // byte, as GET /api/v2/openapi.json answers it from the real route table.
-// The structural tests in apiv2_openapi_contract_test.go check its meaning;
+// The structural tests in internal/apiv2/openapi check its meaning;
 // this pin catches any byte that moves, such as a lost path section, a
 // reordered constant or a changed description, when the document moves out
 // of cmd. A failure names the first differing lines of the document.

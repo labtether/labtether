@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIServiceNotificationPaths documents this domain of the v2 API.
 const v2OpenAPIServiceNotificationPaths = `    "/api/v2/web-services": {

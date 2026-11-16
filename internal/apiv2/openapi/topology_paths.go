@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPITopologyPaths documents this domain of the v2 API.
 const v2OpenAPITopologyPaths = `    "/api/v2/discovery/run": {

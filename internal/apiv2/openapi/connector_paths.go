@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIConnectorPaths documents this domain of the v2 API.
 const v2OpenAPIConnectorPaths = `    "/api/v2/connectors": {

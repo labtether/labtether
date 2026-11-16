@@ -199,21 +199,6 @@ func withProxmoxStreamHooks(
 	})
 }
 
-func setProxmoxTerminalKeepaliveIntervalForTest(t *testing.T, interval time.Duration) {
-	t.Helper()
-
-	proxmoxpkg.ProxmoxStreamHooksMu.Lock()
-	original := proxmoxpkg.ProxmoxTerminalKeepaliveInterval
-	proxmoxpkg.ProxmoxTerminalKeepaliveInterval = interval
-	proxmoxpkg.ProxmoxStreamHooksMu.Unlock()
-
-	t.Cleanup(func() {
-		proxmoxpkg.ProxmoxStreamHooksMu.Lock()
-		proxmoxpkg.ProxmoxTerminalKeepaliveInterval = original
-		proxmoxpkg.ProxmoxStreamHooksMu.Unlock()
-	})
-}
-
 func newWebSocketPair(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
 	t.Helper()
 

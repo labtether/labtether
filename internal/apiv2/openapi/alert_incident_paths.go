@@ -1,4 +1,4 @@
-package main
+package openapi
 
 // v2OpenAPIAlertIncidentPaths documents this domain of the v2 API.
 const v2OpenAPIAlertIncidentPaths = `    "/api/v2/alerts": {
