@@ -30,35 +30,35 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks/node/upid/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStatus(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for status method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/not-status", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStatus(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for invalid status path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks//upid/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStatus(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty status node, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node//status", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStatus(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty status upid, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/status", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStatus(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for status runtime unavailable, got %d", rec.Code)
 	}
@@ -66,28 +66,28 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks/node/upid/log", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskLog(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for log method guard, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/not-log", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskLog(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for invalid log path, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks//upid/log", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskLog(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty log node, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/log?limit=abc", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskLog(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for log runtime unavailable, got %d", rec.Code)
 	}
@@ -95,7 +95,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/stop", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStop(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStop(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 for stop method guard, got %d", rec.Code)
 	}
@@ -103,7 +103,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks/node/upid/not-stop", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStop(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStop(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for invalid stop path, got %d", rec.Code)
 	}
@@ -111,7 +111,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks//upid/stop", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStop(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStop(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty stop node, got %d", rec.Code)
 	}
@@ -119,7 +119,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks/node/upid/stop", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec = httptest.NewRecorder()
-	sut.handlePBSTaskStop(rec, req)
+	sut.ensurePBSDeps().HandlePBSTaskStop(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for stop runtime unavailable, got %d", rec.Code)
 	}
@@ -147,7 +147,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/pbs/tasks/node-a/"+upid+"/status?collector_id="+collectorID, nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSTaskStatus(rec, req)
+		sut.ensurePBSDeps().HandlePBSTaskStatus(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream status error, got %d", rec.Code)
 		}
@@ -169,7 +169,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/pbs/tasks/node-a/"+upid+"/log?collector_id="+collectorID, nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSTaskLog(rec, req)
+		sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream log error, got %d", rec.Code)
 		}
@@ -196,7 +196,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/pbs/tasks/node-a/"+upid+"/stop?collector_id="+collectorID, nil)
 		req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 		rec := httptest.NewRecorder()
-		sut.handlePBSTaskStop(rec, req)
+		sut.ensurePBSDeps().HandlePBSTaskStop(rec, req)
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream stop error, got %d", rec.Code)
 		}
@@ -221,7 +221,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/pbs/tasks/node-a/"+upid+"/log?collector_id="+collectorID+"&limit=9999", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSTaskLog(rec, req)
+		sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -248,7 +248,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/pbs/tasks/node-a/"+upid+"/log?collector_id="+collectorID+"&limit=abc", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSTaskLog(rec, req)
+		sut.ensurePBSDeps().HandlePBSTaskLog(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -315,19 +315,19 @@ func TestHandlePBSTaskHandlersRequireCollectorWhenMultipleCollectors(t *testing.
 			name:    "status",
 			method:  http.MethodGet,
 			path:    "/pbs/tasks/node-a/" + upid + "/status",
-			handler: sut.handlePBSTaskStatus,
+			handler: func(w http.ResponseWriter, r *http.Request) { sut.ensurePBSDeps().HandlePBSTaskStatus(w, r) },
 		},
 		{
 			name:    "log",
 			method:  http.MethodGet,
 			path:    "/pbs/tasks/node-a/" + upid + "/log",
-			handler: sut.handlePBSTaskLog,
+			handler: func(w http.ResponseWriter, r *http.Request) { sut.ensurePBSDeps().HandlePBSTaskLog(w, r) },
 		},
 		{
 			name:    "stop",
 			method:  http.MethodPost,
 			path:    "/pbs/tasks/node-a/" + upid + "/stop",
-			handler: sut.handlePBSTaskStop,
+			handler: func(w http.ResponseWriter, r *http.Request) { sut.ensurePBSDeps().HandlePBSTaskStop(w, r) },
 		},
 	}
 
