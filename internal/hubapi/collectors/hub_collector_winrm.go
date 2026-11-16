@@ -132,7 +132,7 @@ func ExecuteWinRMCommand(ctx context.Context, endpoint, user, password, command 
 		}
 		if skipVerify {
 			log.Printf("hub collector winrm: WARNING: TLS certificate verification disabled for endpoint=%s", endpoint)
-			tlsConfig.InsecureSkipVerify = true //nolint:gosec // explicit operator override
+			tlsConfig.InsecureSkipVerify = true // #nosec G402 -- set only when the collector's skip_verify option is on; logged above.
 		}
 		client.Transport = &http.Transport{
 			TLSClientConfig: tlsConfig,

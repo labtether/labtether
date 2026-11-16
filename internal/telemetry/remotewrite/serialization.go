@@ -22,7 +22,7 @@ func labelSize(name, value string) int {
 // Samples have two one-byte tags, a fixed64 value, and a positive timestamp
 // already checked by validateSample.
 func sampleSize(timestamp int64) int {
-	return 10 + protowire.SizeVarint(uint64(timestamp))
+	return 10 + protowire.SizeVarint(uint64(timestamp)) // #nosec G115 -- protobuf writes an int64 field as its two's-complement uint64; validateSample also keeps it positive.
 }
 
 func timeSeriesSize(labels [][2]string, samples []SampleWithLabels) int {
@@ -41,7 +41,7 @@ func timeSeriesSize(labels [][2]string, samples []SampleWithLabels) int {
 func appendTimeSeries(buf []byte, labels [][2]string, samples []SampleWithLabels) []byte {
 	for _, pair := range labels {
 		buf = protowire.AppendTag(buf, 1, protowire.BytesType)
-		buf = protowire.AppendVarint(buf, uint64(labelSize(pair[0], pair[1])))
+		buf = protowire.AppendVarint(buf, uint64(labelSize(pair[0], pair[1]))) // #nosec G115 -- labelSize adds protowire sizes, which are never negative.
 		buf = protowire.AppendTag(buf, 1, protowire.BytesType)
 		buf = protowire.AppendString(buf, pair[0])
 		buf = protowire.AppendTag(buf, 2, protowire.BytesType)
@@ -49,11 +49,11 @@ func appendTimeSeries(buf []byte, labels [][2]string, samples []SampleWithLabels
 	}
 	for _, sample := range samples {
 		buf = protowire.AppendTag(buf, 2, protowire.BytesType)
-		buf = protowire.AppendVarint(buf, uint64(sampleSize(sample.Timestamp)))
+		buf = protowire.AppendVarint(buf, uint64(sampleSize(sample.Timestamp))) // #nosec G115 -- sampleSize is 10 plus a protowire size, never negative.
 		buf = protowire.AppendTag(buf, 1, protowire.Fixed64Type)
 		buf = protowire.AppendFixed64(buf, math.Float64bits(sample.Value))
 		buf = protowire.AppendTag(buf, 2, protowire.VarintType)
-		buf = protowire.AppendVarint(buf, uint64(sample.Timestamp))
+		buf = protowire.AppendVarint(buf, uint64(sample.Timestamp)) // #nosec G115 -- protobuf writes an int64 field as its two's-complement uint64; validateSample also keeps it positive.
 	}
 	return buf
 }

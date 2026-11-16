@@ -137,7 +137,7 @@ jobs:
         env:
           GOBIN: ${{ runner.temp }}/quality-bin
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
       - name: Scan Go dependencies for reachable vulnerabilities
@@ -146,7 +146,9 @@ jobs:
 
       - name: Strict gosec gate
         if: needs.qa-select.outputs.go_checks != 'false'
-        run: make security-gosec
+        run: |
+          bash scripts/ci/test-gosec-gate.sh
+          make security-gosec
 
       - name: Lint GitHub Actions workflows
         run: actionlint

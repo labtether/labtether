@@ -36,7 +36,7 @@ func HashToken(raw string) string {
 // over plain HTTP from anywhere but localhost, so plain-HTTP sign-in from
 // another machine needs secure=false.
 func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration, secure bool) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure follows the browser's scheme (see above); HttpOnly and SameSite=Lax are always set.
 		Name:     SessionCookieName,
 		Value:    token,
 		Path:     "/",
@@ -50,7 +50,7 @@ func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration,
 // ClearSessionCookie expires the session cookie. It carries no secret and
 // omits Secure, so it can clear a cookie set over either HTTP or HTTPS.
 func ClearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- an empty, expired cookie; leaving out Secure lets it clear one set over HTTP too.
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     "/",

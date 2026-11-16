@@ -116,7 +116,7 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 	buf := make([]byte, 0, totalSize)
 	for _, entry := range order {
 		buf = protowire.AppendTag(buf, 1, protowire.BytesType)
-		buf = protowire.AppendVarint(buf, uint64(entry.size))
+		buf = protowire.AppendVarint(buf, uint64(entry.size)) // #nosec G115 -- entry.size adds protowire sizes, which are never negative.
 		buf = appendTimeSeries(buf, entry.labels, entry.samples)
 	}
 
