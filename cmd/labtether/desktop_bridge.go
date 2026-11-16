@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/terminal"
@@ -107,16 +108,16 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 		},
 
 		ResolveProxmoxSessionTarget: func(assetID string) (any, bool, error) {
-			return s.resolveProxmoxSessionTarget(assetID)
+			return s.ensureProxmoxDeps().ResolveProxmoxSessionTarget(assetID)
 		},
 		HandleProxmoxDesktopStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session, target any) {
-			s.handleProxmoxDesktopStream(w, r, session, target.(proxmoxSessionTarget))
+			s.ensureProxmoxDeps().HandleProxmoxDesktopStream(w, r, session, target.(proxmoxpkg.ProxmoxSessionTarget))
 		},
 		HandleDesktopSPICETicket: func(w http.ResponseWriter, r *http.Request, session terminal.Session) {
-			s.handleDesktopSPICETicket(w, r, session)
+			s.ensureProxmoxDeps().HandleDesktopSPICETicket(w, r, session)
 		},
 		HandleDesktopSPICEStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session) {
-			s.handleDesktopSPICEStream(w, r, session)
+			s.ensureProxmoxDeps().HandleDesktopSPICEStream(w, r, session)
 		},
 
 		StartRecording: func(sessionID, assetID, actorID, protocol string) (*desktoppkg.ActiveRecording, error) {

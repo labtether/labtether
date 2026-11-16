@@ -270,8 +270,6 @@ func trueNASFilesystemCacheKey(scope, id, requestPath string) string {
 }
 
 // Utility functions that were in truenas source but now in shared.
-// Some (parsePositiveInt, parseAnyInt64, formatStorageInsightsWindow) are
-// already declared in proxmox_bridge.go; only declare the new ones here.
 func anyToFloat64(value any) float64                { return shared.AnyToFloat64(value) }
 func parseAnyBoolLoose(value any) (bool, bool)      { return shared.ParseAnyBoolLoose(value) }
 func parseAnyTimestamp(value any) (time.Time, bool) { return shared.ParseAnyTimestamp(value) }

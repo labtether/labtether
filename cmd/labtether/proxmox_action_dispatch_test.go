@@ -13,7 +13,7 @@ import (
 
 func TestExecuteActionInProcessFallbackBranch(t *testing.T) {
 	sut := newTestAPIServer(t)
-	result := sut.executeActionInProcess(actions.Job{
+	result := sut.ensureProxmoxDeps().ExecuteActionInProcess(actions.Job{
 		JobID:   "job-cmd-1",
 		RunID:   "run-cmd-1",
 		Type:    actions.RunTypeCommand,

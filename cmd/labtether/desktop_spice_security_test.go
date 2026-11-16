@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"errors"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/terminal"
 	"net"
 	"net/http"
@@ -61,7 +62,7 @@ func TestHandleProxmoxSPICEStreamRequiresGlobalGateForSkipVerify(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-spice-unverified/stream", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSPICEStream(rec, req, terminal.Session{ID: "sess-spice-unverified", Mode: "desktop"})
+	sut.ensureProxmoxDeps().HandleDesktopSPICEStream(rec, req, terminal.Session{ID: "sess-spice-unverified", Mode: "desktop"})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unverified Proxmox SPICE status=%d body=%s", rec.Code, rec.Body.String())
@@ -82,7 +83,7 @@ func TestNewProxmoxTLSConfigAcceptsProvidedCAPEM(t *testing.T) {
 		t.Fatal("expected test tls server certificate")
 	}
 
-	tlsConfig, err := newProxmoxTLSConfig(false, string(pem.EncodeToMemory(&pem.Block{
+	tlsConfig, err := proxmoxpkg.NewProxmoxTLSConfig(false, string(pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: cert.Raw,
 	})))
@@ -106,7 +107,7 @@ func TestNewProxmoxTLSConfigAcceptsProvidedCAPEM(t *testing.T) {
 }
 
 func TestNewProxmoxTLSConfigRejectsInvalidCAPEM(t *testing.T) {
-	if _, err := newProxmoxTLSConfig(false, "not a pem"); err == nil {
+	if _, err := proxmoxpkg.NewProxmoxTLSConfig(false, "not a pem"); err == nil {
 		t.Fatal("expected invalid ca pem to be rejected")
 	}
 }
@@ -140,7 +141,7 @@ func TestProxmoxSPICEOpenErrorResponse(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotStatus, gotMessage := proxmoxSPICEOpenErrorResponse(tc.input)
+			gotStatus, gotMessage := proxmoxpkg.ProxmoxSPICEOpenErrorResponse(tc.input)
 			if gotStatus != tc.wantStatus {
 				t.Fatalf("status = %d, want %d", gotStatus, tc.wantStatus)
 			}

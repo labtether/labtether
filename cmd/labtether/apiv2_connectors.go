@@ -37,7 +37,7 @@ func (s *apiServer) handleV2ProxmoxClusterStatus(w http.ResponseWriter, r *http.
 		return
 	}
 	r.URL.Path = "/proxmox/cluster/status"
-	apiv2.WrapV1Handler(s.handleProxmoxClusterStatus)(w, r)
+	apiv2.WrapV1Handler(s.ensureProxmoxDeps().HandleProxmoxClusterStatus)(w, r)
 }
 
 func (s *apiServer) handleV2ProxmoxClusterResources(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +46,7 @@ func (s *apiServer) handleV2ProxmoxClusterResources(w http.ResponseWriter, r *ht
 		return
 	}
 	r.URL.Path = "/proxmox/cluster/resources"
-	apiv2.WrapV1Handler(s.handleProxmoxClusterResources)(w, r)
+	apiv2.WrapV1Handler(s.ensureProxmoxDeps().HandleProxmoxClusterResources)(w, r)
 }
 
 func (s *apiServer) handleV2ProxmoxAssets(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +81,7 @@ func (s *apiServer) handleV2ProxmoxCephStatus(w http.ResponseWriter, r *http.Req
 		return
 	}
 	r.URL.Path = "/proxmox/ceph/status"
-	apiv2.WrapV1Handler(s.handleProxmoxCephStatus)(w, r)
+	apiv2.WrapV1Handler(s.ensureProxmoxDeps().HandleProxmoxCephStatus)(w, r)
 }
 
 func (s *apiServer) handleV2ProxmoxTasks(w http.ResponseWriter, r *http.Request) {

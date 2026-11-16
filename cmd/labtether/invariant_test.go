@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 )
 
 func TestValidateLoginRequest_MinPasswordLength(t *testing.T) {
@@ -54,7 +56,7 @@ func TestClampPercent(t *testing.T) {
 		{150, 100},
 	}
 	for _, tc := range tests {
-		got := clampPercent(tc.input)
+		got := proxmoxpkg.ClampPercent(tc.input)
 		if got != tc.want {
 			t.Errorf("clampPercent(%v) = %v, want %v", tc.input, got, tc.want)
 		}

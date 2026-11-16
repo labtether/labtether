@@ -51,11 +51,11 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 			return s.detectLinkSuggestions()
 		},
 		ExecuteProxmoxActionDirect: func(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-			return s.executeProxmoxActionDirect(ctx, actionID, req)
+			return s.ensureProxmoxDeps().ExecuteProxmoxActionDirect(ctx, actionID, req)
 		},
 
 		LoadProxmoxRuntime: func(collectorID string) (*proxmoxconnector.Client, error) {
-			runtime, err := s.loadProxmoxRuntime(collectorID)
+			runtime, err := s.ensureProxmoxDeps().LoadProxmoxRuntime(collectorID)
 			if err != nil {
 				return nil, err
 			}

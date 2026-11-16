@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -166,7 +167,7 @@ func TestHandleTrueNASCapabilitiesKeepsProbeErrorsConservative(t *testing.T) {
 }
 
 func TestBuildProxmoxCapabilityTabsOmitsStorageHAAndReplication(t *testing.T) {
-	tabs := buildProxmoxCapabilityTabs("storage")
+	tabs := proxmoxpkg.BuildProxmoxCapabilityTabs("storage")
 	allowed := make(map[string]bool, len(tabs))
 	for _, tab := range tabs {
 		allowed[tab] = true
@@ -180,10 +181,10 @@ func TestBuildProxmoxCapabilityTabsOmitsStorageHAAndReplication(t *testing.T) {
 }
 
 func TestSelectProxmoxHADoesNotMatchStorageAssets(t *testing.T) {
-	match, related := selectProxmoxHA([]proxmox.HAResource{
+	match, related := proxmoxpkg.SelectProxmoxHA([]proxmox.HAResource{
 		{SID: "vm:101", Node: "pve01", State: "started"},
 		{SID: "ct:202", Node: "pve01", State: "started"},
-	}, proxmoxSessionTarget{Kind: "storage", Node: "pve01"})
+	}, proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01"})
 
 	if match != nil {
 		t.Fatalf("expected no ha match for storage asset, got %+v", match)

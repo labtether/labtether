@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -110,7 +111,7 @@ func TestProxmoxPendingTerminalAuthStopsOnSessionCancel(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/test/stream", nil).WithContext(ctx)
 	done := make(chan error, 1)
 	go func() {
-		done <- sut.tryProxmoxTerminalStream(httptest.NewRecorder(), req, terminal.Session{ID: "cancel-pve"}, proxmoxSessionTarget{
+		done <- sut.ensureProxmoxDeps().TryProxmoxTerminalStream(httptest.NewRecorder(), req, terminal.Session{ID: "cancel-pve"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind: "qemu", Node: "test-node", VMID: "101", CollectorID: "collector-cancel",
 		})
 	}()
