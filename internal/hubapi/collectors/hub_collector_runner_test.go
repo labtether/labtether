@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"context"
@@ -7,13 +7,16 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/connectorsdk"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
 func TestExecuteCollectorUnsupportedTypeUpdatesStatus(t *testing.T) {
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collector := hubcollector.Collector{
 		ID:            "collector-unsupported",
@@ -21,7 +24,7 @@ func TestExecuteCollectorUnsupportedTypeUpdatesStatus(t *testing.T) {
 		Enabled:       true,
 	}
 
-	sut.executeCollector(context.Background(), collector)
+	sut.CollectorsDeps().ExecuteCollector(context.Background(), collector)
 
 	updated, ok, err := store.GetHubCollector(collector.ID)
 	if err != nil {
@@ -39,11 +42,11 @@ func TestExecuteCollectorUnsupportedTypeUpdatesStatus(t *testing.T) {
 }
 
 func TestExecuteCollectorRecoversPanicAndUpdatesStatus(t *testing.T) {
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	sut.connectorRegistry.Register(&fakeDockerDiscoverConnector{
-		assets: []connectorsdk.Asset{
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	sut.ConnectorRegistry.Register(&testutil.FakeDockerDiscoverConnector{
+		Assets: []connectorsdk.Asset{
 			{
 				ID:     "docker-ct-panic",
 				Type:   "docker-container",
@@ -55,7 +58,7 @@ func TestExecuteCollectorRecoversPanicAndUpdatesStatus(t *testing.T) {
 
 	// Force a panic in downstream collector processing to verify executeCollector
 	// recovery and status updates stay intact.
-	sut.assetStore = nil
+	sut.AssetStore = nil
 
 	collector := hubcollector.Collector{
 		ID:              "collector-panic",
@@ -65,7 +68,7 @@ func TestExecuteCollectorRecoversPanicAndUpdatesStatus(t *testing.T) {
 		IntervalSeconds: 60,
 	}
 
-	sut.executeCollector(context.Background(), collector)
+	sut.CollectorsDeps().ExecuteCollector(context.Background(), collector)
 
 	updated, ok, err := store.GetHubCollector(collector.ID)
 	if err != nil {
@@ -80,22 +83,22 @@ func TestExecuteCollectorRecoversPanicAndUpdatesStatus(t *testing.T) {
 	if !strings.HasPrefix(updated.LastError, "panic: ") {
 		t.Fatalf("LastError = %q, want panic prefix", updated.LastError)
 	}
-	if ok := sut.tryBeginCollectorRun(collector.ID); !ok {
+	if ok := sut.CollectorsDeps().TryBeginCollectorRun(collector.ID); !ok {
 		t.Fatalf("expected collector run guard to be released after panic")
 	}
-	sut.finishCollectorRun(collector.ID)
+	sut.CollectorsDeps().FinishCollectorRun(collector.ID)
 }
 
 func TestRunPendingCollectorsStartsDueCollectorsConcurrently(t *testing.T) {
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	const collectorType = "test-concurrent"
-	original, hadOriginal := collectorExecutorRegistry[collectorType]
+	original, hadOriginal := collectorspkg.CollectorExecutorRegistry[collectorType]
 	started := make(chan string, 2)
 	release := make(chan struct{})
-	collectorExecutorRegistry[collectorType] = func(d *collectorsDeps, ctx context.Context, collector hubcollector.Collector) {
+	collectorspkg.CollectorExecutorRegistry[collectorType] = func(d *collectorspkg.Deps, ctx context.Context, collector hubcollector.Collector) {
 		started <- collector.ID
 		<-release
 		d.UpdateCollectorStatus(collector.ID, "ok", "")
@@ -103,16 +106,16 @@ func TestRunPendingCollectorsStartsDueCollectorsConcurrently(t *testing.T) {
 	t.Cleanup(func() {
 		close(release)
 		if hadOriginal {
-			collectorExecutorRegistry[collectorType] = original
+			collectorspkg.CollectorExecutorRegistry[collectorType] = original
 		} else {
-			delete(collectorExecutorRegistry, collectorType)
+			delete(collectorspkg.CollectorExecutorRegistry, collectorType)
 		}
 	})
 
-	store.statusByID["collector-a"] = hubcollector.Collector{ID: "collector-a", CollectorType: collectorType, Enabled: true}
-	store.statusByID["collector-b"] = hubcollector.Collector{ID: "collector-b", CollectorType: collectorType, Enabled: true}
+	store.StatusByID["collector-a"] = hubcollector.Collector{ID: "collector-a", CollectorType: collectorType, Enabled: true}
+	store.StatusByID["collector-b"] = hubcollector.Collector{ID: "collector-b", CollectorType: collectorType, Enabled: true}
 
-	if startedRuns := sut.runPendingCollectors(context.Background()); startedRuns != 2 {
+	if startedRuns := sut.CollectorsDeps().RunPendingCollectors(context.Background()); startedRuns != 2 {
 		t.Fatalf("runPendingCollectors() started %d runs, want 2", startedRuns)
 	}
 

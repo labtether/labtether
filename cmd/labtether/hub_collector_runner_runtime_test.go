@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,36 +9,18 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
-type fakeDockerDiscoverConnector struct {
-	assets []connectorsdk.Asset
-	err    error
-}
+// fakeDockerDiscoverConnector and recordingHubCollectorStore are testutil's,
+// shared with the collector runner tests in internal/hubapi/collectors.
+type fakeDockerDiscoverConnector = testutil.FakeDockerDiscoverConnector
 
-func (f *fakeDockerDiscoverConnector) ID() string { return hubcollector.CollectorTypeDocker }
+type recordingHubCollectorStore = testutil.RecordingHubCollectorStore
 
-func (f *fakeDockerDiscoverConnector) DisplayName() string { return "Docker Test Connector" }
-
-func (f *fakeDockerDiscoverConnector) Capabilities() connectorsdk.Capabilities {
-	return connectorsdk.Capabilities{DiscoverAssets: true}
-}
-
-func (f *fakeDockerDiscoverConnector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
-	return f.assets, f.err
-}
-
-func (f *fakeDockerDiscoverConnector) TestConnection(ctx context.Context) (connectorsdk.Health, error) {
-	return connectorsdk.Health{Status: "ok", Message: "test connector"}, nil
-}
-
-func (f *fakeDockerDiscoverConnector) Actions() []connectorsdk.ActionDescriptor {
-	return nil
-}
-
-func (f *fakeDockerDiscoverConnector) ExecuteAction(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-	return connectorsdk.ActionResult{Status: "succeeded", Message: "noop"}, nil
+func newRecordingHubCollectorStore() *recordingHubCollectorStore {
+	return testutil.NewRecordingHubCollectorStore()
 }
 
 type blockingDockerConnector struct {
@@ -77,63 +58,6 @@ func (b *blockingDockerConnector) ExecuteAction(ctx context.Context, actionID st
 	return connectorsdk.ActionResult{Status: "succeeded", Message: "noop"}, nil
 }
 
-type recordingHubCollectorStore struct {
-	mu         sync.Mutex
-	statusByID map[string]hubcollector.Collector
-}
-
-func newRecordingHubCollectorStore() *recordingHubCollectorStore {
-	return &recordingHubCollectorStore{
-		statusByID: make(map[string]hubcollector.Collector),
-	}
-}
-
-func (s *recordingHubCollectorStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
-	return hubcollector.Collector{}, fmt.Errorf("not implemented")
-}
-
-func (s *recordingHubCollectorStore) GetHubCollector(id string) (hubcollector.Collector, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	collector, ok := s.statusByID[id]
-	return collector, ok, nil
-}
-
-func (s *recordingHubCollectorStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcollector.Collector, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]hubcollector.Collector, 0, len(s.statusByID))
-	for _, collector := range s.statusByID {
-		if enabledOnly && !collector.Enabled {
-			continue
-		}
-		out = append(out, collector)
-	}
-	return out, nil
-}
-
-func (s *recordingHubCollectorStore) UpdateHubCollector(id string, req hubcollector.UpdateCollectorRequest) (hubcollector.Collector, error) {
-	return hubcollector.Collector{}, fmt.Errorf("not implemented")
-}
-
-func (s *recordingHubCollectorStore) DeleteHubCollector(id string) error {
-	return fmt.Errorf("not implemented")
-}
-
-func (s *recordingHubCollectorStore) UpdateHubCollectorStatus(id, status, lastError string, collectedAt time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	collector := s.statusByID[id]
-	collector.ID = id
-	collector.LastStatus = status
-	collector.LastError = lastError
-	collector.Enabled = true
-	collected := collectedAt.UTC()
-	collector.LastCollectedAt = &collected
-	s.statusByID[id] = collector
-	return nil
-}
-
 func TestCollectorRunGuardSingleFlight(t *testing.T) {
 	sut := newTestAPIServer(t)
 
@@ -154,7 +78,7 @@ func TestExecuteDockerCollectorEmptyDiscoveryIsOK(t *testing.T) {
 	store := newRecordingHubCollectorStore()
 	sut.hubCollectorStore = store
 	sut.connectorRegistry.Register(&fakeDockerDiscoverConnector{
-		assets: nil,
+		Assets: nil,
 	})
 
 	collector := hubcollector.Collector{
@@ -198,7 +122,7 @@ func TestExecuteDockerCollectorAddsCanonicalResourceMetadata(t *testing.T) {
 	store := newRecordingHubCollectorStore()
 	sut.hubCollectorStore = store
 	sut.connectorRegistry.Register(&fakeDockerDiscoverConnector{
-		assets: []connectorsdk.Asset{
+		Assets: []connectorsdk.Asset{
 			{
 				ID:     "docker-ct-agent-01-abc123",
 				Type:   "docker-container",
@@ -249,7 +173,7 @@ func TestExecuteDockerCollectorPrunesStaleDiscoveredAssets(t *testing.T) {
 	store := newRecordingHubCollectorStore()
 	sut.hubCollectorStore = store
 	sut.connectorRegistry.Register(&fakeDockerDiscoverConnector{
-		assets: []connectorsdk.Asset{
+		Assets: []connectorsdk.Asset{
 			{
 				ID:     "docker-ct-agent-01-keep123",
 				Type:   "docker-container",

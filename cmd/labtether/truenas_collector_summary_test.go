@@ -41,7 +41,7 @@ func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
 			"skip_verify":   true,
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
@@ -98,7 +98,7 @@ func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
 			"credential_id": "cred-truenas-status-success",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -159,7 +159,7 @@ func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T
 			"credential_id": "cred-truenas-summary-counts",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -216,7 +216,7 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
 			"credential_id": "cred-truenas-summary-zero-alerts",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -272,7 +272,7 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesNonZeroAlertCount(t *testing.T
 			"credential_id": "cred-truenas-summary-nonzero-alerts",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()

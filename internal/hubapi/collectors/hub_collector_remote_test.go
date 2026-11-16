@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"crypto/ed25519"
@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
@@ -27,7 +28,7 @@ func TestBuildCollectorSSHHostKeyCallbackAcceptsExpectedFingerprint(t *testing.T
 	publicKey := mustPublicKey(t)
 	expected := ssh.FingerprintSHA256(publicKey)
 
-	callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
+	callback, insecure, err := collectorspkg.BuildCollectorSSHHostKeyCallback(map[string]any{
 		"strict_host_key": true,
 		"host_key":        expected,
 	})
@@ -46,7 +47,7 @@ func TestBuildCollectorSSHHostKeyCallbackRejectsUnexpectedKey(t *testing.T) {
 	publicKey := mustPublicKey(t)
 	expected := ssh.FingerprintSHA256(publicKey)
 
-	callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
+	callback, insecure, err := collectorspkg.BuildCollectorSSHHostKeyCallback(map[string]any{
 		"strict_host_key": true,
 		"host_key":        expected,
 	})
@@ -65,7 +66,7 @@ func TestBuildCollectorSSHHostKeyCallbackRejectsUnexpectedKey(t *testing.T) {
 
 func TestBuildCollectorSSHHostKeyCallbackSupportsExplicitInsecureMode(t *testing.T) {
 	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "true")
-	callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
+	callback, insecure, err := collectorspkg.BuildCollectorSSHHostKeyCallback(map[string]any{
 		"strict_host_key": false,
 	})
 	if err != nil {
@@ -84,7 +85,7 @@ func TestBuildCollectorSSHHostKeyCallbackFailsClosedWithoutGlobalAcknowledgement
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SSH_KNOWN_HOSTS_PATH", "")
 	t.Setenv("SSH_KNOWN_HOSTS_PATHS", "")
-	if callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
+	if callback, insecure, err := collectorspkg.BuildCollectorSSHHostKeyCallback(map[string]any{
 		"strict_host_key": false,
 	}); err == nil || callback != nil || insecure {
 		t.Fatalf("expected fail-closed callback without global acknowledgement, callback=%v insecure=%v err=%v", callback, insecure, err)

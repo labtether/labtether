@@ -1,8 +1,10 @@
-package main
+package collectors_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 	"strings"
@@ -11,10 +13,10 @@ import (
 )
 
 func TestExecuteTrueNASCollectorMissingCredentialIDAndBaseURLErrorsIncludeLogs(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-log-1",
@@ -23,10 +25,10 @@ func TestExecuteTrueNASCollectorMissingCredentialIDAndBaseURLErrorsIncludeLogs(t
 		Enabled:       true,
 		Config:        map[string]any{},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
-	sut.executeTrueNASCollector(context.Background(), collector)
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -47,10 +49,10 @@ func TestExecuteTrueNASCollectorMissingCredentialIDAndBaseURLErrorsIncludeLogs(t
 }
 
 func TestExecuteTrueNASCollectorCredentialNotFoundLog(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-log-2",
@@ -62,10 +64,10 @@ func TestExecuteTrueNASCollectorCredentialNotFoundLog(t *testing.T) {
 			"credential_id": "missing",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
-	sut.executeTrueNASCollector(context.Background(), collector)
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -87,13 +89,13 @@ func TestExecuteTrueNASCollectorCredentialNotFoundLog(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorDecryptFailureLog(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	const badCipherID = "cred-truenas-log-bad"
-	_, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+	_, err := sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               badCipherID,
 		Name:             "bad cipher",
 		Kind:             credentials.KindTrueNASAPIKey,
@@ -117,10 +119,10 @@ func TestExecuteTrueNASCollectorDecryptFailureLog(t *testing.T) {
 			"credential_id": badCipherID,
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
-	sut.executeTrueNASCollector(context.Background(), collector)
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -142,10 +144,10 @@ func TestExecuteTrueNASCollectorDecryptFailureLog(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorBaseURLCredentialValidationMessages(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-log-6",
@@ -156,8 +158,8 @@ func TestExecuteTrueNASCollectorBaseURLCredentialValidationMessages(t *testing.T
 			"base_url": "",
 		},
 	}
-	store.statusByID[collector.ID] = collector
-	sut.executeTrueNASCollector(context.Background(), collector)
+	store.StatusByID[collector.ID] = collector
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
 	updated, _, _ := store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "error" {
 		t.Fatalf("expected error status for missing base_url")
@@ -168,8 +170,8 @@ func TestExecuteTrueNASCollectorBaseURLCredentialValidationMessages(t *testing.T
 
 	collector.ID = "collector-truenas-log-7"
 	collector.Config = map[string]any{"base_url": "https://tn.local"}
-	store.statusByID[collector.ID] = collector
-	sut.executeTrueNASCollector(context.Background(), collector)
+	store.StatusByID[collector.ID] = collector
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
 	updated, _, _ = store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "error" {
 		t.Fatalf("expected error status for missing credential_id")
@@ -180,10 +182,10 @@ func TestExecuteTrueNASCollectorBaseURLCredentialValidationMessages(t *testing.T
 }
 
 func TestExecuteTrueNASCollectorCredentialNotFoundAndDecryptStatus(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collectorMissing := hubcollector.Collector{
 		ID:            "collector-truenas-status-1",
@@ -195,15 +197,15 @@ func TestExecuteTrueNASCollectorCredentialNotFoundAndDecryptStatus(t *testing.T)
 			"credential_id": "missing",
 		},
 	}
-	store.statusByID[collectorMissing.ID] = collectorMissing
-	sut.executeTrueNASCollector(context.Background(), collectorMissing)
+	store.StatusByID[collectorMissing.ID] = collectorMissing
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collectorMissing)
 	updated, _, _ := store.GetHubCollector(collectorMissing.ID)
 	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "credential not found") {
 		t.Fatalf("unexpected missing credential status: %+v", updated)
 	}
 
 	const badCipherID = "cred-truenas-status-bad"
-	_, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+	_, err := sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               badCipherID,
 		Name:             "bad cipher",
 		Kind:             credentials.KindTrueNASAPIKey,
@@ -227,8 +229,8 @@ func TestExecuteTrueNASCollectorCredentialNotFoundAndDecryptStatus(t *testing.T)
 			"credential_id": badCipherID,
 		},
 	}
-	store.statusByID[collectorBadCipher.ID] = collectorBadCipher
-	sut.executeTrueNASCollector(context.Background(), collectorBadCipher)
+	store.StatusByID[collectorBadCipher.ID] = collectorBadCipher
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collectorBadCipher)
 	updated, _, _ = store.GetHubCollector(collectorBadCipher.ID)
 	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "failed to decrypt credential") {
 		t.Fatalf("unexpected decrypt status: %+v", updated)
@@ -236,10 +238,10 @@ func TestExecuteTrueNASCollectorCredentialNotFoundAndDecryptStatus(t *testing.T)
 }
 
 func TestExecuteTrueNASCollectorMissingCredentialIDStatus(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-status-missing-credential-id",
 		AssetID:       "truenas-cluster-status-missing-credential-id",
@@ -249,8 +251,8 @@ func TestExecuteTrueNASCollectorMissingCredentialIDStatus(t *testing.T) {
 			"base_url": "https://tn.local",
 		},
 	}
-	store.statusByID[collector.ID] = collector
-	sut.executeTrueNASCollector(context.Background(), collector)
+	store.StatusByID[collector.ID] = collector
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
 	updated, _, _ := store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "missing credential_id") {
 		t.Fatalf("unexpected missing credential_id status: %+v", updated)
@@ -258,10 +260,10 @@ func TestExecuteTrueNASCollectorMissingCredentialIDStatus(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorMissingBaseURLStatus(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-status-missing-base-url",
 		AssetID:       "truenas-cluster-status-missing-base-url",
@@ -271,8 +273,8 @@ func TestExecuteTrueNASCollectorMissingBaseURLStatus(t *testing.T) {
 			"credential_id": "cred",
 		},
 	}
-	store.statusByID[collector.ID] = collector
-	sut.executeTrueNASCollector(context.Background(), collector)
+	store.StatusByID[collector.ID] = collector
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
 	updated, _, _ := store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "missing base_url") {
 		t.Fatalf("unexpected missing base_url status: %+v", updated)
@@ -280,19 +282,19 @@ func TestExecuteTrueNASCollectorMissingBaseURLStatus(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorStatusErrorWhenCredentialStoreUnavailable(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	sut.credentialStore = nil
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	sut.CredentialStore = nil
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-cred-unavailable",
 		AssetID:       "truenas-cluster-cred-unavailable",
 		CollectorType: hubcollector.CollectorTypeTrueNAS,
 		Enabled:       true,
 	}
-	store.statusByID[collector.ID] = collector
-	sut.executeTrueNASCollector(context.Background(), collector)
+	store.StatusByID[collector.ID] = collector
+	sut.CollectorsDeps().ExecuteTrueNASCollector(context.Background(), collector)
 	updated, _, _ := store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "error" || !strings.Contains(updated.LastError, "credential store unavailable") {
 		t.Fatalf("unexpected credential store unavailable status: %+v", updated)

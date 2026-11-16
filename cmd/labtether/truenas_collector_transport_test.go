@@ -37,7 +37,7 @@ func TestExecuteTrueNASCollectorAlertIngestionNonFatal(t *testing.T) {
 			"credential_id": "cred-truenas-alert-nonfatal",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -78,7 +78,7 @@ func TestExecuteTrueNASCollectorUpdatesClusterAssetEvenOnAlertFailure(t *testing
 			"credential_id": "cred-truenas-cluster-refresh",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -123,7 +123,7 @@ func TestExecuteTrueNASCollectorAlertListMethodNotFoundNonFatal(t *testing.T) {
 			"credential_id": "cred-truenas-alert-method-not-found",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -165,7 +165,7 @@ func TestExecuteTrueNASCollectorConfigTimeoutParsing(t *testing.T) {
 			"timeout":       "5s",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -206,7 +206,7 @@ func TestExecuteTrueNASCollectorSuccessWithSkipVerifyDefaultFalse(t *testing.T) 
 			"credential_id": "cred-truenas-skipverify-default",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -248,7 +248,7 @@ func TestExecuteTrueNASCollectorUsesCollectorConfigTimeoutInt(t *testing.T) {
 			"timeout":       5,
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -290,7 +290,7 @@ func TestExecuteTrueNASCollectorSkipVerifyFalsePath(t *testing.T) {
 			"skip_verify":   false,
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -331,7 +331,7 @@ func TestExecuteTrueNASCollectorStatusOKWithAlertMethodNotFound(t *testing.T) {
 			"credential_id": "cred-truenas-method-not-found-ok",
 		},
 	}
-	store.statusByID[collector.ID] = collector
+	store.StatusByID[collector.ID] = collector
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
