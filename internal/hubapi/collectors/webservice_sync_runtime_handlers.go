@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
@@ -109,6 +110,10 @@ func (d *Deps) HandleWebServiceSync(w http.ResponseWriter, r *http.Request) {
 
 	msg := agentmgr.Message{Type: agentmgr.MsgWebServiceSync}
 	if targetHost != "" {
+		if conn, ok := d.AgentMgr.Get(targetHost); ok && !agentcaps.ConnOffers(conn, msg.Type) {
+			servicehttp.WriteAgentUnsupported(w)
+			return
+		}
 		if err := d.AgentMgr.SendToAgent(targetHost, msg); err != nil {
 			if !d.AgentMgr.IsConnected(targetHost) {
 				servicehttp.WriteError(w, http.StatusNotFound, "target host is not connected")
@@ -125,7 +130,13 @@ func (d *Deps) HandleWebServiceSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targets := d.AgentMgr.ConnectedAssets()
+	// Agents that did not advertise web service sync are left out.
+	targets := make([]string, 0)
+	for _, assetID := range d.AgentMgr.ConnectedAssets() {
+		if conn, ok := d.AgentMgr.Get(assetID); !ok || agentcaps.ConnOffers(conn, msg.Type) {
+			targets = append(targets, assetID)
+		}
+	}
 	if len(targets) == 0 {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "no connected agents")
 		return

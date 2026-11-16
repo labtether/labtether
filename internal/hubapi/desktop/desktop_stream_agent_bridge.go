@@ -115,6 +115,9 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		d.writeAgentNotConnected(w, session.Target)
 		return
 	}
+	if refuseUnadvertised(w, agentConn, agentmgr.MsgDesktopStart) {
+		return
+	}
 
 	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {

@@ -112,6 +112,9 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		http.Error(w, "agent not connected", http.StatusServiceUnavailable)
 		return
 	}
+	if refuseUnadvertised(w, agentConn, agentmgr.MsgWebRTCStart) {
+		return
+	}
 
 	upgrader := websocket.Upgrader{CheckOrigin: d.CheckSameOrigin}
 	browserWS, err := shared.UpgradeWebSocket(&upgrader, w, r, nil)

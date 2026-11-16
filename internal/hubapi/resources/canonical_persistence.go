@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/model"
@@ -55,6 +56,12 @@ func PersistCanonicalHeartbeat(
 
 	inferredCapabilityIDs := InferCapabilityIDsFromAssetMetadata(assetEntry)
 	mergedCapabilityIDs := MergeCapabilityIDs(existingCapabilityIDs, inferredCapabilityIDs)
+	if IsAgentSource(source) && agentcaps.Explicit(assetEntry.Metadata) {
+		// The stored set keeps every entry ever inferred. An explicit agent's
+		// set is only its latest advertisement, so a device that used to run
+		// the Go agent loses the old entries.
+		mergedCapabilityIDs = inferredCapabilityIDs
+	}
 	if len(inferredCapabilityIDs) > 0 {
 		if _, err := store.UpsertCapabilitySet(model.CapabilitySet{
 			SubjectType:  "resource",

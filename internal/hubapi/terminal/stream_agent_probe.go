@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 )
 
@@ -60,7 +61,7 @@ func (d *Deps) ProbeAgentTmux(agentConn *agentmgr.AgentConn) agentmgr.TerminalPr
 }
 
 func (d *Deps) StartAgentTmuxProbeAsync(agentConn *agentmgr.AgentConn) bool {
-	if agentConn == nil {
+	if agentConn == nil || !agentcaps.ConnOffers(agentConn, agentmgr.MsgTerminalProbe) {
 		return false
 	}
 

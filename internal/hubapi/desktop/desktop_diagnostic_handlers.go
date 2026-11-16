@@ -37,6 +37,9 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertised(w, agentConn, agentmgr.MsgDesktopDiagnose) {
+		return
+	}
 
 	requestID := d.GenerateRequestID()
 	result, err := agentmgr.Request(context.Background(), d.DiagnosticReplies, agentmgr.Call[agentmgr.DesktopDiagnosticRequest, agentmgr.DesktopDiagnosticData]{

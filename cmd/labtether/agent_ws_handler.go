@@ -171,6 +171,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	}
 
 	conn := agentmgr.NewAgentConn(wsConn, assetID, platform)
+	// Requests sent on connect, before the first heartbeat, follow the
+	// stored device's last advertisement.
+	s.recordStoredAgentAdvertisement(conn)
 	if agentTokenID != "" {
 		conn.SetMeta("auth.mode", "agent-token")
 		conn.SetMeta("auth.agent_token_id", agentTokenID)

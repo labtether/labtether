@@ -8,12 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -137,6 +140,9 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		case "asset_offline":
 			status = http.StatusConflict
 			errorCode = "asset_offline"
+		case apiv2.AgentUnsupportedCode:
+			status = http.StatusUnprocessableEntity
+			errorCode = apiv2.AgentUnsupportedCode
 		case "policy_denied":
 			status = http.StatusForbidden
 			errorCode = "policy_denied"
@@ -230,6 +236,9 @@ func (d *ExecDeps) ExecOnAsset(r *http.Request, assetID, command string, timeout
 			return ExecResult{AssetID: assetID, Error: "asset_not_found", Message: msg}
 		}
 		return ExecResult{AssetID: assetID, Error: "asset_offline", Message: msg}
+	}
+	if conn, ok := d.AgentMgr.Get(assetID); ok && !agentcaps.ConnOffers(conn, agentmgr.MsgCommandRequest) {
+		return ExecResult{AssetID: assetID, Error: apiv2.AgentUnsupportedCode, Message: servicehttp.AgentUnsupportedMessage}
 	}
 
 	start := time.Now()

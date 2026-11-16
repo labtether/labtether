@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -171,6 +172,9 @@ func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, a
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		return failed("agent not connected; no changes applied")
+	}
+	if !agentcaps.ConnOffers(agentConn, agentmgr.MsgPackageList) {
+		return failed(servicehttp.AgentUnsupportedMessage + "; no changes applied")
 	}
 	if timeout <= 0 {
 		timeout = packageRequestTimeout

@@ -83,3 +83,15 @@ func (p *AgentPeer) Next(t testing.TB) agentmgr.Message {
 	}
 	return agentmgr.Message{}
 }
+
+// Silent fails the test when the Hub sends the agent anything within wait.
+func (p *AgentPeer) Silent(t testing.TB, wait time.Duration) {
+	t.Helper()
+	select {
+	case msg, ok := <-p.sent:
+		if ok {
+			t.Fatalf("the Hub sent %s to the agent", msg.Type)
+		}
+	case <-time.After(wait):
+	}
+}

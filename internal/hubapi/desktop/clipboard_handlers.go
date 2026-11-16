@@ -60,6 +60,10 @@ func (d *Deps) HandleClipboardRoutes(w http.ResponseWriter, r *http.Request) {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	msgType := map[string]string{"get": agentmgr.MsgClipboardGet, "set": agentmgr.MsgClipboardSet}[action]
+	if conn, ok := d.AgentMgr.Get(assetID); ok && msgType != "" && refuseUnadvertised(w, conn, msgType) {
+		return
+	}
 
 	switch action {
 	case "get":

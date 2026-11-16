@@ -126,6 +126,9 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 	case errors.Is(err, ErrServiceAgentNotConnected):
 		d.writeAgentNotConnected(w, assetID)
 		return
+	case errors.Is(err, ErrServiceAgentUnsupported):
+		servicehttp.WriteAgentUnsupported(w)
+		return
 	case errors.Is(err, ErrServiceAgentTimeout):
 		servicehttp.WriteAgentTimeout(w)
 		return

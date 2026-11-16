@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/model"
@@ -144,7 +145,12 @@ func InferCapabilityIDsFromAssetMetadata(assetEntry assets.Asset) []string {
 	}
 
 	source := CanonicalProviderName(assetEntry.Source)
-	if IsAgentSource(source) {
+	if IsAgentSource(source) && agentcaps.Explicit(metadata) {
+		// An explicit agent gets only what it advertised.
+		for _, capabilityID := range agentcaps.CapabilityIDs(metadata) {
+			capabilitySet[capabilityID] = struct{}{}
+		}
+	} else if IsAgentSource(source) {
 		capabilitySet["terminal.open"] = struct{}{}
 		capabilitySet["process.list"] = struct{}{}
 		platform := strings.ToLower(strings.TrimSpace(canonicalFirstNonEmpty(assetEntry.Platform, metadata["platform"])))

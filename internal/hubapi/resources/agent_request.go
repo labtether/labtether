@@ -2,9 +2,11 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -65,6 +67,9 @@ func deliverAgentReply(p *AgentReplies, match agentmgr.Match, replyType string, 
 // assetID. The wait is read after the send, through agentReplyTimeout, and
 // ends when conn closes: a reply can only come back on it.
 func (d *Deps) requestAgent(p *AgentReplies, conn *agentmgr.AgentConn, msgType, requestID string, payload any, assetID string, defaultTimeout time.Duration) (agentmgr.Message, error) {
+	if err := agentcaps.Check(conn, msgType); err != nil {
+		return agentmgr.Message{}, err
+	}
 	return agentmgr.Request(context.Background(), p, agentmgr.Call[any, agentmgr.Message]{
 		Type:        msgType,
 		ID:          requestID,
@@ -86,10 +91,15 @@ func replyWait(wait time.Duration) time.Duration {
 }
 
 // writeAgentRequestFailure writes the answer for a request that got no reply:
-// 504 when the agent did not answer in time, otherwise "agent is not
-// connected" (the send failed or the connection closed during the wait;
-// nothing else can happen without a context or an admission limit).
+// 422 when the agent did not advertise it (nothing was sent), 504 when the
+// agent did not answer in time, otherwise "agent is not connected" (the send
+// failed or the connection closed during the wait; nothing else can happen
+// without a context or an admission limit).
 func (d *Deps) writeAgentRequestFailure(w http.ResponseWriter, assetID string, err error) {
+	if errors.Is(err, agentcaps.ErrUnsupported) {
+		servicehttp.WriteAgentUnsupported(w)
+		return
+	}
 	if agentmgr.RequestKind(err) == agentmgr.RequestTimedOut {
 		servicehttp.WriteAgentTimeout(w)
 		return

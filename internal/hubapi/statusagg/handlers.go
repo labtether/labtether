@@ -239,9 +239,10 @@ func (d *Deps) buildLiveResponseWithAssets(
 			AssetCount:      len(assetsFiltered),
 			StaleAssetCount: CountStaleAssets(assetsFiltered, now),
 		},
-		Endpoints:         endpoints,
-		Assets:            assetsFiltered,
-		TelemetryOverview: telemetryOverview,
+		Endpoints:           endpoints,
+		Assets:              assetsFiltered,
+		TelemetryOverview:   telemetryOverview,
+		AgentAdvertisements: agentAdvertisements(assetsFiltered),
 	}
 }
 
@@ -339,6 +340,7 @@ func (d *Deps) buildResponseWithAssets(
 		RecentCommands:      collections.recentCommands,
 		RecentAudit:         collections.recentAudit,
 		Canonical:           d.canonicalPayload(live.Assets),
+		AgentAdvertisements: live.AgentAdvertisements,
 	}
 }
 

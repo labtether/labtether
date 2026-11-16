@@ -59,6 +59,9 @@ func (d *Deps) handleAgentFileDownload(w http.ResponseWriter, r *http.Request, a
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertisedConn(w, agentConn, agentmgr.MsgFileRead) {
+		return
+	}
 
 	requestID := generateRequestID()
 

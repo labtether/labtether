@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assetstatus"
 	"github.com/labtether/labtether/internal/audit"
@@ -187,7 +188,7 @@ func startMDNSAdvertiser(ctx context.Context, port int) {
 
 func configureServerRuntime(ctx context.Context, srv *apiServer, registry *connectorsdk.Registry, secretsManager *secrets.Manager, pgStore *persistence.PostgresStore) {
 	// Docker coordinator — must be created after srv so agentMgr is available.
-	srv.dockerCoordinator = docker.NewCoordinator(srv.agentMgr)
+	srv.dockerCoordinator = docker.NewCoordinator(agentcaps.GatedSender{Manager: srv.agentMgr})
 	registry.Register(modelmap.WrapConnector(srv.dockerCoordinator))
 
 	// Web service coordinator — aggregates web service discovery reports from agents.

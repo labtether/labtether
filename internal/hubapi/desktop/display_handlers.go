@@ -71,6 +71,9 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+	if refuseUnadvertised(w, agentConn, agentmgr.MsgDesktopListDisplays) {
+		return
+	}
 
 	// Asked while the agent answers, so a Hub without the gateway adds no wait.
 	rdpGateway := make(chan bool, 1)

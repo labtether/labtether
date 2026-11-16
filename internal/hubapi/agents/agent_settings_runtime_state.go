@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/securityruntime"
@@ -28,7 +29,7 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 		return
 	}
 	conn, ok := d.AgentMgr.Get(assetID)
-	if !ok {
+	if !ok || !agentcaps.ConnOffers(conn, agentmgr.MsgAgentSettingsApply) {
 		return
 	}
 

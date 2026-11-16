@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -110,6 +111,9 @@ func (s *apiServer) validatePersistedHubSSHIdentity(identity *hubSSHIdentity) er
 func sendHubSSHKeyMessage(conn *agentmgr.AgentConn, messageType, publicKey string) error {
 	if conn == nil {
 		return fmt.Errorf("agent connection unavailable")
+	}
+	if err := agentcaps.Check(conn, messageType); err != nil {
+		return err
 	}
 	var payloads []any
 	switch messageType {

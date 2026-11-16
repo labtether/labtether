@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -29,6 +30,10 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		log.Printf("terminal-agent: stream_setup_failed reason=agent_disconnected %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
 		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		return
+	}
+	if !agentcaps.ConnOffers(agentConn, agentmgr.MsgTerminalStart) {
+		servicehttp.WriteAgentUnsupported(w)
 		return
 	}
 	if strings.TrimSpace(session.PersistentSessionID) != "" || strings.TrimSpace(session.TmuxSessionName) != "" {
