@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"errors"
 
 	"github.com/labtether/labtether/internal/agentcaps"
@@ -40,8 +39,8 @@ func (d *Deps) RunServiceAction(assetID, service, action string) (agentmgr.Servi
 	case err != nil:
 		return agentmgr.ServiceResultData{}, ErrServiceAgentNotConnected
 	}
-	var result agentmgr.ServiceResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil {
+	result, err := agentmgr.Decode[agentmgr.ServiceResultData](msg)
+	if err != nil {
 		return agentmgr.ServiceResultData{}, ErrServiceAgentBadAnswer
 	}
 	return result, nil

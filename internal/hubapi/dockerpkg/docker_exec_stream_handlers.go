@@ -81,7 +81,7 @@ func (d *Deps) HandleDockerExecTerminalStream(
 	defer detachPersistent()
 
 	cols, rows := d.ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
-	startData, _ := json.Marshal(agentmgr.DockerExecStartData{
+	startMsg, _ := agentmgr.NewMessage(agentmgr.MsgDockerExecStart, bridgeState.WireSessionID, agentmgr.DockerExecStartData{
 		SessionID:   bridgeState.WireSessionID,
 		ContainerID: containerID,
 		Command:     DockerExecCommandFromQuery(r.URL.Query().Get("shell")),
@@ -91,11 +91,7 @@ func (d *Deps) HandleDockerExecTerminalStream(
 	})
 	var startErr error
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		startErr = d.startDockerExecStream(bridgeState, agentmgr.Message{
-			Type: agentmgr.MsgDockerExecStart,
-			ID:   bridgeState.WireSessionID,
-			Data: startData,
-		})
+		startErr = d.startDockerExecStream(bridgeState, startMsg)
 	}) {
 		return
 	}
@@ -179,16 +175,12 @@ func (d *Deps) bridgeDockerExecInput(
 			if json.Unmarshal(payload, &msg) == nil {
 				switch msg.Type {
 				case "resize":
-					resizeData, _ := json.Marshal(agentmgr.DockerExecResizeData{
+					resize, _ := agentmgr.NewMessage(agentmgr.MsgDockerExecResize, sessionID, agentmgr.DockerExecResizeData{
 						SessionID: sessionID,
 						Cols:      msg.Cols,
 						Rows:      msg.Rows,
 					})
-					_ = agentConn.Send(agentmgr.Message{
-						Type: agentmgr.MsgDockerExecResize,
-						ID:   sessionID,
-						Data: resizeData,
-					})
+					_ = agentConn.Send(resize)
 					continue
 				case "ping":
 					continue
@@ -199,15 +191,11 @@ func (d *Deps) bridgeDockerExecInput(
 		}
 
 		encoded := base64.StdEncoding.EncodeToString(payload)
-		inputData, _ := json.Marshal(agentmgr.DockerExecInputData{
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgDockerExecInput, sessionID, agentmgr.DockerExecInputData{
 			SessionID: sessionID,
 			Data:      encoded,
 		})
-		_ = agentConn.Send(agentmgr.Message{
-			Type: agentmgr.MsgDockerExecInput,
-			ID:   sessionID,
-			Data: inputData,
-		})
+		_ = agentConn.Send(msg)
 	}
 }
 

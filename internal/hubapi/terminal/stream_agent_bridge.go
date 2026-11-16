@@ -158,14 +158,10 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 		return
 	default:
 	}
-	startData, _ := json.Marshal(startReq)
+	startMsg, _ := agentmgr.NewMessage(agentmgr.MsgTerminalStart, wireSessionID, startReq)
 	var startErr error
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		startErr = d.startAgentTerminalStream(bridgeState, persistentSessionID, wsConn, agentmgr.Message{
-			Type: agentmgr.MsgTerminalStart,
-			ID:   wireSessionID,
-			Data: startData,
-		})
+		startErr = d.startAgentTerminalStream(bridgeState, persistentSessionID, wsConn, startMsg)
 	}) {
 		endReason = "session_request_cancelled"
 		return
@@ -307,16 +303,12 @@ func (d *Deps) BridgeAgentInput(wsConn *websocket.Conn, agentConn *agentmgr.Agen
 			if json.Unmarshal(payload, &msg) == nil {
 				switch strings.ToLower(msg.Type) {
 				case "resize":
-					resizeData, _ := json.Marshal(agentmgr.TerminalResizeData{
+					resize, _ := agentmgr.NewMessage(agentmgr.MsgTerminalResize, sessionID, agentmgr.TerminalResizeData{
 						SessionID: sessionID,
 						Cols:      msg.Cols,
 						Rows:      msg.Rows,
 					})
-					if err := agentConn.Send(agentmgr.Message{
-						Type: agentmgr.MsgTerminalResize,
-						ID:   sessionID,
-						Data: resizeData,
-					}); err != nil {
+					if err := agentConn.Send(resize); err != nil {
 						return "agent_resize_send_failed", err
 					}
 					continue
@@ -330,15 +322,11 @@ func (d *Deps) BridgeAgentInput(wsConn *websocket.Conn, agentConn *agentmgr.Agen
 
 		// Send terminal input to agent.
 		encoded := base64.StdEncoding.EncodeToString(payload)
-		inputData, _ := json.Marshal(agentmgr.TerminalDataPayload{
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgTerminalData, sessionID, agentmgr.TerminalDataPayload{
 			SessionID: sessionID,
 			Data:      encoded,
 		})
-		if err := agentConn.Send(agentmgr.Message{
-			Type: agentmgr.MsgTerminalData,
-			ID:   sessionID,
-			Data: inputData,
-		}); err != nil {
+		if err := agentConn.Send(msg); err != nil {
 			return "agent_data_send_failed", err
 		}
 	}

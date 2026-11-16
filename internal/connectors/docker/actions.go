@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -137,7 +136,7 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 		ImageRef:    req.Params["image"],
 		Params:      req.Params,
 	}
-	data, err := json.Marshal(actionData)
+	msg, err := agentmgr.NewMessage(agentmgr.MsgDockerAction, requestID, actionData)
 	if err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: "failed to encode action payload: " + err.Error()}, nil
 	}
@@ -158,11 +157,7 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 		c.pendingMu.Unlock()
 	}()
 
-	if err := c.agentMgr.SendToAgent(agentID, agentmgr.Message{
-		Type: agentmgr.MsgDockerAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := c.agentMgr.SendToAgent(agentID, msg); err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: "failed to send to agent: " + err.Error()}, nil
 	}
 
@@ -254,7 +249,7 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 		EndpointID:  endpointID,
 		ComposeYAML: req.Params["compose_yaml"],
 	}
-	data, err := json.Marshal(composeData)
+	msg, err := agentmgr.NewMessage(agentmgr.MsgDockerComposeActionV2, requestID, composeData)
 	if err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: "failed to encode compose payload: " + err.Error()}, nil
 	}
@@ -273,11 +268,7 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 		c.pendingMu.Unlock()
 	}()
 
-	if err := c.agentMgr.SendToAgent(agentID, agentmgr.Message{
-		Type: agentmgr.MsgDockerComposeActionV2,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := c.agentMgr.SendToAgent(agentID, msg); err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: "failed to send to agent: " + err.Error()}, nil
 	}
 

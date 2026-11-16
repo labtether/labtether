@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -81,8 +80,8 @@ func (d *Deps) handleServiceList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.ServiceListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.ServiceListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -146,8 +145,8 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 }
 
 func (d *Deps) ProcessAgentServiceListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ServiceListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ServiceListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid service listed data: %v", err)
 		return
 	}
@@ -155,8 +154,8 @@ func (d *Deps) ProcessAgentServiceListed(conn *agentmgr.AgentConn, msg agentmgr.
 }
 
 func (d *Deps) ProcessAgentServiceResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ServiceResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ServiceResultData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid service result data: %v", err)
 		return
 	}

@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"log"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -30,14 +29,11 @@ func (d *Deps) SendConfigUpdate(conn *agentmgr.AgentConn) {
 		}
 	}
 
-	data, _ := json.Marshal(agentmgr.ConfigUpdateData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgConfigUpdate, "", agentmgr.ConfigUpdateData{
 		CollectIntervalSec:   &collectValue,
 		HeartbeatIntervalSec: &heartbeatValue,
 	})
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgConfigUpdate,
-		Data: data,
-	}); err != nil {
+	if err := conn.Send(msg); err != nil {
 		log.Printf("agentws: failed to send config.update to %s: %v", conn.AssetID, err)
 	}
 }
@@ -59,8 +55,8 @@ func ParseIntSafe(s string) int {
 
 // processAgentConfigApplied handles the confirmation that the agent applied config.
 func (d *Deps) ProcessAgentConfigApplied(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ConfigAppliedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ConfigAppliedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid config.applied from %s: %v", conn.AssetID, err)
 		return
 	}

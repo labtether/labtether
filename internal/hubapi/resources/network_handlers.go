@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -79,8 +78,8 @@ func (d *Deps) handleNetworkList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.NetworkListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.NetworkListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -128,8 +127,8 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var result agentmgr.NetworkResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil {
+	result, err := agentmgr.Decode[agentmgr.NetworkResultData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -141,8 +140,8 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 }
 
 func (d *Deps) ProcessAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.NetworkListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.NetworkListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid network listed data: %v", err)
 		return
 	}
@@ -150,8 +149,8 @@ func (d *Deps) ProcessAgentNetworkListed(conn *agentmgr.AgentConn, msg agentmgr.
 }
 
 func (d *Deps) ProcessAgentNetworkResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.NetworkResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.NetworkResultData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid network result data: %v", err)
 		return
 	}

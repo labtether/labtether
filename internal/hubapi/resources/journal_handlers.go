@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -53,8 +52,8 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.JournalEntriesData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.JournalEntriesData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -70,8 +69,8 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) ProcessAgentJournalEntries(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.JournalEntriesData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.JournalEntriesData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid journal entries data: %v", err)
 		return
 	}

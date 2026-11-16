@@ -1,7 +1,6 @@
 package desktop
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -108,8 +107,8 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 		}
 		return
 	}
-	var payload agentmgr.ClipboardDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.ClipboardDataPayload](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -147,8 +146,8 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 		}
 		return
 	}
-	var ack agentmgr.ClipboardSetAckData
-	if err := json.Unmarshal(msg.Data, &ack); err != nil {
+	ack, err := agentmgr.Decode[agentmgr.ClipboardSetAckData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -161,8 +160,8 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 
 // ProcessAgentClipboardData handles clipboard.data from agent.
 func (d *Deps) ProcessAgentClipboardData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ClipboardDataPayload
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ClipboardDataPayload](msg)
+	if err != nil {
 		return
 	}
 	d.deliverClipboardResponse(agentmgr.MsgClipboardData, data.RequestID, conn, msg)
@@ -170,8 +169,8 @@ func (d *Deps) ProcessAgentClipboardData(conn *agentmgr.AgentConn, msg agentmgr.
 
 // ProcessAgentClipboardSetAck handles clipboard.set_ack from agent.
 func (d *Deps) ProcessAgentClipboardSetAck(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ClipboardSetAckData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ClipboardSetAckData](msg)
+	if err != nil {
 		return
 	}
 	d.deliverClipboardResponse(agentmgr.MsgClipboardSetAck, data.RequestID, conn, msg)

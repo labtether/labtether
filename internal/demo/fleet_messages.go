@@ -1,7 +1,6 @@
 package demo
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -49,12 +48,12 @@ func (h Host) Messages(now time.Time, agentVersion string, inventory bool) []age
 }
 
 func message(kind string, payload any) agentmgr.Message {
-	data, err := json.Marshal(payload)
+	msg, err := agentmgr.NewMessage(kind, "", payload)
 	if err != nil {
 		// Every payload is a plain struct of strings and numbers.
 		panic(fmt.Sprintf("demo: encode %s: %v", kind, err))
 	}
-	return agentmgr.Message{Type: kind, Data: data}
+	return msg
 }
 
 func (h Host) heartbeat(cpu, memory, disk, rx, tx float64, agentVersion string) agentmgr.HeartbeatData {

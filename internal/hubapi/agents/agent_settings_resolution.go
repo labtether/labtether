@@ -3,7 +3,6 @@ package agents
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -396,7 +395,7 @@ func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
 	}
 	jobID := "auto-update-" + hex.EncodeToString(idBytes[:])
 
-	data, err := json.Marshal(agentmgr.UpdateRequestData{
+	msg, err := agentmgr.NewMessage(agentmgr.MsgUpdateRequest, jobID, agentmgr.UpdateRequestData{
 		JobID: jobID,
 		Mode:  "self",
 	})
@@ -404,11 +403,7 @@ func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
 		return
 	}
 	finishProgress := d.trackAgentUpdate(jobID, conn, 30*time.Minute)
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgUpdateRequest,
-		ID:   jobID,
-		Data: data,
-	}); err != nil {
+	if err := conn.Send(msg); err != nil {
 		finishProgress()
 		log.Printf("agentws: failed to push update request to %s: %v", conn.AssetID, err)
 	} else {

@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/labtether/labtether/internal/agentcaps"
@@ -29,12 +28,12 @@ func (d *Deps) spoolAgentTransferSource(ctx context.Context, assetID, sourcePath
 		d.FileBridges.Delete(requestID)
 	}
 
-	data, err := json.Marshal(agentmgr.FileReadData{RequestID: requestID, Path: sourcePath})
+	msg, err := agentmgr.NewMessage(agentmgr.MsgFileRead, requestID, agentmgr.FileReadData{RequestID: requestID, Path: sourcePath})
 	if err != nil {
 		cleanupBridge()
 		return nil, 0, nil, err
 	}
-	if err := agentConn.Send(agentmgr.Message{Type: agentmgr.MsgFileRead, ID: requestID, Data: data}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		cleanupBridge()
 		return nil, 0, nil, fmt.Errorf("send file read request: %w", err)
 	}
@@ -91,8 +90,8 @@ func receiveAgentTransferChunk(ctx context.Context, bridge *FileBridge) (agentmg
 	case <-ctx.Done():
 		return agentmgr.FileDataPayload{}, ctx.Err()
 	case msg := <-bridge.Ch:
-		var chunk agentmgr.FileDataPayload
-		if err := json.Unmarshal(msg.Data, &chunk); err != nil {
+		chunk, err := agentmgr.Decode[agentmgr.FileDataPayload](msg)
+		if err != nil {
 			return agentmgr.FileDataPayload{}, errFileDownloadInvalidAgentResponse
 		}
 		return chunk, nil
@@ -139,8 +138,8 @@ func (d *Deps) writeAgentTransferDestination(
 		}
 		select {
 		case msg := <-bridge.Ch:
-			var result agentmgr.FileWrittenData
-			if err := json.Unmarshal(msg.Data, &result); err != nil {
+			result, err := agentmgr.Decode[agentmgr.FileWrittenData](msg)
+			if err != nil {
 				return UploadAgentResponseError{err: err}
 			}
 			if result.Error != "" {
@@ -149,11 +148,11 @@ func (d *Deps) writeAgentTransferDestination(
 			return UploadAgentWriteError{message: "destination agent completed upload before source reached EOF"}
 		default:
 		}
-		data, marshalErr := json.Marshal(payload)
+		msg, marshalErr := agentmgr.NewMessage(agentmgr.MsgFileWrite, requestID, payload)
 		if marshalErr != nil {
 			return marshalErr
 		}
-		return agentConn.Send(agentmgr.Message{Type: agentmgr.MsgFileWrite, ID: requestID, Data: data})
+		return agentConn.Send(msg)
 	})
 	if err != nil {
 		return sent, err
@@ -168,8 +167,8 @@ func (d *Deps) writeAgentTransferDestination(
 	case <-ctx.Done():
 		return sent, ctx.Err()
 	case msg := <-bridge.Ch:
-		var result agentmgr.FileWrittenData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
+		result, err := agentmgr.Decode[agentmgr.FileWrittenData](msg)
+		if err != nil {
 			return sent, errFileDownloadInvalidAgentResponse
 		}
 		if result.Error != "" {

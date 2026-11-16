@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"log"
 	"net"
 	"strings"
@@ -25,13 +24,10 @@ func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	if identity == nil || !agentcaps.ConnOffers(conn, agentmgr.MsgSSHKeyInstall) {
 		return
 	}
-	data, _ := json.Marshal(agentmgr.SSHKeyInstallData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgSSHKeyInstall, "", agentmgr.SSHKeyInstallData{
 		PublicKey: shared.HubAuthorizedKeyLine(identity.PublicKey),
 	})
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgSSHKeyInstall,
-		Data: data,
-	}); err != nil {
+	if err := conn.Send(msg); err != nil {
 		log.Printf("agentws: failed to send ssh_key.install to %s: %v", conn.AssetID, err)
 	}
 }
@@ -48,11 +44,8 @@ func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 		return err
 	}
 	for _, line := range shared.HubAuthorizedKeyRemovals(identity.PublicKey) {
-		data, _ := json.Marshal(agentmgr.SSHKeyRemoveData{PublicKey: line})
-		if err := conn.Send(agentmgr.Message{
-			Type: agentmgr.MsgSSHKeyRemove,
-			Data: data,
-		}); err != nil {
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgSSHKeyRemove, "", agentmgr.SSHKeyRemoveData{PublicKey: line})
+		if err := conn.Send(msg); err != nil {
 			log.Printf("agentws: failed to send ssh_key.remove to %s: %v", conn.AssetID, err)
 			return err
 		}
@@ -62,8 +55,8 @@ func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 
 // processAgentSSHKeyInstalled handles the confirmation that the agent installed the hub's SSH key.
 func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.SSHKeyInstalledData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.SSHKeyInstalledData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid ssh_key.installed from %s: %v", conn.AssetID, err)
 		return
 	}

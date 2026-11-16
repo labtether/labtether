@@ -44,12 +44,8 @@ func SendDesktopClose(agentConn *agentmgr.AgentConn, sessionID string) {
 	if agentConn == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	closeData, _ := json.Marshal(agentmgr.DesktopCloseData{SessionID: sessionID})
-	_ = agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDesktopClose,
-		ID:   sessionID,
-		Data: closeData,
-	})
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgDesktopClose, sessionID, agentmgr.DesktopCloseData{SessionID: sessionID})
+	_ = agentConn.Send(msg)
 }
 
 // FinalizeAgentDesktopSession cleans up a desktop bridge after the session ends.
@@ -191,7 +187,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Send desktop.start to agent.
-	startData, _ := json.Marshal(agentmgr.DesktopStartData{
+	startMsg, _ := agentmgr.NewMessage(agentmgr.MsgDesktopStart, bridgeState.WireSessionID, agentmgr.DesktopStartData{
 		SessionID:   bridgeState.WireSessionID,
 		Quality:     quality,
 		Display:     display,
@@ -199,11 +195,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 	})
 	var startErr error
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		startErr = bridgeState.start(agentmgr.Message{
-			Type: agentmgr.MsgDesktopStart,
-			ID:   bridgeState.WireSessionID,
-			Data: startData,
-		})
+		startErr = bridgeState.start(startMsg)
 	}) {
 		endReason = "session_request_cancelled"
 		return
@@ -419,15 +411,11 @@ func (d *Deps) BridgeDesktopInput(wsConn *websocket.Conn, agentConn *agentmgr.Ag
 		}
 		// Send VNC input to agent as base64-encoded data.
 		encoded := base64.StdEncoding.EncodeToString(payload)
-		inputData, _ := json.Marshal(agentmgr.DesktopDataPayload{
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgDesktopData, sessionID, agentmgr.DesktopDataPayload{
 			SessionID: sessionID,
 			Data:      encoded,
 		})
-		if err := agentConn.Send(agentmgr.Message{
-			Type: agentmgr.MsgDesktopData,
-			ID:   sessionID,
-			Data: inputData,
-		}); err != nil {
+		if err := agentConn.Send(msg); err != nil {
 			log.Printf("desktop: failed to send input to agent for %s: %v", sessionID, err)
 			return "agent_input_send_failed", err
 		}
@@ -436,8 +424,8 @@ func (d *Deps) BridgeDesktopInput(wsConn *websocket.Conn, agentConn *agentmgr.Ag
 
 // ProcessAgentDesktopStarted handles desktop.started from agent.
 func (d *Deps) ProcessAgentDesktopStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DesktopStartedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DesktopStartedData](msg)
+	if err != nil {
 		return
 	}
 
@@ -456,8 +444,8 @@ func (d *Deps) ProcessAgentDesktopStarted(conn *agentmgr.AgentConn, msg agentmgr
 
 // ProcessAgentDesktopData handles desktop.data (VNC output) from agent.
 func (d *Deps) ProcessAgentDesktopData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.DesktopDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+	payload, err := agentmgr.Decode[agentmgr.DesktopDataPayload](msg)
+	if err != nil {
 		return
 	}
 
@@ -484,8 +472,8 @@ func (d *Deps) ProcessAgentDesktopData(conn *agentmgr.AgentConn, msg agentmgr.Me
 
 // ProcessAgentDesktopClosed handles desktop.closed from agent.
 func (d *Deps) ProcessAgentDesktopClosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DesktopCloseData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DesktopCloseData](msg)
+	if err != nil {
 		return
 	}
 

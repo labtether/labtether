@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -53,8 +52,8 @@ func (d *Deps) ProcessAgentHeartbeatInLifecycle(conn *agentmgr.AgentConn, msg ag
 		securityruntime.Logf("agentws: rejected oversized heartbeat from %s (%d bytes)", conn.AssetID, len(msg.Data))
 		return
 	}
-	var data agentmgr.HeartbeatData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.HeartbeatData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid heartbeat data from %s: %v", conn.AssetID, err)
 		return
 	}
@@ -194,8 +193,8 @@ func (d *Deps) ProcessAgentTelemetry(conn *agentmgr.AgentConn, msg agentmgr.Mess
 		return
 	}
 
-	var data agentmgr.TelemetryData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.TelemetryData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid telemetry data from %s: %v", conn.AssetID, err)
 		return
 	}
@@ -221,8 +220,8 @@ func (d *Deps) ProcessAgentTelemetry(conn *agentmgr.AgentConn, msg agentmgr.Mess
 }
 
 func (d *Deps) ProcessAgentCommandResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.CommandResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.CommandResultData](msg)
+	if err != nil {
 		assetID := ""
 		if conn != nil {
 			assetID = conn.AssetID
@@ -243,8 +242,8 @@ func (d *Deps) ProcessAgentLogStream(conn *agentmgr.AgentConn, msg agentmgr.Mess
 		securityruntime.Logf("agentws: rejected oversized log stream from %s (%d bytes)", assetID, len(msg.Data))
 		return
 	}
-	var data agentmgr.LogStreamData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.LogStreamData](msg)
+	if err != nil {
 		securityruntime.Logf("agentws: invalid log stream from %s: %v", assetID, err)
 		return
 	}
@@ -270,8 +269,8 @@ func (d *Deps) ProcessAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Messa
 		securityruntime.Logf("agentws: rejected oversized log batch from %s (%d bytes)", assetID, len(msg.Data))
 		return
 	}
-	var data agentmgr.LogBatchData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.LogBatchData](msg)
+	if err != nil {
 		securityruntime.Logf("agentws: invalid log batch from %s: %v", assetID, err)
 		return
 	}
@@ -310,8 +309,8 @@ func (d *Deps) ProcessAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Messa
 }
 
 func (d *Deps) ProcessAgentUpdateProgress(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.UpdateProgressData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.UpdateProgressData](msg)
+	if err != nil {
 		return
 	}
 	if !d.acceptsAgentUpdate(conn, data.JobID) {
@@ -321,8 +320,8 @@ func (d *Deps) ProcessAgentUpdateProgress(conn *agentmgr.AgentConn, msg agentmgr
 }
 
 func (d *Deps) ProcessAgentUpdateResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.UpdateResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.UpdateResultData](msg)
+	if err != nil {
 		return
 	}
 	d.finishAgentUpdate(conn, data.JobID)

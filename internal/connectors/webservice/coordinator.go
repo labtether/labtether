@@ -1,7 +1,6 @@
 package webservice
 
 import (
-	"encoding/json"
 	"errors"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/persistence"
@@ -77,8 +76,8 @@ func (c *Coordinator) HandleReport(agentID string, msg agentmgr.Message) {
 	if agentID == "" {
 		return
 	}
-	var data agentmgr.WebServiceReportData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.WebServiceReportData](msg)
+	if err != nil {
 		log.Printf("webservice-coordinator: invalid report from %s: %v", agentID, err)
 		return
 	}

@@ -96,8 +96,8 @@ func (d *Deps) ProcessAgentDockerEndpointTestResult(conn *agentmgr.AgentConn, ms
 	if d == nil || conn == nil || len(msg.Data) > maxDockerEndpointTestResultBytes {
 		return
 	}
-	var result agentmgr.DockerEndpointTestResultData
-	if err := agentmgr.DecodeData(msg.Data, &result, agentmgr.DecodeLenient); err != nil || result.Validate() != nil {
+	result, err := agentmgr.Decode[agentmgr.DockerEndpointTestResultData](msg)
+	if err != nil || result.Validate() != nil {
 		return
 	}
 	d.DockerEndpointTestBridges.Deliver(dockerEndpointTestMatch, agentmgr.Reply[agentmgr.DockerEndpointTestResultData]{
