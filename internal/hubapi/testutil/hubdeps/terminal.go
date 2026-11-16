@@ -11,7 +11,6 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
-	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -20,7 +19,6 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/protocols"
-	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -31,11 +29,15 @@ const (
 	maxModeLength    = 32
 )
 
+// MaxTargetLength is cmd's maxTargetLength, the target and title limit the
+// desktop and terminal Deps here enforce, for tests that send one byte more.
+const MaxTargetLength = maxTargetLength
+
 // BuildTerminalDeps mirrors cmd's buildTerminalDeps field by field. Stand-ins
 // replace only cmd's middleware (route auth, rate limit, stream tickets and
 // the WebSocket origin check); see testutil/standins.go for what each one
-// still refuses. Like cmd's test server, the Hub has no database and no
-// Docker coordinator, so no target resolves to a container.
+// still refuses. Like cmd's test server, the Hub has no database, and no
+// Docker coordinator until a test sets one.
 func (h *Hub) BuildTerminalDeps() *terminalpkg.Deps {
 	if h.EphemeralSSHConfigs == nil {
 		h.EphemeralSSHConfigs = terminalpkg.NewEphemeralSSHConfigStore(0)
@@ -82,8 +84,12 @@ func (h *Hub) BuildTerminalDeps() *terminalpkg.Deps {
 		},
 		EvaluateAssetGuardrails: h.GroupFeaturesDeps().EvaluateAssetGuardrails,
 
-		ResolveDockerExecSessionTarget: (&dockerpkg.Deps{}).ResolveDockerExecSessionTarget,
-		HandleDockerExecTerminalStream: dockerExecNotWired(h.t),
+		ResolveDockerExecSessionTarget: func(target string) (string, string, bool) {
+			return h.DockerDeps().ResolveDockerExecSessionTarget(target)
+		},
+		HandleDockerExecTerminalStream: func(w http.ResponseWriter, r *http.Request, session terminal.Session, agentID, containerID string) {
+			h.DockerDeps().HandleDockerExecTerminalStream(w, r, session, agentID, containerID)
+		},
 		ResolveProxmoxSessionTarget: func(assetID string) (terminalpkg.ProxmoxSessionTarget, bool, error) {
 			target, ok, err := h.ProxmoxDeps().ResolveProxmoxSessionTarget(assetID)
 			return target, ok, err
@@ -158,15 +164,5 @@ func hubSSHKeyNotTested(t *testing.T) func(string) bool {
 	return func(string) bool {
 		t.Errorf("a request reached the Hub SSH key stand-in; that check is tested in cmd/labtether")
 		return false
-	}
-}
-
-// dockerExecNotWired stands in for the Docker package's exec stream, which
-// has no builder here yet. No target resolves to a container without a
-// Docker coordinator, so a request that reaches it fails the test.
-func dockerExecNotWired(t *testing.T) func(http.ResponseWriter, *http.Request, terminal.Session, string, string) {
-	return func(w http.ResponseWriter, _ *http.Request, _ terminal.Session, _, _ string) {
-		t.Errorf("a stream reached the Docker exec stand-in; Docker is not wired in hubdeps yet")
-		servicehttp.WriteError(w, http.StatusInternalServerError, "docker exec is not wired in package tests")
 	}
 }

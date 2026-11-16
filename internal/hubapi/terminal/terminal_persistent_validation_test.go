@@ -1,4 +1,4 @@
-package main
+package terminal_test
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -20,7 +21,7 @@ func TestPersistentSessionCreateRejectsOversizedTargetAndTitle(t *testing.T) {
 		{
 			name: "target",
 			payload: map[string]string{
-				"target": strings.Repeat("a", maxTargetLength+1),
+				"target": strings.Repeat("a", hubdeps.MaxTargetLength+1),
 				"title":  "Shell",
 			},
 		},
@@ -28,14 +29,14 @@ func TestPersistentSessionCreateRejectsOversizedTargetAndTitle(t *testing.T) {
 			name: "title",
 			payload: map[string]string{
 				"target": "lab-host-01",
-				"title":  strings.Repeat("a", maxTargetLength+1),
+				"title":  strings.Repeat("a", hubdeps.MaxTargetLength+1),
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			sut := newTestAPIServer(t)
+			sut := hubdeps.New(t)
 			body, err := json.Marshal(test.payload)
 			if err != nil {
 				t.Fatal(err)
@@ -44,7 +45,7 @@ func TestPersistentSessionCreateRejectsOversizedTargetAndTitle(t *testing.T) {
 			request = request.WithContext(apiv2.ContextWithUserID(request.Context(), "actor-a"))
 			recorder := httptest.NewRecorder()
 
-			sut.handlePersistentSessions(recorder, request)
+			sut.TerminalDeps().HandlePersistentSessions(recorder, request)
 
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
@@ -54,7 +55,7 @@ func TestPersistentSessionCreateRejectsOversizedTargetAndTitle(t *testing.T) {
 }
 
 func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createRequest := httptest.NewRequest(
 		http.MethodPost,
 		"/terminal/persistent-sessions",
@@ -62,7 +63,7 @@ func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
 	)
 	createRequest = createRequest.WithContext(apiv2.ContextWithUserID(createRequest.Context(), "actor-a"))
 	createRecorder := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRecorder, createRequest)
+	sut.TerminalDeps().HandlePersistentSessions(createRecorder, createRequest)
 	if createRecorder.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body=%s", createRecorder.Code, http.StatusCreated, createRecorder.Body.String())
 	}
@@ -73,7 +74,7 @@ func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
 	if err := json.Unmarshal(createRecorder.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	updateBody, err := json.Marshal(map[string]string{"title": strings.Repeat("a", maxTargetLength+1)})
+	updateBody, err := json.Marshal(map[string]string{"title": strings.Repeat("a", hubdeps.MaxTargetLength+1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestPersistentSessionUpdateRejectsOversizedTitle(t *testing.T) {
 	updateRequest = updateRequest.WithContext(apiv2.ContextWithUserID(updateRequest.Context(), "actor-a"))
 	updateRecorder := httptest.NewRecorder()
 
-	sut.handlePersistentSessionActions(updateRecorder, updateRequest)
+	sut.TerminalDeps().HandlePersistentSessionActions(updateRecorder, updateRequest)
 
 	if updateRecorder.Code != http.StatusBadRequest {
 		t.Fatalf("update status = %d, want %d; body=%s", updateRecorder.Code, http.StatusBadRequest, updateRecorder.Body.String())

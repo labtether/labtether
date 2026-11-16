@@ -1,4 +1,4 @@
-package main
+package dockerpkg_test
 
 import (
 	"encoding/json"
@@ -19,11 +19,11 @@ func makeDockerDiscovery(data agentmgr.DockerDiscoveryData) agentmgr.Message {
 
 func TestHandleDockerHostsEmpty(t *testing.T) {
 	coord := docker.NewCoordinator(nil)
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts", nil)
 	w := httptest.NewRecorder()
-	srv.handleDockerHosts(w, req)
+	srv.DockerDeps().HandleDockerHosts(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -47,11 +47,11 @@ func TestHandleDockerHostsEmpty(t *testing.T) {
 }
 
 func TestHandleDockerHostsNilCoordinator(t *testing.T) {
-	srv := &apiServer{dockerCoordinator: nil}
+	srv := newDockerHub(t, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts", nil)
 	w := httptest.NewRecorder()
-	srv.handleDockerHosts(w, req)
+	srv.DockerDeps().HandleDockerHosts(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -75,11 +75,11 @@ func TestHandleDockerHostsNilCoordinator(t *testing.T) {
 
 func TestHandleDockerHostsMethodNotAllowed(t *testing.T) {
 	coord := docker.NewCoordinator(nil)
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/hosts", nil)
 	w := httptest.NewRecorder()
-	srv.handleDockerHosts(w, req)
+	srv.DockerDeps().HandleDockerHosts(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", w.Code)
@@ -96,11 +96,11 @@ func TestHandleDockerHostsListOne(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts", nil)
 	w := httptest.NewRecorder()
-	srv.handleDockerHosts(w, req)
+	srv.DockerDeps().HandleDockerHosts(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -143,12 +143,12 @@ func TestHandleDockerHostDetail(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/agent-01", nil)
 	req.URL.Path = "/api/v1/docker/hosts/agent-01"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -165,12 +165,12 @@ func TestHandleDockerHostDetail(t *testing.T) {
 
 func TestHandleDockerHostNotFound(t *testing.T) {
 	coord := docker.NewCoordinator(nil)
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/nonexistent", nil)
 	req.URL.Path = "/api/v1/docker/hosts/nonexistent"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -187,12 +187,12 @@ func TestHandleDockerHostContainersSub(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/agent-01/containers", nil)
 	req.URL.Path = "/api/v1/docker/hosts/agent-01/containers"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -221,12 +221,12 @@ func TestHandleDockerHostContainersSubRejectsLegacyDockerPrefixAlias(t *testing.
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/docker-agent-01/containers", nil)
 	req.URL.Path = "/api/v1/docker/hosts/docker-agent-01/containers"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
@@ -240,12 +240,12 @@ func TestHandleDockerHostDetailDockerHostAssetAlias(t *testing.T) {
 		Engine: agentmgr.DockerEngineInfo{Version: "24.0.7"},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/docker-host-agent-01", nil)
 	req.URL.Path = "/api/v1/docker/hosts/docker-host-agent-01"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -261,12 +261,12 @@ func TestHandleDockerHostStacksSub(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/agent-01/stacks", nil)
 	req.URL.Path = "/api/v1/docker/hosts/agent-01/stacks"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -294,13 +294,13 @@ func TestHandleDockerContainerDetail(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	// docker-ct-agent-01-abc123def456 (12-char prefix of abc123def456ab)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/containers/docker-ct-agent-01-abc123def456", nil)
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-abc123def456"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -320,12 +320,12 @@ func TestHandleDockerContainerDetail(t *testing.T) {
 
 func TestHandleDockerContainerNotFound(t *testing.T) {
 	coord := docker.NewCoordinator(nil)
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/containers/docker-ct-agent-01-notexist", nil)
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-notexist"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -341,12 +341,12 @@ func TestHandleDockerContainerStats(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/stats", nil)
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/stats"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
@@ -373,7 +373,7 @@ func TestHandleDockerContainerActionNoAgent(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	body := `{"action": "container.restart"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/action",
@@ -381,7 +381,7 @@ func TestHandleDockerContainerActionNoAgent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/action"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	// With nil agent manager, coordinator returns a failed ActionResult (not an error).
 	// The handler maps "failed" status -> 400.
@@ -411,7 +411,7 @@ func TestHandleDockerContainerActionMissingAction(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	body := `{"action": ""}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/action",
@@ -419,7 +419,7 @@ func TestHandleDockerContainerActionMissingAction(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/action"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing action, got %d: %s", w.Code, w.Body.String())
@@ -436,7 +436,7 @@ func TestHandleDockerStackActionNoAgent(t *testing.T) {
 		},
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	body := `{"action": "stack.restart"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/stacks/docker-stack-agent-01-webstack/action",
@@ -444,7 +444,7 @@ func TestHandleDockerStackActionNoAgent(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.URL.Path = "/api/v1/docker/stacks/docker-stack-agent-01-webstack/action"
 	w := httptest.NewRecorder()
-	srv.handleDockerStackActions(w, req)
+	srv.DockerDeps().HandleDockerStackActions(w, req)
 
 	// With nil agent manager, the coordinator returns a failed ActionResult.
 	if w.Code != http.StatusBadRequest {
@@ -466,12 +466,12 @@ func TestHandleDockerStackActionNoAgent(t *testing.T) {
 
 func TestHandleDockerStackActionMissingSubResource(t *testing.T) {
 	coord := docker.NewCoordinator(nil)
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/stacks/some-stack", nil)
 	req.URL.Path = "/api/v1/docker/stacks/some-stack"
 	w := httptest.NewRecorder()
-	srv.handleDockerStackActions(w, req)
+	srv.DockerDeps().HandleDockerStackActions(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -484,12 +484,12 @@ func TestHandleDockerHostUnknownSubResource(t *testing.T) {
 		HostID: "agent-01",
 	}))
 
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/hosts/agent-01/unknown", nil)
 	req.URL.Path = "/api/v1/docker/hosts/agent-01/unknown"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
@@ -501,14 +501,14 @@ func TestHandleDockerHostActionNoAgent(t *testing.T) {
 	coord.HandleDiscovery("agent-01", makeDockerDiscovery(agentmgr.DockerDiscoveryData{
 		HostID: "agent-01",
 	}))
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	body := `{"action":"container.create","params":{"image":"nginx:latest"}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/hosts/agent-01/action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.URL.Path = "/api/v1/docker/hosts/agent-01/action"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -532,14 +532,14 @@ func TestHandleDockerHostActionMissingAction(t *testing.T) {
 	coord.HandleDiscovery("agent-01", makeDockerDiscovery(agentmgr.DockerDiscoveryData{
 		HostID: "agent-01",
 	}))
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	body := `{"action":" "}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/docker/hosts/agent-01/action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.URL.Path = "/api/v1/docker/hosts/agent-01/action"
 	w := httptest.NewRecorder()
-	srv.handleDockerHostActions(w, req)
+	srv.DockerDeps().HandleDockerHostActions(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
@@ -554,12 +554,12 @@ func TestHandleDockerContainerLogsNoAgent(t *testing.T) {
 			{ID: "abc123def456ab", Name: "nginx", State: "running"},
 		},
 	}))
-	srv := &apiServer{dockerCoordinator: coord}
+	srv := newDockerHub(t, coord)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/logs?tail=100", nil)
 	req.URL.Path = "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/logs"
 	w := httptest.NewRecorder()
-	srv.handleDockerContainerActions(w, req)
+	srv.DockerDeps().HandleDockerContainerActions(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())

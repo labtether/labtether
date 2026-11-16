@@ -14,7 +14,9 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/alerting"
 	"github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
@@ -87,6 +89,25 @@ type Hub struct {
 		opts map[string]desktop.DesktopSessionOptions
 	}
 
+	// State cmd's apiServer holds for the Docker Deps. DockerCoordinator is
+	// nil until a test sets it, as on cmd's test server. The Docker Deps is
+	// built once and kept, as cmd keeps apiServer.dockerDeps.
+	DockerCoordinator *docker.Coordinator
+	DockerExecBridges sync.Map
+	dockerOnce        sync.Once
+	dockerDeps        *dockerpkg.Deps
+
+	// State cmd's apiServer holds for the alerting Deps. The three stores are
+	// nil until a test sets them, as on cmd's test server. New gives the
+	// dispatcher stand-in senders and cmd's limit of 32 sends in flight;
+	// NewEmpty leaves it empty, like a bare apiServer.
+	NotificationStore      persistence.NotificationStore
+	IncidentEventStore     persistence.IncidentEventStore
+	DependencyStore        persistence.DependencyStore
+	NotificationDispatcher NotificationDispatcher
+	alertDevicesOnce       sync.Once
+	alertDevices           *alerting.AgentAlertDevices
+
 	t            *testing.T
 	desktopSPICE struct {
 		mu      sync.RWMutex
@@ -99,6 +120,8 @@ func New(t *testing.T) *Hub {
 	t.Helper()
 	h := newHub(t, testutil.NewStores(t))
 	h.PolicyState = operations.NewPolicyRuntimeState(policy.DefaultEvaluatorConfig())
+	h.NotificationDispatcher.Adapters = notificationSendersNotTested(t)
+	h.NotificationDispatcher.DispatchSem = make(chan struct{}, 32)
 	return h
 }
 

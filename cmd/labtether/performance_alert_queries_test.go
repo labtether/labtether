@@ -2,9 +2,7 @@ package main
 
 import (
 	"github.com/labtether/labtether/internal/alerts"
-	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/logs"
-	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/telemetry"
 	"testing"
 	"time"
@@ -141,53 +139,5 @@ func TestLogPatternAlertUsesSingleTargetedLogQuery(t *testing.T) {
 	}
 	if len(logCounter.lastQueryEventsReq.GroupAssetIDs) != 2 {
 		t.Fatalf("expected targeted asset filter to include both assets, got %#v", logCounter.lastQueryEventsReq.GroupAssetIDs)
-	}
-}
-
-func TestMaybeAutoCreateIncidentUsesAtomicStore(t *testing.T) {
-	sut := newTestAPIServer(t)
-
-	incidentCounter := &countingIncidentStore{IncidentStore: sut.incidentStore}
-	sut.incidentStore = incidentCounter
-
-	existing, err := sut.incidentStore.CreateIncident(incidents.CreateIncidentRequest{
-		Title:    "Existing Auto Incident",
-		Severity: incidents.SeverityCritical,
-		Source:   incidents.SourceAlertAuto,
-	})
-	if err != nil {
-		t.Fatalf("create auto incident: %v", err)
-	}
-	if _, err := sut.incidentStore.LinkIncidentAlert(existing.ID, incidents.LinkAlertRequest{
-		AlertInstanceID: "inst-dup",
-		LinkType:        incidents.LinkTypeTrigger,
-	}); err != nil {
-		t.Fatalf("link existing auto incident: %v", err)
-	}
-
-	sut.maybeAutoCreateIncident(alerts.Rule{
-		ID:       "rule-dup",
-		Name:     "Duplicate CPU Saturation",
-		Severity: alerts.SeverityCritical,
-	}, alerts.AlertInstance{
-		ID:        "inst-dup",
-		StartedAt: time.Now().Add(-10 * time.Minute),
-	})
-
-	autoIncidents, err := sut.incidentStore.ListIncidents(persistence.IncidentFilter{
-		Limit:  10,
-		Source: incidents.SourceAlertAuto,
-	})
-	if err != nil {
-		t.Fatalf("list auto incidents: %v", err)
-	}
-	if len(autoIncidents) != 1 {
-		t.Fatalf("expected duplicate auto incident creation to be skipped, incidents=%d", len(autoIncidents))
-	}
-	if incidentCounter.createAutoIncidentCalls != 1 || incidentCounter.hasAutoIncidentCalls != 0 {
-		t.Fatalf("expected one atomic create and no separate lookup, got %d/%d", incidentCounter.createAutoIncidentCalls, incidentCounter.hasAutoIncidentCalls)
-	}
-	if incidentCounter.listIncidentAlertLinksCalls != 0 {
-		t.Fatalf("expected no per-incident link scans, got %d", incidentCounter.listIncidentAlertLinksCalls)
 	}
 }

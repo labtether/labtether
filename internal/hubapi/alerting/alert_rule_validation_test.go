@@ -1,10 +1,11 @@
-package main
+package alerting_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/alerts"
+	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
 )
 
 func TestValidateCreateAlertRuleRequestAcceptsSyntheticCheckKind(t *testing.T) {
@@ -19,7 +20,7 @@ func TestValidateCreateAlertRuleRequestAcceptsSyntheticCheckKind(t *testing.T) {
 		},
 	}
 
-	if err := validateCreateAlertRuleRequest(req); err != nil {
+	if err := alertingpkg.ValidateCreateAlertRuleRequest(req); err != nil {
 		t.Fatalf("expected synthetic_check kind to validate, got error: %v", err)
 	}
 }
@@ -32,7 +33,7 @@ func TestValidateUpdateAlertRuleRequestAllowsZeroWindowAndEvaluationInterval(t *
 		EvaluationIntervalSeconds: &zero,
 	}
 
-	if err := validateUpdateAlertRuleRequest(existing, req); err != nil {
+	if err := alertingpkg.ValidateUpdateAlertRuleRequest(existing, req); err != nil {
 		t.Fatalf("expected zero values to be accepted for update, got error: %v", err)
 	}
 }
@@ -41,14 +42,14 @@ func TestValidateUpdateAlertRuleRequestRejectsNegativeWindowAndEvaluationInterva
 	existing := alerts.Rule{TargetScope: alerts.TargetScopeAsset}
 	negative := -1
 
-	err := validateUpdateAlertRuleRequest(existing, alerts.UpdateRuleRequest{
+	err := alertingpkg.ValidateUpdateAlertRuleRequest(existing, alerts.UpdateRuleRequest{
 		WindowSeconds: &negative,
 	})
 	if err == nil || !strings.Contains(err.Error(), "window_seconds must be >= 0") {
 		t.Fatalf("expected window_seconds validation error, got: %v", err)
 	}
 
-	err = validateUpdateAlertRuleRequest(existing, alerts.UpdateRuleRequest{
+	err = alertingpkg.ValidateUpdateAlertRuleRequest(existing, alerts.UpdateRuleRequest{
 		EvaluationIntervalSeconds: &negative,
 	})
 	if err == nil || !strings.Contains(err.Error(), "evaluation_interval_seconds must be >= 0") {
