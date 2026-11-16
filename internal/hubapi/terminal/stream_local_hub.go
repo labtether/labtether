@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -89,20 +90,11 @@ func (d *Deps) HandleHubLocalTerminalStream(w http.ResponseWriter, r *http.Reque
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 	cmd.Dir = "/"
 
-	cols, rows := ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
-	if cols <= 0 {
-		cols = hubLocalTerminalDefaultCols
-	}
-	if rows <= 0 {
-		rows = hubLocalTerminalDefaultRows
-	}
+	size := localPTYSize(ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows")))
 
 	var ptmx *os.File
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		ptmx, err = pty.StartWithSize(cmd, &pty.Winsize{
-			Cols: uint16(cols),
-			Rows: uint16(rows),
-		})
+		ptmx, err = pty.StartWithSize(cmd, size)
 	}) {
 		return
 	}
@@ -121,7 +113,7 @@ func (d *Deps) HandleHubLocalTerminalStream(w http.ResponseWriter, r *http.Reque
 	stopCancellation := context.AfterFunc(r.Context(), closeShell)
 	defer stopCancellation()
 
-	log.Printf("terminal-local: stream_connected %s shell=%s cols=%d rows=%d", logContext, shellBinary, cols, rows) // #nosec G706 -- Log context and shell path are bounded local runtime values.
+	log.Printf("terminal-local: stream_connected %s shell=%s cols=%d rows=%d", logContext, shellBinary, size.Cols, size.Rows) // #nosec G706 -- Log context and shell path are bounded local runtime values.
 	_ = WriteTerminalReady(wsConn, "Local hub diagnostics shell connected", time.Since(connectStart).Milliseconds())
 
 	var writeMu sync.Mutex
@@ -235,6 +227,18 @@ streamEnd:
 	}
 }
 
+// localPTYSize uses the default for a size that is not positive or does not
+// fit in the PTY's 16-bit fields, so a resize message cannot wrap it.
+func localPTYSize(cols, rows int) *pty.Winsize {
+	if cols <= 0 || cols > math.MaxUint16 {
+		cols = hubLocalTerminalDefaultCols
+	}
+	if rows <= 0 || rows > math.MaxUint16 {
+		rows = hubLocalTerminalDefaultRows
+	}
+	return &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}
+}
+
 func HandleLocalTerminalControlMessage(ptmx *os.File, payload []byte) (bool, error) {
 	if ptmx == nil || len(payload) == 0 {
 		return false, nil
@@ -256,18 +260,7 @@ func HandleLocalTerminalControlMessage(ptmx *os.File, payload []byte) (bool, err
 		_, err := io.WriteString(ptmx, msg.Data)
 		return true, err
 	case "resize":
-		cols := msg.Cols
-		rows := msg.Rows
-		if cols <= 0 {
-			cols = hubLocalTerminalDefaultCols
-		}
-		if rows <= 0 {
-			rows = hubLocalTerminalDefaultRows
-		}
-		return true, pty.Setsize(ptmx, &pty.Winsize{
-			Cols: uint16(cols),
-			Rows: uint16(rows),
-		})
+		return true, pty.Setsize(ptmx, localPTYSize(msg.Cols, msg.Rows))
 	case "ping":
 		return true, nil
 	default:

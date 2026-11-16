@@ -3,7 +3,6 @@ package collectors
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -213,7 +213,7 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 		}
 		removed, err := d.deleteCollectorAssets(collectorID)
 		if err != nil {
-			log.Printf("hub collector %s: removed, but its devices could not all be removed: %v", collectorID, err)
+			securityruntime.Logf("hub collector %s: removed, but its devices could not all be removed: %v", collectorID, err)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "connector removed, but some of its devices remain; remove them from Devices")
 			return
 		}

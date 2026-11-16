@@ -119,6 +119,10 @@ func TestSanitizeNextPath(t *testing.T) {
 		{"/\\evil.example/path", "/"},
 		{"/%5cevil.example/path", "/"},
 		{"/safe\nLocation: https://evil.example", "/"},
+		// Fault these two guard: the decoded path came back with a real tab
+		// or newline in it, which a browser drops, reading "//evil.example".
+		{"/%09/evil.example", "/"},
+		{"/%0a/evil.example", "/"},
 		{"  /trimmed  ", "/trimmed"},
 	}
 	for _, tt := range tests {

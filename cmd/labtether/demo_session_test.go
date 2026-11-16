@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,33 @@ func TestHandleDemoSession_RedirectsToRequestedPath(t *testing.T) {
 	location := rec.Header().Get("Location")
 	if location != "/en/dashboard" {
 		t.Fatalf("expected redirect to /en/dashboard, got %q", location)
+	}
+}
+
+// Fault this guards: safeLocalDemoRedirectTarget decoded the path a second
+// time and returned the decoded form, so a double-encoded backslash or tab
+// reached the Location header as "/\evil.example" or "/\t/evil.example".
+// Browsers read both as "//evil.example" and leave the Hub.
+func TestHandleDemoSession_DoubleEncodedRedirectStaysLocal(t *testing.T) {
+	s := newTestAPIServer(t)
+	s.demoMode = true
+	s.demoRateLimiter = newDemoSessionRateLimiter(10, time.Minute)
+	if err := s.bootstrapDemoUser(); err != nil {
+		t.Fatalf("bootstrap failed: %v", err)
+	}
+	for _, query := range []string{
+		"/%25255Cevil.example",
+		"/%252509/evil.example",
+		"/%25250A/evil.example",
+	} {
+		req := httptest.NewRequest("GET", "/api/demo/session?redirect="+query, nil)
+		req.RemoteAddr = "192.0.2.10:54321"
+		rec := httptest.NewRecorder()
+		s.handleDemoSession(rec, req)
+		location := rec.Header().Get("Location")
+		if strings.ContainsAny(location, "\\\t\n\r") || strings.HasPrefix(location, "//") {
+			t.Errorf("redirect=%s: Location = %q, want a local path", query, location)
+		}
 	}
 }
 

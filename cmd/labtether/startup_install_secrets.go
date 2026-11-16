@@ -156,7 +156,7 @@ func writeRuntimeAPITokenFile(token string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- Directory is derived from the fixed runtime token file path.
 		return fmt.Errorf("create runtime api token directory: %w", err)
 	}
-	dirInfo, err := os.Lstat(dir)
+	dirInfo, err := os.Lstat(dir) // #nosec G703 -- Same directory as above, from the LABTETHER_API_TOKEN_FILE setting; Lstat only reads it.
 	if err != nil {
 		return fmt.Errorf("inspect runtime api token directory: %w", err)
 	}

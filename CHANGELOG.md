@@ -56,6 +56,10 @@ setting.
 - Demo mode sends no notifications and no webhooks.
 - The demo data loads with times relative to the load, so it does not go out
   of date.
+- The demo sign-in link can no longer send a visitor to another site. A
+  `redirect` value with a doubly encoded backslash or tab was passed on, and
+  a browser read it as an address on another host. Such a value now goes to
+  the Dashboard.
 
 ### Device requests
 
@@ -89,6 +93,14 @@ and reboot or shut down.
   sending it. Timed checks skip it too. Agents that do not say this, which
   includes every Go agent, keep everything they had. The status data and the
   v2 device record report the agent's edition and what it offers.
+
+### Fixed
+
+- The hub's own diagnostics shell keeps its size when the console sends a
+  width or height above 65,535. Before, the number wrapped and the shell
+  could end up 0 columns wide.
+- The Go security scan in CI reads the code again. Its scanner could not
+  read Go 1.27 packages and passed without checking anything.
 
 ## [2.0.0] - unreleased
 

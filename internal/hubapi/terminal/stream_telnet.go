@@ -145,7 +145,7 @@ func filterIAC(conn net.Conn, buf []byte) []byte {
 			i++
 			continue
 		}
-		cmd := buf[i+1]
+		cmd := buf[i+1] // #nosec G602 -- the check above skips an IAC at the last byte, so i+1 < len(buf).
 		switch cmd {
 		case iacSB:
 			// Sub-negotiation: skip from SB up to and including SE.

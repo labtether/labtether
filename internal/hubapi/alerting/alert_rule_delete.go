@@ -2,11 +2,11 @@ package alerting
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 // agentAlertIDsForRule lists the alerts of a rule that agents were told are
@@ -19,7 +19,7 @@ func (d *Deps) agentAlertIDsForRule(ruleID string) []string {
 	for _, status := range []string{alerts.InstanceStatusFiring, alerts.InstanceStatusAcknowledged} {
 		instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{RuleID: ruleID, Status: status, Limit: agentReplayInstanceLimit})
 		if err != nil {
-			log.Printf("alert rule delete: list %s alerts of %s: %v", status, ruleID, err)
+			securityruntime.Logf("alert rule delete: list %s alerts of %s: %v", status, ruleID, err)
 			continue
 		}
 		for _, inst := range instances {
