@@ -1,0 +1,72 @@
+# Route access pin: routes added only when DEV_MODE=true.
+# Same identities and format as route_access.txt.
+
+== /debug/pprof/ (probe /debug/pprof/nas01)
+GET    anonymous       401 "unauthorized"
+GET    viewer          403 "forbidden"
+GET    operator        403 "forbidden"
+GET    admin           404 text "Unknown profile"
+GET    key-no-scope    404 text "Unknown profile"
+GET    key-other-asset 403 asset-denied
+POST   anonymous       401 "unauthorized"
+POST   viewer          403 "forbidden"
+POST   operator        403 "forbidden"
+POST   admin           404 text "Unknown profile"
+POST   key-no-scope    404 text "Unknown profile"
+POST   key-other-asset 403 asset-denied
+
+== /debug/pprof/cmdline (probe /debug/pprof/cmdline)
+GET    anonymous       401 "unauthorized"
+GET    viewer          403 "forbidden"
+GET    operator        403 "forbidden"
+GET    admin           200
+GET    key-no-scope    200
+GET    key-other-asset 403 asset-denied
+POST   anonymous       401 "unauthorized"
+POST   viewer          403 "forbidden"
+POST   operator        403 "forbidden"
+POST   admin           200
+POST   key-no-scope    200
+POST   key-other-asset 403 asset-denied
+
+== /debug/pprof/profile (probe /debug/pprof/profile)
+GET    anonymous       401 "unauthorized"
+GET    viewer          403 "forbidden"
+GET    operator        403 "forbidden"
+GET    admin           200
+GET    key-no-scope    200
+GET    key-other-asset 403 asset-denied
+POST   anonymous       401 "unauthorized"
+POST   viewer          403 "forbidden"
+POST   operator        403 "forbidden"
+POST   admin           200
+POST   key-no-scope    200
+POST   key-other-asset 403 asset-denied
+
+== /debug/pprof/symbol (probe /debug/pprof/symbol)
+GET    anonymous       401 "unauthorized"
+GET    viewer          403 "forbidden"
+GET    operator        403 "forbidden"
+GET    admin           200
+GET    key-no-scope    200
+GET    key-other-asset 403 asset-denied
+POST   anonymous       401 "unauthorized"
+POST   viewer          403 "forbidden"
+POST   operator        403 "forbidden"
+POST   admin           200
+POST   key-no-scope    200
+POST   key-other-asset 403 asset-denied
+
+== /debug/pprof/trace (probe /debug/pprof/trace)
+GET    anonymous       401 "unauthorized"
+GET    viewer          403 "forbidden"
+GET    operator        403 "forbidden"
+GET    admin           200
+GET    key-no-scope    200
+GET    key-other-asset 403 asset-denied
+POST   anonymous       401 "unauthorized"
+POST   viewer          403 "forbidden"
+POST   operator        403 "forbidden"
+POST   admin           200
+POST   key-no-scope    200
+POST   key-other-asset 403 asset-denied

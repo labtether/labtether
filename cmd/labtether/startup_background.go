@@ -10,6 +10,11 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+// safeGo starts a named background loop with panic recovery. Production
+// always uses servicehttp.SafeGo; the wiring pin test replaces it to record
+// the loop names startRuntimeLoops starts without running them.
+var safeGo = servicehttp.SafeGo
+
 func startRuntimeLoops(
 	ctx context.Context,
 	srv *apiServer,
@@ -27,47 +32,47 @@ func startRuntimeLoops(
 
 	wg := &srv.backgroundWG
 
-	servicehttp.SafeGo(ctx, wg, "heartbeat", func(ctx context.Context) { heartbeatLoop(ctx) })
-	servicehttp.SafeGo(ctx, wg, "retention", func(ctx context.Context) { runRetentionLoop(ctx, pgStore, workerState, retentionTracker) })
+	safeGo(ctx, wg, "heartbeat", func(ctx context.Context) { heartbeatLoop(ctx) })
+	safeGo(ctx, wg, "retention", func(ctx context.Context) { runRetentionLoop(ctx, pgStore, workerState, retentionTracker) })
 	startMetricsExport(ctx, srv)
 	startPrometheusRemoteWrite(ctx, srv, pgStore)
-	servicehttp.SafeGo(ctx, wg, "session-cleanup", func(ctx context.Context) { runSessionCleanupLoop(ctx, pgStore) })
-	servicehttp.SafeGo(ctx, wg, "alert-evaluator", func(ctx context.Context) { srv.runAlertEvaluator(ctx) })
-	servicehttp.SafeGo(ctx, wg, "synthetic-runner", func(ctx context.Context) { srv.runSyntheticRunner(ctx) })
-	servicehttp.SafeGo(ctx, wg, "incident-correlator", func(ctx context.Context) { srv.runIncidentCorrelator(ctx) })
-	servicehttp.SafeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.runHubCollectorLoop(ctx) })
-	servicehttp.SafeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
-	servicehttp.SafeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
-	servicehttp.SafeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
+	safeGo(ctx, wg, "session-cleanup", func(ctx context.Context) { runSessionCleanupLoop(ctx, pgStore) })
+	safeGo(ctx, wg, "alert-evaluator", func(ctx context.Context) { srv.runAlertEvaluator(ctx) })
+	safeGo(ctx, wg, "synthetic-runner", func(ctx context.Context) { srv.runSyntheticRunner(ctx) })
+	safeGo(ctx, wg, "incident-correlator", func(ctx context.Context) { srv.runIncidentCorrelator(ctx) })
+	safeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.runHubCollectorLoop(ctx) })
+	safeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
+	safeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
+	safeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
 	if srv.demoMode {
-		servicehttp.SafeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })
+		safeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })
 	} else {
-		servicehttp.SafeGo(ctx, wg, "schedule-runner", func(ctx context.Context) { srv.runScheduleRunner(ctx) })
+		safeGo(ctx, wg, "schedule-runner", func(ctx context.Context) { srv.runScheduleRunner(ctx) })
 	}
-	servicehttp.SafeGo(ctx, wg, "live-activity-dispatch", func(ctx context.Context) { srv.runLiveActivityDispatchLoop(ctx) })
-	servicehttp.SafeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.runLiveActivityRetryLoop(ctx) })
-	servicehttp.SafeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
-	servicehttp.SafeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
+	safeGo(ctx, wg, "live-activity-dispatch", func(ctx context.Context) { srv.runLiveActivityDispatchLoop(ctx) })
+	safeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.runLiveActivityRetryLoop(ctx) })
+	safeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
+	safeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
 	if !srv.demoMode {
 		// Demo mode delivers no webhooks.
-		servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+		safeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
 	}
 	if srv.failoverStore != nil && srv.groupStore != nil && srv.assetStore != nil {
-		servicehttp.SafeGo(ctx, wg, "failover-readiness", func(ctx context.Context) { srv.runFailoverReadinessChecker(ctx) })
+		safeGo(ctx, wg, "failover-readiness", func(ctx context.Context) { srv.runFailoverReadinessChecker(ctx) })
 	}
 	if pgStore != nil && srv.groupStore != nil && srv.assetStore != nil {
 		groupFeaturesDeps := srv.ensureGroupFeaturesDeps()
-		servicehttp.SafeGo(ctx, wg, "reliability-materializer", func(ctx context.Context) {
+		safeGo(ctx, wg, "reliability-materializer", func(ctx context.Context) {
 			groupFeaturesDeps.RunReliabilityMaterializer(ctx, pgStore)
 		})
 	}
 
 	// Archive worker: periodically archives stale detached persistent sessions.
 	terminalDeps := srv.ensureTerminalDeps()
-	servicehttp.SafeGo(ctx, wg, "archive-worker", func(ctx context.Context) { terminalDeps.StartArchiveWorker(ctx) })
+	safeGo(ctx, wg, "archive-worker", func(ctx context.Context) { terminalDeps.StartArchiveWorker(ctx) })
 
 	// Bounded API key touch drainer — drains apiKeyTouchCh sequentially.
-	servicehttp.SafeGo(ctx, wg, "apikey-touch", func(ctx context.Context) {
+	safeGo(ctx, wg, "apikey-touch", func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -85,7 +90,7 @@ func startRuntimeLoops(
 	// Bounded request-audit drainer. HTTP handlers enqueue without blocking;
 	// one worker serializes store writes and prevents request floods from
 	// spawning unbounded persistence goroutines.
-	servicehttp.SafeGo(ctx, wg, "request-audit", func(ctx context.Context) {
+	safeGo(ctx, wg, "request-audit", func(ctx context.Context) {
 		runRequestAuditWorker(ctx, srv)
 	})
 

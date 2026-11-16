@@ -1,0 +1,46 @@
+# MCP pin: names served by buildMCPServer, sorted.
+# Regenerate: LABTETHER_UPDATE_WIRING_PINS=1 go test -count=1 -run 'TestWiringPin' ./cmd/labtether
+
+== tools
+count 32
+alerts_acknowledge
+alerts_list
+asset_reboot
+asset_shutdown
+asset_wake
+assets_get
+assets_list
+connectors_health
+credentials_list
+docker_container_logs
+docker_container_restart
+docker_container_stats
+docker_containers
+docker_hosts
+exec
+exec_multi
+files_list
+files_read
+groups_list
+metrics_overview
+saved_actions_list
+schedules_list
+services_list
+services_restart
+system_disks
+system_network
+system_packages
+system_processes
+topology_edges
+updates_list_plans
+webhooks_list
+whoami
+
+== resources
+count 3
+labtether://alerts/active
+labtether://assets
+labtether://groups
+
+== prompts
+count 0
