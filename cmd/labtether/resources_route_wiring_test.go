@@ -243,6 +243,8 @@ func (resourcesWiringTransfers) GetFileTransfer(context.Context, string) (*persi
 // resources Deps for each request (ensureResourcesDeps), so a store set on
 // the server after start is the one a request reads. A route that took
 // s.ensureResourcesDeps().H as a method value would keep the first store.
+// The device routes (/assets, /assets/ and /assets/heartbeat) are checked
+// the same way with the device store.
 func TestResourcesRoutesBuildDepsPerRequest(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.groupProfileStore = resourcesWiringProfiles{}
@@ -253,6 +255,22 @@ func TestResourcesRoutesBuildDepsPerRequest(t *testing.T) {
 	sut.groupProfileStore = resourcesLaterProfiles{}
 	call("/group-profiles", http.MethodGet, "/group-profiles", "", http.StatusOK, `"name":"Later profile"`)
 	call("/group-profiles/", http.MethodGet, "/group-profiles/gp-later", "", http.StatusOK, `"name":"Later profile"`)
+
+	later := persistence.NewMemoryAssetStore()
+	if _, err := later.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "node-later", Type: "host", Name: "node-later", Source: "agent", Status: "online", Platform: "linux",
+	}); err != nil {
+		t.Fatalf("seed device: %v", err)
+	}
+	sut.assetStore = later
+	call("/assets", http.MethodGet, "/assets", "", http.StatusOK, `"id":"node-later"`)
+	call("/assets/", http.MethodGet, "/assets/node-later", "", http.StatusOK, `"id":"node-later"`)
+	call("/assets/heartbeat", http.MethodPost, "/assets/heartbeat",
+		`{"asset_id":"node-hb-later","type":"host","name":"node-hb-later","source":"lab-script","status":"online","platform":"linux"}`,
+		http.StatusAccepted, `"status":"recorded"`)
+	if _, ok, err := later.GetAsset("node-hb-later"); err != nil || !ok {
+		t.Fatalf("the heartbeat did not reach the device store set after start: found=%v err=%v", ok, err)
+	}
 }
 
 type resourcesLaterProfiles struct{ persistence.GroupProfileStore }
