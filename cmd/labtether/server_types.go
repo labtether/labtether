@@ -125,8 +125,8 @@ type apiServer struct {
 	syntheticCheckRunState        sync.Map // map[checkID]struct{}
 	terminalBridges               sync.Map // map[sessionID]*terminalBridge
 	dockerExecBridges             sync.Map // map[sessionID]*dockerExecBridge
-	desktopBridges                sync.Map // map[sessionID]*desktopBridge
-	webrtcBridges                 sync.Map // map[sessionID]*webrtcSignalingBridge
+	desktopBridges                sync.Map // map[sessionID]*desktoppkg.DesktopBridge
+	webrtcBridges                 sync.Map // map[sessionID]*desktoppkg.WebRTCSignalingBridge
 	displayReplies                desktoppkg.DisplayReplies
 	fileBridges                   sync.Map // map[requestID]*respkg.FileBridge
 	processReplies                respkg.AgentReplies

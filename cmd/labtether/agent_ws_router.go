@@ -60,37 +60,37 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureAgentsDeps().ProcessAgentSSHKeyRemoved(conn, msg)
 	}
 	router[agentmgr.MsgDesktopStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopStarted(conn, msg)
 	}
 	router[agentmgr.MsgDesktopData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopData(conn, msg)
 	}
 	router[agentmgr.MsgDesktopClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopClosed(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopClosed(conn, msg)
 	}
 	router[agentmgr.MsgDesktopDisplays] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopDisplays(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopDisplays(conn, msg)
 	}
 	router[agentmgr.MsgDesktopAudioData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopAudioData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopAudioData(conn, msg)
 	}
 	router[agentmgr.MsgDesktopAudioState] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopAudioState(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopAudioState(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCCapabilities] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCCapabilities(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCCapabilities(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStarted(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCAnswer] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCAnswer(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCAnswer(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCICE] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCICE(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCICE(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCStopped] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCStopped(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStopped(conn, msg)
 	}
 	router[agentmgr.MsgWoLResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureResourcesDeps().ProcessAgentWoLResult(conn, msg)
@@ -186,13 +186,13 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.processAgentWebServiceReport(conn, msg)
 	}
 	router[agentmgr.MsgClipboardData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentClipboardData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentClipboardData(conn, msg)
 	}
 	router[agentmgr.MsgClipboardSetAck] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentClipboardSetAck(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentClipboardSetAck(conn, msg)
 	}
 	router[agentmgr.MsgDesktopDiagnosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopDiagnosed(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopDiagnosed(conn, msg)
 	}
 
 	return router

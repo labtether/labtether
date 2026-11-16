@@ -124,15 +124,17 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		// extracted from cmd/labtether into the resources package.
 		HandleDesktopCredentials:         s.handleDesktopCredentials,
 		HandleRetrieveDesktopCredentials: s.handleRetrieveDesktopCredentials,
-		HandleDisplayList:                s.handleDisplayList,
-		HandlePushHubKey:                 s.handlePushHubKey,
-		HandleTestProtocolConnection:     s.handleTestProtocolConnection,
-		HandleListProtocolConfigs:        s.handleListProtocolConfigs,
-		HandleCreateProtocolConfig:       s.handleCreateProtocolConfig,
-		HandleUpdateProtocolConfig:       s.handleUpdateProtocolConfig,
-		HandleDeleteProtocolConfig:       s.handleDeleteProtocolConfig,
-		HandleHubSSHKey:                  s.handleAssetHubSSHKey,
-		HubSSHKeyEnabled:                 s.hubSSHKeyEnabled,
+		HandleDisplayList: func(w http.ResponseWriter, r *http.Request, assetID string) {
+			s.ensureDesktopDeps().HandleDisplayListDirect(w, r, assetID)
+		},
+		HandlePushHubKey:             s.handlePushHubKey,
+		HandleTestProtocolConnection: s.handleTestProtocolConnection,
+		HandleListProtocolConfigs:    s.handleListProtocolConfigs,
+		HandleCreateProtocolConfig:   s.handleCreateProtocolConfig,
+		HandleUpdateProtocolConfig:   s.handleUpdateProtocolConfig,
+		HandleDeleteProtocolConfig:   s.handleDeleteProtocolConfig,
+		HandleHubSSHKey:              s.handleAssetHubSSHKey,
+		HubSSHKeyEnabled:             s.hubSSHKeyEnabled,
 	}
 }
 

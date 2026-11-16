@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestDesktopBridgeCloseReasonRoundTrip(t *testing.T) {
-	bridge := &desktopBridge{
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -32,13 +33,13 @@ func TestDesktopBridgeCloseReasonRoundTrip(t *testing.T) {
 }
 
 func TestNormalizeWebSocketCloseReasonTruncatesToProtocolLimit(t *testing.T) {
-	longReason := strings.Repeat("x", maxWebSocketCloseReasonBytes+64)
-	got := normalizeWebSocketCloseReason(longReason)
+	longReason := strings.Repeat("x", desktoppkg.MaxWebSocketCloseReasonBytes+64)
+	got := desktoppkg.NormalizeWebSocketCloseReason(longReason)
 	if got == "" {
 		t.Fatal("expected non-empty normalized close reason")
 	}
-	if len([]byte(got)) > maxWebSocketCloseReasonBytes {
-		t.Fatalf("expected close reason <= %d bytes, got %d", maxWebSocketCloseReasonBytes, len([]byte(got)))
+	if len([]byte(got)) > desktoppkg.MaxWebSocketCloseReasonBytes {
+		t.Fatalf("expected close reason <= %d bytes, got %d", desktoppkg.MaxWebSocketCloseReasonBytes, len([]byte(got)))
 	}
 }
 
@@ -72,7 +73,7 @@ func TestSafeWriteCloseHandlesOversizedReason(t *testing.T) {
 	}
 	defer serverConn.Close()
 
-	safeWriteClose(serverConn, websocket.CloseTryAgainLater, strings.Repeat("a", 500))
+	desktoppkg.SafeWriteClose(serverConn, websocket.CloseTryAgainLater, strings.Repeat("a", 500))
 
 	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, _, readErr := clientConn.ReadMessage()
@@ -83,8 +84,8 @@ func TestSafeWriteCloseHandlesOversizedReason(t *testing.T) {
 	if closeErr.Code != websocket.CloseTryAgainLater {
 		t.Fatalf("expected close code %d, got %d (%q)", websocket.CloseTryAgainLater, closeErr.Code, closeErr.Text)
 	}
-	if len([]byte(closeErr.Text)) > maxWebSocketCloseReasonBytes {
-		t.Fatalf("expected close reason <= %d bytes, got %d", maxWebSocketCloseReasonBytes, len([]byte(closeErr.Text)))
+	if len([]byte(closeErr.Text)) > desktoppkg.MaxWebSocketCloseReasonBytes {
+		t.Fatalf("expected close reason <= %d bytes, got %d", desktoppkg.MaxWebSocketCloseReasonBytes, len([]byte(closeErr.Text)))
 	}
 }
 
@@ -102,12 +103,12 @@ func TestHandleDesktopStreamRejectsDirectProxyWhenDisabled(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-1/stream", nil)
 	rec := httptest.NewRecorder()
-	sut.setDesktopSessionOptions("sess-1", desktopSessionOptions{
+	sut.ensureDesktopDeps().SetDesktopSessionOptions("sess-1", desktoppkg.DesktopSessionOptions{
 		Protocol: "webrtc",
 		Display:  ":0",
 		Quality:  "high",
 	})
-	sut.handleDesktopStream(rec, req, terminal.Session{
+	sut.ensureDesktopDeps().HandleDesktopStream(rec, req, terminal.Session{
 		ID:     "sess-1",
 		Target: "desktop-offline-node",
 		Mode:   "desktop",
@@ -116,7 +117,7 @@ func TestHandleDesktopStreamRejectsDirectProxyWhenDisabled(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 when no route can reach the device, got %d: %s", rec.Code, rec.Body.String())
 	}
-	opts := sut.getDesktopSessionOptions("sess-1")
+	opts := sut.ensureDesktopDeps().GetDesktopSessionOptions("sess-1")
 	if opts.Protocol != "webrtc" || opts.Display != ":0" || opts.Quality != "high" {
 		t.Fatalf("expected desktop session options to remain available after failed stream attempt, got %+v", opts)
 	}
@@ -135,11 +136,11 @@ func TestHandleDesktopStreamRejectsWaylandVNCFallbackWhenWebRTCUnavailable(t *te
 
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-wayland/stream", nil)
 	rec := httptest.NewRecorder()
-	sut.setDesktopSessionOptions("sess-wayland", desktopSessionOptions{
+	sut.ensureDesktopDeps().SetDesktopSessionOptions("sess-wayland", desktoppkg.DesktopSessionOptions{
 		Protocol: "webrtc",
 	})
 
-	sut.handleDesktopStream(rec, req, terminal.Session{
+	sut.ensureDesktopDeps().HandleDesktopStream(rec, req, terminal.Session{
 		ID:     "sess-wayland",
 		Target: "wayland-node",
 		Mode:   "desktop",
@@ -155,7 +156,7 @@ func TestHandleDesktopStreamRejectsWaylandVNCFallbackWhenWebRTCUnavailable(t *te
 
 func TestProcessAgentDesktopClosedStoresReasonAndSignalsBridge(t *testing.T) {
 	var srv apiServer
-	bridge := &desktopBridge{
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh:        make(chan []byte, 1),
 		ExpectedAgentID: "node-1",
 		ClosedCh:        make(chan struct{}),
@@ -170,7 +171,7 @@ func TestProcessAgentDesktopClosedStoresReasonAndSignalsBridge(t *testing.T) {
 		t.Fatalf("marshal close payload: %v", err)
 	}
 
-	srv.processAgentDesktopClosed(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: payload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopClosed(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: payload})
 
 	if got := bridge.CloseReason(); got != "failed to start VNC: x11vnc not found" {
 		t.Fatalf("unexpected close reason %q", got)
@@ -184,8 +185,8 @@ func TestProcessAgentDesktopClosedStoresReasonAndSignalsBridge(t *testing.T) {
 
 func TestProcessAgentDesktopAudioDataRoutesBinaryToBridge(t *testing.T) {
 	var srv apiServer
-	bridge := &desktopBridge{
-		AudioCh:         make(chan desktopAudioOutbound, 1),
+	bridge := &desktoppkg.DesktopBridge{
+		AudioCh:         make(chan desktoppkg.DesktopAudioOutbound, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 		SessionID:       "sess-audio",
@@ -202,7 +203,7 @@ func TestProcessAgentDesktopAudioDataRoutesBinaryToBridge(t *testing.T) {
 		t.Fatalf("marshal audio payload: %v", err)
 	}
 
-	srv.processAgentDesktopAudioData(conn, agentmgr.Message{Data: payload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopAudioData(conn, agentmgr.Message{Data: payload})
 
 	select {
 	case outbound := <-bridge.AudioCh:
@@ -219,8 +220,8 @@ func TestProcessAgentDesktopAudioDataRoutesBinaryToBridge(t *testing.T) {
 
 func TestProcessAgentDesktopAudioStateRoutesTextToBridge(t *testing.T) {
 	var srv apiServer
-	bridge := &desktopBridge{
-		AudioCh:         make(chan desktopAudioOutbound, 1),
+	bridge := &desktoppkg.DesktopBridge{
+		AudioCh:         make(chan desktoppkg.DesktopAudioOutbound, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 		SessionID:       "sess-audio",
@@ -237,7 +238,7 @@ func TestProcessAgentDesktopAudioStateRoutesTextToBridge(t *testing.T) {
 		t.Fatalf("marshal audio state payload: %v", err)
 	}
 
-	srv.processAgentDesktopAudioState(conn, agentmgr.Message{Data: payload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopAudioState(conn, agentmgr.Message{Data: payload})
 
 	select {
 	case outbound := <-bridge.AudioCh:
@@ -268,7 +269,7 @@ func TestBridgeDesktopInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
 				panicCh <- r
 			}
 		}()
-		_, _ = srv.bridgeDesktopInput(serverConn, nil, "sess-idle", closedCh, nil)
+		_, _ = srv.ensureDesktopDeps().BridgeDesktopInput(serverConn, nil, "sess-idle", closedCh, nil)
 	}()
 
 	// Keep the bridge idle long enough to cover the previous timeout/panic path.
@@ -297,24 +298,24 @@ func TestBridgeDesktopInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
 func TestShouldUseWebRTCReadsAgentCapabilities(t *testing.T) {
 	srv := apiServer{agentMgr: agentmgr.NewManager()}
 
-	if srv.shouldUseWebRTC("node-1") {
+	if srv.ensureDesktopDeps().ShouldUseWebRTC("node-1") {
 		t.Fatal("expected false when no agent is connected")
 	}
 
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 	srv.agentMgr.Register(conn)
 
-	if srv.shouldUseWebRTC("node-1") {
+	if srv.ensureDesktopDeps().ShouldUseWebRTC("node-1") {
 		t.Fatal("expected false when agent has no webrtc capability metadata")
 	}
 
 	conn.SetMeta("webrtc_available", " TrUe ")
-	if !srv.shouldUseWebRTC("node-1") {
+	if !srv.ensureDesktopDeps().ShouldUseWebRTC("node-1") {
 		t.Fatal("expected true when webrtc_available=true")
 	}
 
 	conn.SetMeta("webrtc_available", "false")
-	if srv.shouldUseWebRTC("node-1") {
+	if srv.ensureDesktopDeps().ShouldUseWebRTC("node-1") {
 		t.Fatal("expected false when capability is explicitly disabled")
 	}
 }
@@ -342,9 +343,9 @@ func TestProcessAgentDesktopHandlersIgnoreNonBridgeEntries(t *testing.T) {
 		t.Fatalf("marshal desktop close payload: %v", err)
 	}
 
-	srv.processAgentDesktopStarted(nil, agentmgr.Message{Data: startedPayload})
-	srv.processAgentDesktopData(nil, agentmgr.Message{Data: dataPayload})
-	srv.processAgentDesktopClosed(nil, agentmgr.Message{Data: closedPayload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopStarted(nil, agentmgr.Message{Data: startedPayload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopData(nil, agentmgr.Message{Data: dataPayload})
+	srv.ensureDesktopDeps().ProcessAgentDesktopClosed(nil, agentmgr.Message{Data: closedPayload})
 }
 
 func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) {
@@ -360,7 +361,7 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 
 	session := terminal.Session{ID: "desk-before-ready", Target: "node-desktop", Mode: "desktop"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleAgentDesktopStream(w, r, session)
+		sut.ensureDesktopDeps().HandleAgentDesktopStream(w, r, session)
 	}))
 	defer server.Close()
 
@@ -400,7 +401,7 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 	if err != nil {
 		t.Fatalf("marshal desktop close payload: %v", err)
 	}
-	sut.processAgentDesktopClosed(agentConn, agentmgr.Message{Data: closedPayload})
+	sut.ensureDesktopDeps().ProcessAgentDesktopClosed(agentConn, agentmgr.Message{Data: closedPayload})
 
 	_ = browserConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, _, readErr := browserConn.ReadMessage()

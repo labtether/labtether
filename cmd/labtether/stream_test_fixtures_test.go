@@ -65,17 +65,17 @@ func streamGenerationReply(s *apiServer, conn *agentmgr.AgentConn, kind, event, 
 	case "terminal:data":
 		s.processAgentTerminalData(conn, msg)
 	case "desktop:started":
-		s.processAgentDesktopStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopStarted(conn, msg)
 	case "desktop:closed":
-		s.processAgentDesktopClosed(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopClosed(conn, msg)
 	case "desktop:data":
-		s.processAgentDesktopData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopData(conn, msg)
 	case "webrtc:started":
-		s.processAgentWebRTCStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStarted(conn, msg)
 	case "webrtc:closed":
-		s.processAgentWebRTCStopped(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStopped(conn, msg)
 	case "webrtc:data":
-		s.processAgentWebRTCAnswer(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCAnswer(conn, msg)
 	}
 }
 

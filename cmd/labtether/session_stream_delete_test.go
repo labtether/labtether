@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/auth"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -70,7 +71,7 @@ func runSessionDeleteLifecycle(t *testing.T, kind, phase string, failDelete bool
 		if kind == "webrtc" {
 			protocol = "webrtc"
 		}
-		s.setDesktopSessionOptions(session.ID, desktopSessionOptions{Protocol: protocol})
+		s.ensureDesktopDeps().SetDesktopSessionOptions(session.ID, desktoppkg.DesktopSessionOptions{Protocol: protocol})
 	}
 	if kind == "docker" {
 		s.ensureTerminalDeps().ResolveDockerExecSessionTarget = func(string) (string, string, bool) { return agent.AssetID, "container", true }
@@ -130,7 +131,7 @@ func runSessionDeleteLifecycle(t *testing.T, kind, phase string, failDelete bool
 		if strings.HasPrefix(r.URL.Path, "/terminal/persistent-sessions/") {
 			s.handlePersistentSessionActions(w, r)
 		} else if request.Mode == "desktop" {
-			s.handleDesktopSessionActions(w, r)
+			s.ensureDesktopDeps().HandleDesktopSessionActions(w, r)
 		} else {
 			s.handleSessionActions(w, r)
 		}
@@ -202,7 +203,7 @@ func runSessionDeleteLifecycle(t *testing.T, kind, phase string, failDelete bool
 		}
 		if audio != nil {
 			raw, _ := json.Marshal(agentmgr.DesktopAudioDataPayload{SessionID: audioWire, Data: base64.StdEncoding.EncodeToString([]byte("audio survived"))})
-			s.processAgentDesktopAudioData(agent, agentmgr.Message{Data: raw})
+			s.ensureDesktopDeps().ProcessAgentDesktopAudioData(agent, agentmgr.Message{Data: raw})
 			if got := streamGenerationBrowserPayload(t, audio, "audio", session.ID); got != "audio survived" {
 				t.Fatalf("audio changed after rejected delete: %q", got)
 			}

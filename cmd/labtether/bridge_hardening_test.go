@@ -315,14 +315,14 @@ func TestProcessAgentDesktopDisplaysRejectsMismatchedSender(t *testing.T) {
 		Displays:  []agentmgr.DisplayInfo{{Name: "display-1", Width: 1920, Height: 1080}},
 	})
 
-	srv.processAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
+	srv.ensureDesktopDeps().ProcessAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-2"}, payload)
 	select {
 	case <-replies:
 		t.Fatal("expected mismatched sender display payload to be ignored")
 	default:
 	}
 
-	srv.processAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	srv.ensureDesktopDeps().ProcessAgentDesktopDisplays(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-replies:
 	case <-time.After(time.Second):
@@ -462,7 +462,7 @@ func TestProcessAgentNodeOpsHandlersIgnoreNonBridgeEntries(t *testing.T) {
 
 	t.Run("desktop displays", func(t *testing.T) {
 		var srv apiServer
-		srv.processAgentDesktopDisplays(nil, marshalAgentMessage(t, agentmgr.DisplayListData{RequestID: "req-display"}))
+		srv.ensureDesktopDeps().ProcessAgentDesktopDisplays(nil, marshalAgentMessage(t, agentmgr.DisplayListData{RequestID: "req-display"}))
 	})
 }
 
