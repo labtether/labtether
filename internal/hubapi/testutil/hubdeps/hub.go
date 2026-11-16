@@ -15,7 +15,10 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/connectors/docker"
+	"github.com/labtether/labtether/internal/connectors/webservice"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/edges"
+	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/hubapi/alerting"
 	"github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
@@ -24,6 +27,7 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/pbs"
 	"github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
@@ -108,6 +112,26 @@ type Hub struct {
 	alertDevicesOnce       sync.Once
 	alertDevices           *alerting.AgentAlertDevices
 
+	// State cmd's apiServer holds for the resources Deps. The four stores
+	// and the file protocol pool are nil until a test sets them, as on cmd's
+	// test server. New sets WebServiceCoordinator as newTestAPIServer does.
+	FailoverStore         persistence.FailoverStore
+	EdgeStore             edges.Store
+	FileTransferStore     persistence.FileTransferStore
+	FileProtoPool         *fileproto.Pool
+	WebServiceCoordinator *webservice.Coordinator
+	ActiveTransfers       sync.Map
+	FileBridges           sync.Map
+	ProcessReplies        resources.AgentReplies
+	ServiceReplies        resources.AgentReplies
+	JournalReplies        resources.AgentReplies
+	DiskReplies           resources.AgentReplies
+	NetworkReplies        resources.AgentReplies
+	WoLPending            resources.WoLPendingRegistry
+	PackageReplies        resources.AgentReplies
+	CronReplies           resources.AgentReplies
+	UsersReplies          resources.AgentReplies
+
 	t            *testing.T
 	desktopSPICE struct {
 		mu      sync.RWMutex
@@ -122,6 +146,7 @@ func New(t *testing.T) *Hub {
 	h.PolicyState = operations.NewPolicyRuntimeState(policy.DefaultEvaluatorConfig())
 	h.NotificationDispatcher.Adapters = notificationSendersNotTested(t)
 	h.NotificationDispatcher.DispatchSem = make(chan struct{}, 32)
+	h.WebServiceCoordinator = webservice.NewCoordinator(persistence.NewMemoryWebServiceStore())
 	return h
 }
 

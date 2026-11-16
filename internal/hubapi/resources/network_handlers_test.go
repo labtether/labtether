@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -7,21 +7,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleNetworkActionBridgesAgentResult(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-1", "linux"))
-	defer sut.agentMgr.Unregister("node-1")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-1", "linux"))
+	defer sut.AgentMgr.Unregister("node-1")
 
 	done := make(chan struct{})
 	go func() {
@@ -53,7 +52,7 @@ func TestHandleNetworkActionBridgesAgentResult(t *testing.T) {
 			OK:        true,
 			Output:    "applied",
 		})
-		sut.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
 			Type: agentmgr.MsgNetworkResult,
 			ID:   req.RequestID,
 			Data: raw,
@@ -62,7 +61,7 @@ func TestHandleNetworkActionBridgesAgentResult(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/network/node-1/apply", strings.NewReader(`{"method":"netplan"}`))
 	rec := httptest.NewRecorder()
-	sut.handleNetworks(rec, req)
+	sut.ResourcesDeps().HandleNetworks(rec, req)
 
 	<-done
 
@@ -80,14 +79,14 @@ func TestHandleNetworkActionBridgesAgentResult(t *testing.T) {
 }
 
 func TestHandleNetworkActionPropagatesAgentError(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-2", "linux"))
-	defer sut.agentMgr.Unregister("node-2")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-2", "linux"))
+	defer sut.AgentMgr.Unregister("node-2")
 
 	done := make(chan struct{})
 	go func() {
@@ -109,7 +108,7 @@ func TestHandleNetworkActionPropagatesAgentError(t *testing.T) {
 			OK:        false,
 			Error:     "invalid method",
 		})
-		sut.processAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentNetworkResult(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{
 			Type: agentmgr.MsgNetworkResult,
 			ID:   req.RequestID,
 			Data: raw,
@@ -118,7 +117,7 @@ func TestHandleNetworkActionPropagatesAgentError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/network/node-2/apply", strings.NewReader(`{"method":"bad"}`))
 	rec := httptest.NewRecorder()
-	sut.handleNetworks(rec, req)
+	sut.ResourcesDeps().HandleNetworks(rec, req)
 
 	<-done
 
@@ -131,14 +130,14 @@ func TestHandleNetworkActionPropagatesAgentError(t *testing.T) {
 }
 
 func TestHandleNetworkListBridgesAgentInventory(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-3", "linux"))
-	defer sut.agentMgr.Unregister("node-3")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-3", "linux"))
+	defer sut.AgentMgr.Unregister("node-3")
 
 	done := make(chan struct{})
 	go func() {
@@ -168,7 +167,7 @@ func TestHandleNetworkListBridgesAgentInventory(t *testing.T) {
 				IPs:   []string{"192.168.1.10/24"},
 			}},
 		})
-		sut.processAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-3"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentNetworkListed(&agentmgr.AgentConn{AssetID: "node-3"}, agentmgr.Message{
 			Type: agentmgr.MsgNetworkListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -177,7 +176,7 @@ func TestHandleNetworkListBridgesAgentInventory(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/network/node-3", nil)
 	rec := httptest.NewRecorder()
-	sut.handleNetworks(rec, req)
+	sut.ResourcesDeps().HandleNetworks(rec, req)
 
 	<-done
 
@@ -192,9 +191,4 @@ func TestHandleNetworkListBridgesAgentInventory(t *testing.T) {
 	if len(response.Interfaces) != 1 || response.Interfaces[0].Name != "eth0" {
 		t.Fatalf("unexpected response %+v", response)
 	}
-}
-
-// createWSPairForNetworkTest: one implementation, in testutil.
-func createWSPairForNetworkTest(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
-	return testutil.CreateWSPairForNetworkTest(t)
 }

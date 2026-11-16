@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleFileListBridgesAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-list", "linux"))
-	defer sut.agentMgr.Unregister("node-list")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-list", "linux"))
+	defer sut.AgentMgr.Unregister("node-list")
 
 	done := make(chan struct{})
 	go func() {
@@ -54,7 +56,7 @@ func TestHandleFileListBridgesAgentSuccess(t *testing.T) {
 				{Name: "visible.txt", Size: 12, Mode: "-rw-r--r--"},
 			},
 		})
-		sut.processAgentFileListed(&agentmgr.AgentConn{AssetID: "node-list"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileListed(&agentmgr.AgentConn{AssetID: "node-list"}, agentmgr.Message{
 			Type: agentmgr.MsgFileListed,
 			ID:   listReq.RequestID,
 			Data: raw,
@@ -63,7 +65,7 @@ func TestHandleFileListBridgesAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-list/list?path=%2Ftmp%2Fdata&show_hidden=true", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileList(rec, req, "node-list")
+	sut.ResourcesDeps().HandleFileList(rec, req, "node-list")
 
 	select {
 	case <-done:
@@ -88,14 +90,14 @@ func TestHandleFileListBridgesAgentSuccess(t *testing.T) {
 }
 
 func TestHandleFileMkdirBridgesAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-mkdir", "linux"))
-	defer sut.agentMgr.Unregister("node-mkdir")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-mkdir", "linux"))
+	defer sut.AgentMgr.Unregister("node-mkdir")
 
 	done := make(chan struct{})
 	go func() {
@@ -124,7 +126,7 @@ func TestHandleFileMkdirBridgesAgentSuccess(t *testing.T) {
 			RequestID: mkdirReq.RequestID,
 			OK:        true,
 		})
-		sut.processAgentFileResult(&agentmgr.AgentConn{AssetID: "node-mkdir"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileResult(&agentmgr.AgentConn{AssetID: "node-mkdir"}, agentmgr.Message{
 			Type: agentmgr.MsgFileResult,
 			ID:   mkdirReq.RequestID,
 			Data: raw,
@@ -133,7 +135,7 @@ func TestHandleFileMkdirBridgesAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/files/node-mkdir/mkdir?path=%2Ftmp%2Fnew-dir", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileMkdir(rec, req, "node-mkdir")
+	sut.ResourcesDeps().HandleFileMkdir(rec, req, "node-mkdir")
 
 	select {
 	case <-done:
@@ -155,14 +157,14 @@ func TestHandleFileMkdirBridgesAgentSuccess(t *testing.T) {
 }
 
 func TestHandleFileRenamePropagatesAgentError(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-rename", "linux"))
-	defer sut.agentMgr.Unregister("node-rename")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-rename", "linux"))
+	defer sut.AgentMgr.Unregister("node-rename")
 
 	done := make(chan struct{})
 	go func() {
@@ -192,7 +194,7 @@ func TestHandleFileRenamePropagatesAgentError(t *testing.T) {
 			OK:        false,
 			Error:     "destination already exists",
 		})
-		sut.processAgentFileResult(&agentmgr.AgentConn{AssetID: "node-rename"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileResult(&agentmgr.AgentConn{AssetID: "node-rename"}, agentmgr.Message{
 			Type: agentmgr.MsgFileResult,
 			ID:   renameReq.RequestID,
 			Data: raw,
@@ -201,7 +203,7 @@ func TestHandleFileRenamePropagatesAgentError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/files/node-rename/rename?old_path=%2Ftmp%2Fold.txt&new_path=%2Ftmp%2Fnew.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileRename(rec, req, "node-rename")
+	sut.ResourcesDeps().HandleFileRename(rec, req, "node-rename")
 
 	select {
 	case <-done:

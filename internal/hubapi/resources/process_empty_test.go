@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -7,15 +7,17 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleProcessListNormalizesEmptyAgentReply(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-empty", "linux"))
-	defer sut.agentMgr.Unregister("node-empty")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-empty", "linux"))
+	defer sut.AgentMgr.Unregister("node-empty")
 
 	done := make(chan struct{})
 	go func() {
@@ -35,7 +37,7 @@ func TestHandleProcessListNormalizesEmptyAgentReply(t *testing.T) {
 			t.Errorf("encode empty process reply: %v", err)
 			return
 		}
-		sut.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-empty"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-empty"}, agentmgr.Message{
 			Type: agentmgr.MsgProcessListed,
 			ID:   request.RequestID,
 			Data: data,
@@ -43,7 +45,7 @@ func TestHandleProcessListNormalizesEmptyAgentReply(t *testing.T) {
 	}()
 
 	rec := httptest.NewRecorder()
-	sut.handleProcesses(rec, httptest.NewRequest(http.MethodGet, "/processes/node-empty", nil))
+	sut.ResourcesDeps().HandleProcesses(rec, httptest.NewRequest(http.MethodGet, "/processes/node-empty", nil))
 	<-done
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
