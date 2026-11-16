@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"bytes"
@@ -7,6 +7,9 @@ import (
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/persistence"
 	"net/http"
 	"net/http/httptest"
@@ -16,9 +19,9 @@ import (
 )
 
 func TestHandleApproveAgentRequiresIdentityVerified(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
-	sut.pendingAgents.Add(&pendingAgent{
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
+	sut.PendingAgents.Add(&agentspkg.PendingAgent{
 		AssetID:          "pending-charlie-1",
 		Hostname:         "charlie",
 		Platform:         "linux",
@@ -27,7 +30,7 @@ func TestHandleApproveAgentRequiresIdentityVerified(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-charlie-1"}`)))
 	rec := httptest.NewRecorder()
-	sut.handleApproveAgent(rec, req)
+	sut.AgentsDeps().HandleApproveAgent(rec, req)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 when identity is unverified, got %d: %s", rec.Code, rec.Body.String())
@@ -35,12 +38,12 @@ func TestHandleApproveAgentRequiresIdentityVerified(t *testing.T) {
 }
 
 func TestHandleApproveAgentRejectsRetiredIdentity(t *testing.T) {
-	sut := newTestAPIServer(t)
-	transactions, ok := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	sut := hubdeps.New(t)
+	transactions, ok := sut.EnrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	if !ok {
 		t.Fatal("test enrollment store lacks transaction interface")
 	}
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "retired-approval", Name: "retired-approval", Type: "node", Source: "agent", Status: "online",
 	}); err != nil {
 		t.Fatal(err)
@@ -49,9 +52,9 @@ func TestHandleApproveAgentRejectsRetiredIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sut.pendingAgents = newPendingAgents()
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 	verifiedAt := time.Now().UTC()
-	sut.pendingAgents.Add(&pendingAgent{
+	sut.PendingAgents.Add(&agentspkg.PendingAgent{
 		AssetID:            "pending-retired-approval",
 		Hostname:           "retired-approval",
 		Platform:           "linux",
@@ -63,12 +66,12 @@ func TestHandleApproveAgentRejectsRetiredIdentity(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-retired-approval"}`)))
 	rec := httptest.NewRecorder()
-	sut.handleApproveAgent(rec, req)
+	sut.AgentsDeps().HandleApproveAgent(rec, req)
 
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "This device was removed from LabTether") {
 		t.Fatalf("retired approval status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if _, exists := sut.pendingAgents.Get("pending-retired-approval"); !exists {
+	if _, exists := sut.PendingAgents.Get("pending-retired-approval"); !exists {
 		t.Fatal("retired approval removed the pending agent instead of releasing the decision")
 	}
 }
@@ -78,7 +81,7 @@ func TestDecodePendingEnrollmentAssetID(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{`)))
 		rec := httptest.NewRecorder()
 
-		if _, ok := decodePendingEnrollmentAssetID(rec, req); ok {
+		if _, ok := agentspkg.DecodePendingEnrollmentAssetID(rec, req); ok {
 			t.Fatalf("expected malformed body to be rejected")
 		}
 		if rec.Code != http.StatusBadRequest {
@@ -90,7 +93,7 @@ func TestDecodePendingEnrollmentAssetID(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"  "}`)))
 		rec := httptest.NewRecorder()
 
-		if _, ok := decodePendingEnrollmentAssetID(rec, req); ok {
+		if _, ok := agentspkg.DecodePendingEnrollmentAssetID(rec, req); ok {
 			t.Fatalf("expected empty asset_id to be rejected")
 		}
 		if rec.Code != http.StatusBadRequest {
@@ -100,45 +103,45 @@ func TestDecodePendingEnrollmentAssetID(t *testing.T) {
 }
 
 func TestResolveApprovedAssetID(t *testing.T) {
-	if got := resolveApprovedAssetID(&pendingAgent{Hostname: "lab-host-01"}, "pending-lab-host-01"); got != "lab-host-01" {
+	if got := agentspkg.ResolveApprovedAssetID(agentspkg.PendingAgentInfo{Hostname: "lab-host-01"}, "pending-lab-host-01"); got != "lab-host-01" {
 		t.Fatalf("expected hostname to become stable asset id, got %q", got)
 	}
-	if got := resolveApprovedAssetID(&pendingAgent{Hostname: "unknown"}, "pending-unknown-1"); got != "pending-unknown-1" {
+	if got := agentspkg.ResolveApprovedAssetID(agentspkg.PendingAgentInfo{Hostname: "unknown"}, "pending-unknown-1"); got != "pending-unknown-1" {
 		t.Fatalf("expected unknown hostname to fall back to pending asset id, got %q", got)
 	}
-	if got := resolveApprovedAssetID(&pendingAgent{}, "pending-empty-1"); got != "pending-empty-1" {
+	if got := agentspkg.ResolveApprovedAssetID(agentspkg.PendingAgentInfo{}, "pending-empty-1"); got != "pending-empty-1" {
 		t.Fatalf("expected empty hostname to fall back to pending asset id, got %q", got)
 	}
 }
 
 func TestHandleApproveAgentErrorPaths(t *testing.T) {
 	t.Run("rejects non-POST method", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/approve", nil)
 		rec := httptest.NewRecorder()
-		sut.handleApproveAgent(rec, req)
+		sut.AgentsDeps().HandleApproveAgent(rec, req)
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
 		}
 	})
 
 	t.Run("returns not found for missing pending agent", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-missing-1"}`)))
 		rec := httptest.NewRecorder()
-		sut.handleApproveAgent(rec, req)
+		sut.AgentsDeps().HandleApproveAgent(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d", rec.Code)
 		}
 	})
 
 	t.Run("returns service unavailable without enrollment store", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
-		sut.enrollmentStore = nil
-		sut.pendingAgents.Add(&pendingAgent{
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
+		sut.EnrollmentStore = nil
+		sut.PendingAgents.Add(&agentspkg.PendingAgent{
 			AssetID:          "pending-foxtrot-1",
 			Hostname:         "foxtrot",
 			IdentityVerified: true,
@@ -146,7 +149,7 @@ func TestHandleApproveAgentErrorPaths(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-foxtrot-1"}`)))
 		rec := httptest.NewRecorder()
-		sut.handleApproveAgent(rec, req)
+		sut.AgentsDeps().HandleApproveAgent(rec, req)
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
@@ -154,14 +157,14 @@ func TestHandleApproveAgentErrorPaths(t *testing.T) {
 }
 
 func TestHandleApproveAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 
-	serverConn, clientConn, cleanup := createWSPairForPendingEnrollmentTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
 	verifiedAt := time.Now().UTC()
-	sut.pendingAgents.Add(&pendingAgent{
+	sut.PendingAgents.Add(&agentspkg.PendingAgent{
 		AssetID:            "pending-golf-1",
 		Hostname:           "golf",
 		Platform:           "linux",
@@ -175,7 +178,7 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-golf-1"}`)))
 	rec := httptest.NewRecorder()
-	sut.handleApproveAgent(rec, req)
+	sut.AgentsDeps().HandleApproveAgent(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -192,11 +195,11 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 		t.Fatalf("expected stable asset_id golf, got %v", resp["asset_id"])
 	}
 
-	if _, ok := sut.pendingAgents.Get("pending-golf-1"); ok {
+	if _, ok := sut.PendingAgents.Get("pending-golf-1"); ok {
 		t.Fatalf("expected pending agent to be removed after approval")
 	}
 
-	tokens, err := sut.enrollmentStore.ListAgentTokens(10)
+	tokens, err := sut.EnrollmentStore.ListAgentTokens(10)
 	if err != nil {
 		t.Fatalf("list agent tokens: %v", err)
 	}
@@ -204,7 +207,7 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 		t.Fatalf("expected one issued token for golf, got %+v", tokens)
 	}
 
-	if _, ok, err := sut.assetStore.GetAsset("golf"); err != nil {
+	if _, ok, err := sut.AssetStore.GetAsset("golf"); err != nil {
 		t.Fatalf("get asset: %v", err)
 	} else if !ok {
 		t.Fatalf("expected approved asset to be upserted")
@@ -235,9 +238,9 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 }
 
 func TestHandleApproveAgentFinalizesWithIndependentContext(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
-	underlyingEnrollment := sut.enrollmentStore
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
+	underlyingEnrollment := sut.EnrollmentStore
 	transactions, ok := underlyingEnrollment.(persistence.AgentEnrollmentTransactionStore)
 	if !ok {
 		t.Fatal("test enrollment store lacks transaction interface")
@@ -248,12 +251,12 @@ func TestHandleApproveAgentFinalizesWithIndependentContext(t *testing.T) {
 		AgentEnrollmentTransactionStore: transactions,
 		cancelRequest:                   cancelRequest,
 	}
-	sut.enrollmentStore = wrapped
+	sut.EnrollmentStore = wrapped
 
-	serverConn, clientConn, cleanup := createWSPairForPendingEnrollmentTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 	verifiedAt := time.Now().UTC()
-	sut.pendingAgents.Add(&pendingAgent{
+	sut.PendingAgents.Add(&agentspkg.PendingAgent{
 		AssetID:            "pending-cancel-1",
 		Hostname:           "cancel-node",
 		Platform:           "linux",
@@ -266,7 +269,7 @@ func TestHandleApproveAgentFinalizesWithIndependentContext(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-cancel-1"}`))).WithContext(requestCtx)
 	rec := httptest.NewRecorder()
-	sut.handleApproveAgent(rec, req)
+	sut.AgentsDeps().HandleApproveAgent(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("request cancellation prevented finalization: status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -288,13 +291,13 @@ func TestHandleApproveAgentFinalizesWithIndependentContext(t *testing.T) {
 }
 
 func TestHandleRejectAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 
-	serverConn, clientConn, cleanup := createWSPairForPendingEnrollmentTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.pendingAgents.Add(&pendingAgent{
+	sut.PendingAgents.Add(&agentspkg.PendingAgent{
 		AssetID:     "pending-hotel-1",
 		Hostname:    "hotel",
 		Platform:    "linux",
@@ -304,12 +307,12 @@ func TestHandleRejectAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/reject", bytes.NewReader([]byte(`{"asset_id":"pending-hotel-1"}`)))
 	rec := httptest.NewRecorder()
-	sut.handleRejectAgent(rec, req)
+	sut.AgentsDeps().HandleRejectAgent(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if _, ok := sut.pendingAgents.Get("pending-hotel-1"); ok {
+	if _, ok := sut.PendingAgents.Get("pending-hotel-1"); ok {
 		t.Fatalf("expected pending agent to be removed after rejection")
 	}
 
@@ -339,11 +342,11 @@ func TestHandleRejectAgentSuccess(t *testing.T) {
 	again.Header.Set("X-Request-Enrollment", "true")
 	again.Header.Set("X-Hostname", "hotel")
 	againRec := httptest.NewRecorder()
-	sut.handlePendingEnrollment(againRec, again)
+	sut.AgentsDeps().HandlePendingEnrollment(againRec, again)
 	if againRec.Code != http.StatusForbidden || !strings.Contains(againRec.Body.String(), "An admin rejected this device") {
 		t.Fatalf("rejected device asked again: %d %s", againRec.Code, againRec.Body.String())
 	}
-	if sut.pendingAgents.Count() != 0 {
+	if sut.PendingAgents.Count() != 0 {
 		t.Fatalf("rejected device is back in Pending")
 	}
 }

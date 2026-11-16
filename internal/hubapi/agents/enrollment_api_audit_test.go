@@ -1,15 +1,15 @@
-package main
+package agents_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/persistence"
 )
 
@@ -30,11 +30,11 @@ func (s *trackingEnrollmentAssetStore) GetAsset(id string) (assets.Asset, bool, 
 }
 
 func TestHandleEnrollmentTokenActionsReturnsNotFoundForMissingToken(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/settings/enrollment/missing-token", nil)
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokenActions(rec, req)
+	sut.AgentsDeps().HandleEnrollmentTokenActions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
@@ -42,11 +42,11 @@ func TestHandleEnrollmentTokenActionsReturnsNotFoundForMissingToken(t *testing.T
 }
 
 func TestHandleAgentTokenActionsReturnsNotFoundForMissingToken(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/settings/agent-tokens/missing-token", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAgentTokenActions(rec, req)
+	sut.AgentsDeps().HandleAgentTokenActions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
@@ -54,11 +54,10 @@ func TestHandleAgentTokenActionsReturnsNotFoundForMissingToken(t *testing.T) {
 }
 
 func TestHandleAgentTokensUsesSingleAssetListLookup(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	trackingStore := &trackingEnrollmentAssetStore{MemoryAssetStore: persistence.NewMemoryAssetStore()}
-	sut.assetStore = trackingStore
-	sut.agentsDeps = nil
-	sut.agentsDepsOnce = sync.Once{}
+	sut.AssetStore = trackingStore
+	sut.ResetAgentsDeps()
 
 	if _, err := trackingStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID:  "agent-node-01",
@@ -77,13 +76,13 @@ func TestHandleAgentTokensUsesSingleAssetListLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := sut.enrollmentStore.CreateAgentToken("agent-node-01", tokenHash, "test", time.Now().UTC().Add(time.Hour)); err != nil {
+	if _, err := sut.EnrollmentStore.CreateAgentToken("agent-node-01", tokenHash, "test", time.Now().UTC().Add(time.Hour)); err != nil {
 		t.Fatalf("create agent token: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/settings/agent-tokens", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAgentTokens(rec, req)
+	sut.AgentsDeps().HandleAgentTokens(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"crypto/ed25519"
@@ -9,6 +9,7 @@ import (
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
 	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,11 +18,11 @@ import (
 )
 
 func TestHandlePendingEnrollmentAcceptsLargeValidProof(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handlePendingEnrollment(w, r)
+		sut.AgentsDeps().HandlePendingEnrollment(w, r)
 	}))
 	defer server.Close()
 
@@ -87,13 +88,13 @@ func TestHandlePendingEnrollmentAcceptsLargeValidProof(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if sut.pendingAgents.IsIdentityVerified(challenge.ConnectionID) {
+		if sut.PendingAgents.IsIdentityVerified(challenge.ConnectionID) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, ok := sut.pendingAgents.Get(challenge.ConnectionID)
+	_, ok := sut.PendingAgents.Get(challenge.ConnectionID)
 	if !ok {
 		t.Fatalf("expected pending agent %q to remain connected", challenge.ConnectionID)
 	}
@@ -101,9 +102,9 @@ func TestHandlePendingEnrollmentAcceptsLargeValidProof(t *testing.T) {
 }
 
 func TestHandlePendingEnrollmentClosesAfterInvalidProofBudget(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
-	server := httptest.NewServer(http.HandlerFunc(sut.handlePendingEnrollment))
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
+	server := httptest.NewServer(http.HandlerFunc(sut.AgentsDeps().HandlePendingEnrollment))
 	defer server.Close()
 
 	headers := http.Header{}
@@ -117,7 +118,7 @@ func TestHandlePendingEnrollmentClosesAfterInvalidProofBudget(t *testing.T) {
 	if err := client.ReadJSON(&challenge); err != nil || challenge.Type != agentmgr.MsgEnrollmentChallenge {
 		t.Fatalf("challenge=%+v err=%v", challenge, err)
 	}
-	for i := 0; i < maxPendingEnrollmentProofMessages; i++ {
+	for i := 0; i < agentspkg.MaxPendingEnrollmentProofMessages; i++ {
 		if err := client.WriteJSON(agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: json.RawMessage(`{}`)}); err != nil {
 			t.Fatalf("invalid proof %d: %v", i+1, err)
 		}
@@ -127,18 +128,18 @@ func TestHandlePendingEnrollmentClosesAfterInvalidProofBudget(t *testing.T) {
 		t.Fatal("pending socket remained open after proof budget exhaustion")
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for sut.pendingAgents.Count() != 0 && time.Now().Before(deadline) {
+	for sut.PendingAgents.Count() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if sut.pendingAgents.Count() != 0 {
+	if sut.PendingAgents.Count() != 0 {
 		t.Fatal("proof-budget socket remained in pending capacity registry")
 	}
 }
 
 func TestHandlePendingEnrollmentRejectsUnexpectedMessageType(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
-	server := httptest.NewServer(http.HandlerFunc(sut.handlePendingEnrollment))
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
+	server := httptest.NewServer(http.HandlerFunc(sut.AgentsDeps().HandlePendingEnrollment))
 	defer server.Close()
 	headers := http.Header{}
 	headers.Set("X-Hostname", "unexpected-message-node")
@@ -161,8 +162,8 @@ func TestHandlePendingEnrollmentRejectsUnexpectedMessageType(t *testing.T) {
 }
 
 func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 
 	type scheduledTimeout struct {
 		duration time.Duration
@@ -179,7 +180,7 @@ func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
 	}()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handlePendingEnrollment(w, r)
+		sut.AgentsDeps().HandlePendingEnrollment(w, r)
 	}))
 	defer server.Close()
 
@@ -203,8 +204,8 @@ func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
 		t.Fatalf("expected enrollment.challenge, got %q", msg.Type)
 	}
 
-	if sut.pendingAgents.Count() != 1 {
-		t.Fatalf("expected one pending agent after connect, got %d", sut.pendingAgents.Count())
+	if sut.PendingAgents.Count() != 1 {
+		t.Fatalf("expected one pending agent after connect, got %d", sut.PendingAgents.Count())
 	}
 
 	var scheduled scheduledTimeout
@@ -213,14 +214,14 @@ func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for pending enrollment timeout callback")
 	}
-	if scheduled.duration != maxPendingEnrollmentTimeout {
-		t.Fatalf("expected timeout duration %s, got %s", maxPendingEnrollmentTimeout, scheduled.duration)
+	if scheduled.duration != agentspkg.MaxPendingEnrollmentTimeout {
+		t.Fatalf("expected timeout duration %s, got %s", agentspkg.MaxPendingEnrollmentTimeout, scheduled.duration)
 	}
 	scheduled.fn()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if sut.pendingAgents.Count() == 0 {
+		if sut.PendingAgents.Count() == 0 {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -230,8 +231,8 @@ func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
 
 func TestVerifyPendingEnrollmentProof(t *testing.T) {
 	t.Run("accepts valid signed proof", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
@@ -239,13 +240,13 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
 
-		agent := &pendingAgent{
+		agent := &agentspkg.PendingAgent{
 			AssetID:            "pending-alpha-1",
 			Hostname:           "alpha",
 			ChallengeNonce:     "nonce-123",
 			ChallengeExpiresAt: time.Now().UTC().Add(time.Minute),
 		}
-		sut.pendingAgents.Add(agent)
+		sut.PendingAgents.Add(agent)
 
 		payload := agentidentity.BuildEnrollmentProofPayload(agent.AssetID, agent.ChallengeNonce, fingerprint)
 		signature := ed25519.Sign(privateKey, payload)
@@ -259,7 +260,7 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		raw, _ := json.Marshal(proof)
 
-		if err := sut.verifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err != nil {
+		if err := sut.AgentsDeps().VerifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err != nil {
 			t.Fatalf("expected proof verification success, got %v", err)
 		}
 		if !agent.IdentityVerified {
@@ -274,21 +275,21 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 	})
 
 	t.Run("rejects invalid signature", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		publicKey, _, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatalf("generate key: %v", err)
 		}
 		fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
-		agent := &pendingAgent{
+		agent := &agentspkg.PendingAgent{
 			AssetID:            "pending-bravo-1",
 			Hostname:           "bravo",
 			ChallengeNonce:     "nonce-456",
 			ChallengeExpiresAt: time.Now().UTC().Add(time.Minute),
 		}
-		sut.pendingAgents.Add(agent)
+		sut.PendingAgents.Add(agent)
 
 		invalidSignature := make([]byte, ed25519.SignatureSize)
 		if _, err := rand.Read(invalidSignature); err != nil {
@@ -304,7 +305,7 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		raw, _ := json.Marshal(proof)
 
-		if err := sut.verifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
+		if err := sut.AgentsDeps().VerifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
 			t.Fatalf("expected invalid signature rejection")
 		}
 		if agent.IdentityVerified {
@@ -313,20 +314,20 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 	})
 
 	t.Run("rejects connection_id mismatch", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatalf("generate key: %v", err)
 		}
 		fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
-		agent := &pendingAgent{
+		agent := &agentspkg.PendingAgent{
 			AssetID:            "pending-charlie-1",
 			ChallengeNonce:     "nonce-789",
 			ChallengeExpiresAt: time.Now().UTC().Add(time.Minute),
 		}
-		sut.pendingAgents.Add(agent)
+		sut.PendingAgents.Add(agent)
 
 		payload := agentidentity.BuildEnrollmentProofPayload("pending-other-1", agent.ChallengeNonce, fingerprint)
 		signature := ed25519.Sign(privateKey, payload)
@@ -340,26 +341,26 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		raw, _ := json.Marshal(proof)
 
-		if err := sut.verifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
+		if err := sut.AgentsDeps().VerifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
 			t.Fatalf("expected connection_id mismatch rejection")
 		}
 	})
 
 	t.Run("rejects expired challenge", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatalf("generate key: %v", err)
 		}
 		fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
-		agent := &pendingAgent{
+		agent := &agentspkg.PendingAgent{
 			AssetID:            "pending-delta-1",
 			ChallengeNonce:     "nonce-expired",
 			ChallengeExpiresAt: time.Now().UTC().Add(-time.Minute),
 		}
-		sut.pendingAgents.Add(agent)
+		sut.PendingAgents.Add(agent)
 
 		payload := agentidentity.BuildEnrollmentProofPayload(agent.AssetID, agent.ChallengeNonce, fingerprint)
 		signature := ed25519.Sign(privateKey, payload)
@@ -373,26 +374,26 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		raw, _ := json.Marshal(proof)
 
-		if err := sut.verifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
+		if err := sut.AgentsDeps().VerifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
 			t.Fatalf("expected expired challenge rejection")
 		}
 	})
 
 	t.Run("rejects fingerprint mismatch", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatalf("generate key: %v", err)
 		}
 		fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
-		agent := &pendingAgent{
+		agent := &agentspkg.PendingAgent{
 			AssetID:            "pending-echo-1",
 			ChallengeNonce:     "nonce-fingerprint",
 			ChallengeExpiresAt: time.Now().UTC().Add(time.Minute),
 		}
-		sut.pendingAgents.Add(agent)
+		sut.PendingAgents.Add(agent)
 
 		payload := agentidentity.BuildEnrollmentProofPayload(agent.AssetID, agent.ChallengeNonce, fingerprint)
 		signature := ed25519.Sign(privateKey, payload)
@@ -406,7 +407,7 @@ func TestVerifyPendingEnrollmentProof(t *testing.T) {
 		}
 		raw, _ := json.Marshal(proof)
 
-		if err := sut.verifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
+		if err := sut.AgentsDeps().VerifyPendingEnrollmentProof(agent, agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: raw}); err == nil {
 			t.Fatalf("expected fingerprint mismatch rejection")
 		}
 	})

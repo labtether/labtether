@@ -1,4 +1,4 @@
-package main
+package agents_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/persistence"
 	"net/http"
 	"net/http/httptest"
@@ -28,18 +30,18 @@ func (s *cancelOnFinalizeEnrollmentStore) FinalizeAgentApproval(ctx context.Cont
 }
 
 func TestBuildPendingEnrollmentAssetID(t *testing.T) {
-	id := buildPendingEnrollmentAssetID(" Lab Host/01 ")
+	id := agentspkg.BuildPendingEnrollmentAssetID(" Lab Host/01 ")
 	if !strings.HasPrefix(id, "pending-lab-host-01-") {
 		t.Fatalf("expected normalized host prefix, got %q", id)
 	}
 
-	unknownID := buildPendingEnrollmentAssetID(" !!! ")
+	unknownID := agentspkg.BuildPendingEnrollmentAssetID(" !!! ")
 	if !strings.HasPrefix(unknownID, "pending-unknown-") {
 		t.Fatalf("expected unknown host fallback, got %q", unknownID)
 	}
 
-	longHostID := buildPendingEnrollmentAssetID(strings.Repeat("X", 200))
-	if !strings.HasPrefix(longHostID, "pending-"+strings.Repeat("x", maxPendingHostnameIDLen)+"-") {
+	longHostID := agentspkg.BuildPendingEnrollmentAssetID(strings.Repeat("X", 200))
+	if !strings.HasPrefix(longHostID, "pending-"+strings.Repeat("x", agentspkg.MaxPendingHostnameIDLen)+"-") {
 		t.Fatalf("expected long hostname to be truncated, got %q", longHostID)
 	}
 	if len(longHostID) > 100 {
@@ -48,7 +50,7 @@ func TestBuildPendingEnrollmentAssetID(t *testing.T) {
 
 	seen := make(map[string]struct{}, 64)
 	for i := 0; i < 64; i++ {
-		candidate := buildPendingEnrollmentAssetID("alpha")
+		candidate := agentspkg.BuildPendingEnrollmentAssetID("alpha")
 		if _, exists := seen[candidate]; exists {
 			t.Fatalf("expected unique pending asset ids, duplicate %q", candidate)
 		}
@@ -56,54 +58,10 @@ func TestBuildPendingEnrollmentAssetID(t *testing.T) {
 	}
 }
 
-func createWSPairForPendingEnrollmentTest(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
-	t.Helper()
-
-	serverConnCh := make(chan *websocket.Conn, 1)
-	done := make(chan struct{})
-	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Errorf("upgrade failed: %v", err)
-			return
-		}
-		serverConnCh <- conn
-		<-done
-	}))
-
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		close(done)
-		server.Close()
-		t.Fatalf("dial failed: %v", err)
-	}
-
-	var serverConn *websocket.Conn
-	select {
-	case serverConn = <-serverConnCh:
-	case <-time.After(2 * time.Second):
-		_ = clientConn.Close()
-		close(done)
-		server.Close()
-		t.Fatal("timed out waiting for server websocket")
-	}
-
-	cleanup := func() {
-		close(done)
-		_ = clientConn.Close()
-		_ = serverConn.Close()
-		server.Close()
-	}
-	return serverConn, clientConn, cleanup
-}
-
 // TestPendingAgents exercises Add, List, Get, and Remove on the registry.
 func TestPendingAgents(t *testing.T) {
 	t.Run("empty registry returns empty list", func(t *testing.T) {
-		p := newPendingAgents()
+		p := agentspkg.NewPendingAgents()
 		got := p.List()
 		if len(got) != 0 {
 			t.Fatalf("expected empty list, got %d entries", len(got))
@@ -111,8 +69,8 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("Add and Get", func(t *testing.T) {
-		p := newPendingAgents()
-		agent := &pendingAgent{
+		p := agentspkg.NewPendingAgents()
+		agent := &agentspkg.PendingAgent{
 			AssetID:     "pending-my-host-123",
 			Hostname:    "my-host",
 			Platform:    "linux",
@@ -137,7 +95,7 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("Get returns false for unknown asset_id", func(t *testing.T) {
-		p := newPendingAgents()
+		p := agentspkg.NewPendingAgents()
 		_, ok := p.Get("does-not-exist")
 		if ok {
 			t.Fatal("expected ok=false for unknown asset_id")
@@ -145,9 +103,9 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("List returns all added agents", func(t *testing.T) {
-		p := newPendingAgents()
-		p.Add(&pendingAgent{AssetID: "pending-host-a-1", Hostname: "host-a", Platform: "linux", ConnectedAt: time.Now().UTC()})
-		p.Add(&pendingAgent{AssetID: "pending-host-b-2", Hostname: "host-b", Platform: "darwin", ConnectedAt: time.Now().UTC()})
+		p := agentspkg.NewPendingAgents()
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-a-1", Hostname: "host-a", Platform: "linux", ConnectedAt: time.Now().UTC()})
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-b-2", Hostname: "host-b", Platform: "darwin", ConnectedAt: time.Now().UTC()})
 
 		list := p.List()
 		if len(list) != 2 {
@@ -168,10 +126,10 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("Count and CountByRemoteIP", func(t *testing.T) {
-		p := newPendingAgents()
-		p.Add(&pendingAgent{AssetID: "pending-host-a-1", Hostname: "host-a", RemoteIP: "10.0.0.1", ConnectedAt: time.Now().UTC()})
-		p.Add(&pendingAgent{AssetID: "pending-host-b-2", Hostname: "host-b", RemoteIP: "10.0.0.1", ConnectedAt: time.Now().UTC()})
-		p.Add(&pendingAgent{AssetID: "pending-host-c-3", Hostname: "host-c", RemoteIP: "10.0.0.2", ConnectedAt: time.Now().UTC()})
+		p := agentspkg.NewPendingAgents()
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-a-1", Hostname: "host-a", RemoteIP: "10.0.0.1", ConnectedAt: time.Now().UTC()})
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-b-2", Hostname: "host-b", RemoteIP: "10.0.0.1", ConnectedAt: time.Now().UTC()})
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-c-3", Hostname: "host-c", RemoteIP: "10.0.0.2", ConnectedAt: time.Now().UTC()})
 
 		if got := p.Count(); got != 3 {
 			t.Fatalf("expected pending count=3, got %d", got)
@@ -188,8 +146,8 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("Remove deletes agent from registry", func(t *testing.T) {
-		p := newPendingAgents()
-		p.Add(&pendingAgent{AssetID: "pending-host-x-9", Hostname: "host-x", ConnectedAt: time.Now().UTC()})
+		p := agentspkg.NewPendingAgents()
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-x-9", Hostname: "host-x", ConnectedAt: time.Now().UTC()})
 
 		p.Remove("pending-host-x-9")
 
@@ -203,8 +161,8 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("Remove on unknown ID is a no-op", func(t *testing.T) {
-		p := newPendingAgents()
-		p.Add(&pendingAgent{AssetID: "pending-host-y-1", Hostname: "host-y", ConnectedAt: time.Now().UTC()})
+		p := agentspkg.NewPendingAgents()
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-y-1", Hostname: "host-y", ConnectedAt: time.Now().UTC()})
 
 		// Removing a non-existent ID must not panic and must not affect other entries.
 		p.Remove("pending-does-not-exist")
@@ -215,8 +173,8 @@ func TestPendingAgents(t *testing.T) {
 	})
 
 	t.Run("List does not expose conn field in JSON", func(t *testing.T) {
-		p := newPendingAgents()
-		p.Add(&pendingAgent{AssetID: "pending-host-z-5", Hostname: "host-z", ConnectedAt: time.Now().UTC()})
+		p := agentspkg.NewPendingAgents()
+		p.Add(&agentspkg.PendingAgent{AssetID: "pending-host-z-5", Hostname: "host-z", ConnectedAt: time.Now().UTC()})
 
 		list := p.List()
 		if len(list) != 1 {
@@ -244,12 +202,12 @@ func TestPendingAgents(t *testing.T) {
 // TestHandleListPendingAgents tests the GET /api/v1/agents/pending handler.
 func TestHandleListPendingAgents(t *testing.T) {
 	t.Run("returns empty list when no pending agents", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/pending", nil)
 		rec := httptest.NewRecorder()
-		sut.handleListPendingAgents(rec, req)
+		sut.AgentsDeps().HandleListPendingAgents(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -272,18 +230,18 @@ func TestHandleListPendingAgents(t *testing.T) {
 	})
 
 	t.Run("returns populated list", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		now := time.Now().UTC()
-		sut.pendingAgents.Add(&pendingAgent{
+		sut.PendingAgents.Add(&agentspkg.PendingAgent{
 			AssetID:     "pending-alpha-1000",
 			Hostname:    "alpha",
 			Platform:    "linux",
 			RemoteIP:    "10.0.0.1",
 			ConnectedAt: now,
 		})
-		sut.pendingAgents.Add(&pendingAgent{
+		sut.PendingAgents.Add(&agentspkg.PendingAgent{
 			AssetID:     "pending-beta-2000",
 			Hostname:    "beta",
 			Platform:    "darwin",
@@ -293,7 +251,7 @@ func TestHandleListPendingAgents(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/pending", nil)
 		rec := httptest.NewRecorder()
-		sut.handleListPendingAgents(rec, req)
+		sut.AgentsDeps().HandleListPendingAgents(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -330,12 +288,12 @@ func TestHandleListPendingAgents(t *testing.T) {
 	})
 
 	t.Run("rejects non-GET method", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pending", nil)
 		rec := httptest.NewRecorder()
-		sut.handleListPendingAgents(rec, req)
+		sut.AgentsDeps().HandleListPendingAgents(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -345,11 +303,11 @@ func TestHandleListPendingAgents(t *testing.T) {
 
 func TestHandlePendingEnrollmentGuards(t *testing.T) {
 	t.Run("rejects when pending capacity is full", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
-		for i := 0; i < maxPendingEnrollmentAgents; i++ {
-			sut.pendingAgents.Add(&pendingAgent{
-				AssetID:  buildPendingEnrollmentAssetID("host"),
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
+		for i := 0; i < agentspkg.MaxPendingEnrollmentAgents; i++ {
+			sut.PendingAgents.Add(&agentspkg.PendingAgent{
+				AssetID:  agentspkg.BuildPendingEnrollmentAssetID("host"),
 				Hostname: "host",
 			})
 		}
@@ -357,7 +315,7 @@ func TestHandlePendingEnrollmentGuards(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/ws/agent", nil)
 		req.RemoteAddr = "10.0.0.10:1234"
 		rec := httptest.NewRecorder()
-		sut.handlePendingEnrollment(rec, req)
+		sut.AgentsDeps().HandlePendingEnrollment(rec, req)
 
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
@@ -365,11 +323,11 @@ func TestHandlePendingEnrollmentGuards(t *testing.T) {
 	})
 
 	t.Run("rejects when source IP exceeds pending connection limit", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.pendingAgents = newPendingAgents()
-		for i := 0; i < maxPendingEnrollmentPerIP; i++ {
-			sut.pendingAgents.Add(&pendingAgent{
-				AssetID:  buildPendingEnrollmentAssetID("host"),
+		sut := hubdeps.New(t)
+		sut.PendingAgents = agentspkg.NewPendingAgents()
+		for i := 0; i < agentspkg.MaxPendingEnrollmentPerIP; i++ {
+			sut.PendingAgents.Add(&agentspkg.PendingAgent{
+				AssetID:  agentspkg.BuildPendingEnrollmentAssetID("host"),
 				Hostname: "host",
 				RemoteIP: "10.0.0.20",
 			})
@@ -378,7 +336,7 @@ func TestHandlePendingEnrollmentGuards(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/ws/agent", nil)
 		req.RemoteAddr = "10.0.0.20:9999"
 		rec := httptest.NewRecorder()
-		sut.handlePendingEnrollment(rec, req)
+		sut.AgentsDeps().HandlePendingEnrollment(rec, req)
 
 		if rec.Code != http.StatusTooManyRequests {
 			t.Fatalf("expected 429, got %d", rec.Code)
@@ -387,11 +345,11 @@ func TestHandlePendingEnrollmentGuards(t *testing.T) {
 }
 
 func TestHandlePendingEnrollmentSendsChallengeAndCleansUpOnDisconnect(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut := hubdeps.New(t)
+	sut.PendingAgents = agentspkg.NewPendingAgents()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handlePendingEnrollment(w, r)
+		sut.AgentsDeps().HandlePendingEnrollment(w, r)
 	}))
 	defer server.Close()
 
@@ -429,8 +387,8 @@ func TestHandlePendingEnrollmentSendsChallengeAndCleansUpOnDisconnect(t *testing
 		t.Fatalf("expected nonce in challenge payload")
 	}
 
-	if sut.pendingAgents.Count() != 1 {
-		t.Fatalf("expected one pending agent after connect, got %d", sut.pendingAgents.Count())
+	if sut.PendingAgents.Count() != 1 {
+		t.Fatalf("expected one pending agent after connect, got %d", sut.PendingAgents.Count())
 	}
 
 	if err := clientConn.Close(); err != nil {
@@ -439,7 +397,7 @@ func TestHandlePendingEnrollmentSendsChallengeAndCleansUpOnDisconnect(t *testing
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if sut.pendingAgents.Count() == 0 {
+		if sut.PendingAgents.Count() == 0 {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
