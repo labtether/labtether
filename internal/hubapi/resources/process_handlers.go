@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -93,8 +92,8 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.ProcessListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.ProcessListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -147,8 +146,8 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var result agentmgr.ProcessKillResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil {
+	result, err := agentmgr.Decode[agentmgr.ProcessKillResultData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -160,8 +159,8 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 }
 
 func (d *Deps) ProcessAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ProcessListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.ProcessListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid process listed data: %v", err)
 		return
 	}
@@ -169,8 +168,7 @@ func (d *Deps) ProcessAgentProcessListed(conn *agentmgr.AgentConn, msg agentmgr.
 }
 
 func (d *Deps) ProcessAgentProcessKillResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.ProcessKillResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	if _, err := agentmgr.Decode[agentmgr.ProcessKillResultData](msg); err != nil {
 		log.Printf("agentws: invalid process kill result data: %v", err)
 		return
 	}

@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -46,8 +45,8 @@ func (d *Deps) FailAgentFileOperations(assetID string) {
 }
 
 func (d *Deps) ProcessAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.FileListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.FileListedData](msg)
+	if err != nil {
 		return
 	}
 	d.deliverFileResponseFromAgent(conn, data.RequestID, msg)
@@ -55,8 +54,8 @@ func (d *Deps) ProcessAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Mes
 
 // processAgentFileData handles file.data from agent.
 func (d *Deps) ProcessAgentFileData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.FileDataPayload
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.FileDataPayload](msg)
+	if err != nil {
 		return
 	}
 	d.deliverFileResponseFromAgent(conn, data.RequestID, msg)
@@ -64,8 +63,8 @@ func (d *Deps) ProcessAgentFileData(conn *agentmgr.AgentConn, msg agentmgr.Messa
 
 // processAgentFileWritten handles file.written from agent.
 func (d *Deps) ProcessAgentFileWritten(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.FileWrittenData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.FileWrittenData](msg)
+	if err != nil {
 		return
 	}
 	d.deliverFileResponseFromAgent(conn, data.RequestID, msg)
@@ -73,8 +72,8 @@ func (d *Deps) ProcessAgentFileWritten(conn *agentmgr.AgentConn, msg agentmgr.Me
 
 // processAgentFileResult handles file.result from agent.
 func (d *Deps) ProcessAgentFileResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.FileResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.FileResultData](msg)
+	if err != nil {
 		return
 	}
 	d.deliverFileResponseFromAgent(conn, data.RequestID, msg)

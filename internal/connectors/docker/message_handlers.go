@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -12,8 +11,8 @@ import (
 
 // HandleDiscovery processes a docker.discovery message from an agent.
 func (c *Coordinator) HandleDiscovery(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerDiscoveryData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerDiscoveryData](msg)
+	if err != nil {
 		log.Printf("docker-coordinator: invalid discovery from %s: %v", agentID, err)
 		return
 	}
@@ -29,8 +28,8 @@ func (c *Coordinator) HandleDiscovery(agentID string, msg agentmgr.Message) {
 
 // HandleDiscoveryDelta processes a docker.discovery.delta message from an agent.
 func (c *Coordinator) HandleDiscoveryDelta(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerDiscoveryDeltaData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerDiscoveryDeltaData](msg)
+	if err != nil {
 		log.Printf("docker-coordinator: invalid discovery delta from %s: %v", agentID, err)
 		return
 	}
@@ -296,8 +295,8 @@ func sortComposeStackStates(stacks []ComposeStackState) {
 
 // HandleStats processes a docker.stats message from an agent.
 func (c *Coordinator) HandleStats(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerStatsData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerStatsData](msg)
+	if err != nil {
 		log.Printf("docker-coordinator: invalid stats from %s: %v", agentID, err)
 		return
 	}
@@ -331,8 +330,7 @@ func (c *Coordinator) HandleStats(agentID string, msg agentmgr.Message) {
 // Container state changes are captured by the next discovery cycle; this
 // handler only updates the LastSeen timestamp for now.
 func (c *Coordinator) HandleEvent(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerEventData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	if _, err := agentmgr.Decode[agentmgr.DockerEventData](msg); err != nil {
 		log.Printf("docker-coordinator: invalid event from %s: %v", agentID, err)
 		return
 	}
@@ -347,8 +345,8 @@ func (c *Coordinator) HandleEvent(agentID string, msg agentmgr.Message) {
 // HandleActionResult processes a docker.action.result message from an agent.
 // It delivers the result to any waiting ExecuteAction call via a pending channel.
 func (c *Coordinator) HandleActionResult(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerActionResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerActionResultData](msg)
+	if err != nil {
 		log.Printf("docker-coordinator: invalid action result from %s: %v", agentID, err)
 		return
 	}
@@ -373,8 +371,8 @@ func (c *Coordinator) HandleActionResult(agentID string, msg agentmgr.Message) {
 
 // HandleComposeResult processes a docker.compose.result message from an agent.
 func (c *Coordinator) HandleComposeResult(agentID string, msg agentmgr.Message) {
-	var data agentmgr.DockerComposeResultData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.DockerComposeResultData](msg)
+	if err != nil {
 		log.Printf("docker-coordinator: invalid compose result from %s: %v", agentID, err)
 		return
 	}

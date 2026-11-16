@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -73,7 +72,7 @@ func (d *Deps) executeViaAgent(ctx context.Context, cmdJob terminal.CommandJob, 
 		Timeout:   int(timeout.Seconds()),
 	}
 
-	data, err := json.Marshal(req)
+	msg, err := agentmgr.NewMessage(agentmgr.MsgCommandRequest, wireID, req)
 	if err != nil {
 		return terminal.CommandResult{
 			JobID:       cmdJob.JobID,
@@ -106,11 +105,7 @@ func (d *Deps) executeViaAgent(ctx context.Context, cmdJob terminal.CommandJob, 
 	}
 	defer d.PendingAgentCmds.CompareAndDelete(wireID, pending)
 
-	if err := conn.SendContext(ctx, agentmgr.Message{
-		Type: agentmgr.MsgCommandRequest,
-		ID:   wireID,
-		Data: data,
-	}); err != nil {
+	if err := conn.SendContext(ctx, msg); err != nil {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return canceled(false)
 		}
@@ -233,7 +228,7 @@ func (d *Deps) executeUpdateViaAgent(ctx context.Context, jobID, target, mode st
 		Force:    force,
 		Packages: append([]string(nil), packages...),
 	}
-	data, err := json.Marshal(req)
+	msg, err := agentmgr.NewMessage(agentmgr.MsgUpdateRequest, wireID, req)
 	if err != nil {
 		return failed(fmt.Sprintf("marshal update request: %v", err))
 	}
@@ -256,11 +251,7 @@ func (d *Deps) executeUpdateViaAgent(ctx context.Context, jobID, target, mode st
 	finishProgress := d.trackAgentUpdate(wireID, conn, timeout+15*time.Second)
 	defer finishProgress()
 
-	if err := conn.SendContext(ctx, agentmgr.Message{
-		Type: agentmgr.MsgUpdateRequest,
-		ID:   wireID,
-		Data: data,
-	}); err != nil {
+	if err := conn.SendContext(ctx, msg); err != nil {
 		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
 			return failed("agent update canceled before dispatch: " + ctx.Err().Error())
 		}

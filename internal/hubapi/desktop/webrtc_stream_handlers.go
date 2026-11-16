@@ -37,12 +37,8 @@ func SendWebRTCStop(agentConn *agentmgr.AgentConn, sessionID string) {
 	if agentConn == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	stopData, _ := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: sessionID})
-	_ = agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgWebRTCStop,
-		ID:   sessionID,
-		Data: stopData,
-	})
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgWebRTCStop, sessionID, agentmgr.WebRTCStoppedData{SessionID: sessionID})
+	_ = agentConn.Send(msg)
 }
 
 func (b *WebRTCSignalingBridge) SendToBrowser(data []byte) error {
@@ -139,7 +135,7 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 	width, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("width")))
 	height, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("height")))
 	fps, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("fps")))
-	startData, _ := json.Marshal(agentmgr.WebRTCSessionData{
+	startMsg, _ := agentmgr.NewMessage(agentmgr.MsgWebRTCStart, bridge.WireSessionID, agentmgr.WebRTCSessionData{
 		SessionID:    bridge.WireSessionID,
 		Display:      strings.TrimSpace(r.URL.Query().Get("display")),
 		Quality:      strings.TrimSpace(r.URL.Query().Get("quality")),
@@ -150,11 +146,7 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 	})
 	var startErr error
 	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
-		startErr = bridge.start(agentmgr.Message{
-			Type: agentmgr.MsgWebRTCStart,
-			ID:   bridge.WireSessionID,
-			Data: startData,
-		})
+		startErr = bridge.start(startMsg)
 	}) {
 		return
 	}
@@ -197,12 +189,12 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 			if err := json.Unmarshal(sigMsg.Data, &payload); err != nil {
 				continue
 			}
-			data, _ := json.Marshal(agentmgr.WebRTCSDPData{
+			msg, _ := agentmgr.NewMessage(agentmgr.MsgWebRTCOffer, bridge.WireSessionID, agentmgr.WebRTCSDPData{
 				SessionID: bridge.WireSessionID,
 				Type:      "offer",
 				SDP:       payload.SDP,
 			})
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCOffer, ID: bridge.WireSessionID, Data: data})
+			_ = agentConn.Send(msg)
 
 		case "ice":
 			var payload agentmgr.WebRTCICEData
@@ -210,8 +202,8 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 				continue
 			}
 			payload.SessionID = bridge.WireSessionID
-			data, _ := json.Marshal(payload)
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCICE, ID: bridge.WireSessionID, Data: data})
+			msg, _ := agentmgr.NewMessage(agentmgr.MsgWebRTCICE, bridge.WireSessionID, payload)
+			_ = agentConn.Send(msg)
 
 		case "input":
 			var payload agentmgr.WebRTCInputData
@@ -219,8 +211,8 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 				continue
 			}
 			payload.SessionID = bridge.WireSessionID
-			data, _ := json.Marshal(payload)
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCInput, ID: bridge.WireSessionID, Data: data})
+			msg, _ := agentmgr.NewMessage(agentmgr.MsgWebRTCInput, bridge.WireSessionID, payload)
+			_ = agentConn.Send(msg)
 
 		case "stop":
 			explicitStop = true
@@ -244,8 +236,8 @@ stop:
 
 // ProcessAgentWebRTCCapabilities handles webrtc.capabilities from agent.
 func (d *Deps) ProcessAgentWebRTCCapabilities(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var caps agentmgr.WebRTCCapabilitiesData
-	if err := json.Unmarshal(msg.Data, &caps); err != nil {
+	caps, err := agentmgr.Decode[agentmgr.WebRTCCapabilitiesData](msg)
+	if err != nil {
 		return
 	}
 	conn.SetMeta("webrtc_available", strconv.FormatBool(caps.Available))
@@ -265,8 +257,8 @@ func (d *Deps) ProcessAgentWebRTCCapabilities(conn *agentmgr.AgentConn, msg agen
 
 // ProcessAgentWebRTCStarted handles webrtc.started from agent.
 func (d *Deps) ProcessAgentWebRTCStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var started agentmgr.WebRTCStartedData
-	if err := json.Unmarshal(msg.Data, &started); err != nil {
+	started, err := agentmgr.Decode[agentmgr.WebRTCStartedData](msg)
+	if err != nil {
 		return
 	}
 	raw, ok := d.WebRTCBridges.Load(started.SessionID)
@@ -289,8 +281,8 @@ func (d *Deps) ProcessAgentWebRTCStarted(conn *agentmgr.AgentConn, msg agentmgr.
 
 // ProcessAgentWebRTCAnswer handles webrtc.answer from agent.
 func (d *Deps) ProcessAgentWebRTCAnswer(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var answer agentmgr.WebRTCSDPData
-	if err := json.Unmarshal(msg.Data, &answer); err != nil {
+	answer, err := agentmgr.Decode[agentmgr.WebRTCSDPData](msg)
+	if err != nil {
 		return
 	}
 	raw, ok := d.WebRTCBridges.Load(answer.SessionID)
@@ -313,8 +305,8 @@ func (d *Deps) ProcessAgentWebRTCAnswer(conn *agentmgr.AgentConn, msg agentmgr.M
 
 // ProcessAgentWebRTCICE handles webrtc.ice from agent.
 func (d *Deps) ProcessAgentWebRTCICE(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var ice agentmgr.WebRTCICEData
-	if err := json.Unmarshal(msg.Data, &ice); err != nil {
+	ice, err := agentmgr.Decode[agentmgr.WebRTCICEData](msg)
+	if err != nil {
 		return
 	}
 	raw, ok := d.WebRTCBridges.Load(ice.SessionID)
@@ -337,8 +329,8 @@ func (d *Deps) ProcessAgentWebRTCICE(conn *agentmgr.AgentConn, msg agentmgr.Mess
 
 // ProcessAgentWebRTCStopped handles webrtc.stopped from agent.
 func (d *Deps) ProcessAgentWebRTCStopped(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var stopped agentmgr.WebRTCStoppedData
-	if err := json.Unmarshal(msg.Data, &stopped); err != nil {
+	stopped, err := agentmgr.Decode[agentmgr.WebRTCStoppedData](msg)
+	if err != nil {
 		return
 	}
 	raw, ok := d.WebRTCBridges.Load(stopped.SessionID)

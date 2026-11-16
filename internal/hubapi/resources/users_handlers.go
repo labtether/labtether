@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -50,8 +49,8 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 		d.writeAgentRequestFailure(w, assetID, err)
 		return
 	}
-	var listed agentmgr.UsersListedData
-	if err := json.Unmarshal(msg.Data, &listed); err != nil {
+	listed, err := agentmgr.Decode[agentmgr.UsersListedData](msg)
+	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -65,8 +64,8 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 }
 
 func (d *Deps) ProcessAgentUsersListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.UsersListedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
+	data, err := agentmgr.Decode[agentmgr.UsersListedData](msg)
+	if err != nil {
 		log.Printf("agentws: invalid users listed data: %v", err)
 		return
 	}

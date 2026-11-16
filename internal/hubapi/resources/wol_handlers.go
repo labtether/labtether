@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
@@ -195,16 +194,12 @@ func (d *Deps) tryAgentAssistedWoL(ctx context.Context, target assets.Asset, mac
 			break
 		}
 
-		payload, _ := json.Marshal(agentmgr.WoLSendData{
+		msg, _ := agentmgr.NewMessage(agentmgr.MsgWoLSend, target.ID, agentmgr.WoLSendData{
 			RequestID: requestID,
 			MAC:       macAddr,
 			Broadcast: "255.255.255.255:9",
 		})
-		err := d.AgentMgr.SendToAgent(connectedID, agentmgr.Message{
-			Type: agentmgr.MsgWoLSend,
-			ID:   target.ID,
-			Data: payload,
-		})
+		err := d.AgentMgr.SendToAgent(connectedID, msg)
 		if err != nil {
 			d.WoLPending.delete(requestID)
 			securityruntime.Logf("wol: agent-assisted dispatch failed relay=%s target=%s reason=relay_unavailable", connectedID, target.ID)
@@ -293,8 +288,8 @@ func (d *Deps) ProcessAgentWoLResult(conn *agentmgr.AgentConn, msg agentmgr.Mess
 		relayID = strings.TrimSpace(conn.AssetID)
 	}
 
-	var result agentmgr.WoLResultData
-	if err := json.Unmarshal(msg.Data, &result); err != nil {
+	result, err := agentmgr.Decode[agentmgr.WoLResultData](msg)
+	if err != nil {
 		securityruntime.Logf("wol: invalid wol.result payload relay=%s reason=invalid_payload", relayID)
 		d.appendAgentWakeResultAudit(relayID, "rejected", "invalid_payload", "")
 		return

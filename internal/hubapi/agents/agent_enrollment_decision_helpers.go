@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -42,11 +41,10 @@ func SendPendingEnrollmentClaimDecision(claim PendingDecisionClaim, msgType stri
 	if claim.conn == nil || claim.connMu == nil {
 		return fmt.Errorf("pending agent connection not available")
 	}
-	payload, err := json.Marshal(data)
+	msg, err := agentmgr.NewMessage(msgType, "", data)
 	if err != nil {
 		return err
 	}
-	msg := agentmgr.Message{Type: msgType, Data: payload}
 	claim.connMu.Lock()
 	defer claim.connMu.Unlock()
 	_ = claim.conn.SetWriteDeadline(time.Now().Add(agentmgr.AgentWriteDeadline))
@@ -116,13 +114,9 @@ func NormalizeHostnameForAssetID(hostname string) string {
 }
 
 func SendPendingEnrollmentDecision(agent *PendingAgent, msgType string, data any, closeReason string) error {
-	payload, err := json.Marshal(data)
+	msg, err := agentmgr.NewMessage(msgType, "", data)
 	if err != nil {
 		return err
-	}
-	msg := agentmgr.Message{
-		Type: msgType,
-		Data: payload,
 	}
 
 	agent.ConnMu.Lock()

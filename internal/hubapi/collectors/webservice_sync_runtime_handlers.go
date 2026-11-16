@@ -2,7 +2,6 @@ package collectors
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -51,8 +50,8 @@ func (d *Deps) ProcessAgentWebServiceReport(conn *agentmgr.AgentConn, msg agentm
 		return
 	}
 
-	var report agentmgr.WebServiceReportData
-	if err := json.Unmarshal(msg.Data, &report); err != nil || len(report.Services) == 0 {
+	report, err := agentmgr.Decode[agentmgr.WebServiceReportData](msg)
+	if err != nil || len(report.Services) == 0 {
 		return
 	}
 
@@ -107,7 +106,7 @@ func (d *Deps) HandleWebServiceSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msg := agentmgr.Message{Type: agentmgr.MsgWebServiceSync}
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgWebServiceSync, "", nil)
 	if targetHost != "" {
 		if err := d.AgentMgr.SendToAgent(targetHost, msg); err != nil {
 			if !d.AgentMgr.IsConnected(targetHost) {

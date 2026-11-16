@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -67,15 +66,11 @@ func (d *Deps) handleAgentFileDownload(w http.ResponseWriter, r *http.Request, a
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	data, _ := json.Marshal(agentmgr.FileReadData{
+	msg, _ := agentmgr.NewMessage(agentmgr.MsgFileRead, requestID, agentmgr.FileReadData{
 		RequestID: requestID,
 		Path:      filePath,
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgFileRead,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	if err := agentConn.Send(msg); err != nil {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
