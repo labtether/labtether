@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -9,15 +9,17 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleFileCopyRejectsInvalidMethod(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-1/copy?src_path=%2Ftmp%2Fa&dst_path=%2Ftmp%2Fb", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileCopy(rec, req, "node-1")
+	sut.ResourcesDeps().HandleFileCopy(rec, req, "node-1")
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -25,12 +27,12 @@ func TestHandleFileCopyRejectsInvalidMethod(t *testing.T) {
 }
 
 func TestHandleFileCopyRejectsMissingPaths(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/files/node-1/copy?src_path=%2Ftmp%2Fa", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileCopy(rec, req, "node-1")
+	sut.ResourcesDeps().HandleFileCopy(rec, req, "node-1")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -41,14 +43,14 @@ func TestHandleFileCopyRejectsMissingPaths(t *testing.T) {
 }
 
 func TestHandleFileCopyBridgesAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-copy", "linux"))
-	defer sut.agentMgr.Unregister("node-copy")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-copy", "linux"))
+	defer sut.AgentMgr.Unregister("node-copy")
 
 	done := make(chan struct{})
 	go func() {
@@ -79,7 +81,7 @@ func TestHandleFileCopyBridgesAgentSuccess(t *testing.T) {
 			RequestID: copyReq.RequestID,
 			OK:        true,
 		})
-		sut.processAgentFileResult(&agentmgr.AgentConn{AssetID: "node-copy"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileResult(&agentmgr.AgentConn{AssetID: "node-copy"}, agentmgr.Message{
 			Type: agentmgr.MsgFileResult,
 			ID:   copyReq.RequestID,
 			Data: raw,
@@ -88,7 +90,7 @@ func TestHandleFileCopyBridgesAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/files/node-copy/copy?src_path=%2Ftmp%2Fsrc.txt&dst_path=%2Ftmp%2Fdst.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileCopy(rec, req, "node-copy")
+	sut.ResourcesDeps().HandleFileCopy(rec, req, "node-copy")
 
 	select {
 	case <-done:
@@ -110,14 +112,14 @@ func TestHandleFileCopyBridgesAgentSuccess(t *testing.T) {
 }
 
 func TestHandleFileCopyPropagatesAgentError(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-copy-error", "linux"))
-	defer sut.agentMgr.Unregister("node-copy-error")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-copy-error", "linux"))
+	defer sut.AgentMgr.Unregister("node-copy-error")
 
 	done := make(chan struct{})
 	go func() {
@@ -139,7 +141,7 @@ func TestHandleFileCopyPropagatesAgentError(t *testing.T) {
 			OK:        false,
 			Error:     "destination already exists",
 		})
-		sut.processAgentFileResult(&agentmgr.AgentConn{AssetID: "node-copy-error"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileResult(&agentmgr.AgentConn{AssetID: "node-copy-error"}, agentmgr.Message{
 			Type: agentmgr.MsgFileResult,
 			ID:   copyReq.RequestID,
 			Data: raw,
@@ -148,7 +150,7 @@ func TestHandleFileCopyPropagatesAgentError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/files/node-copy-error/copy?src_path=%2Ftmp%2Fsrc.txt&dst_path=%2Ftmp%2Fdst.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileCopy(rec, req, "node-copy-error")
+	sut.ResourcesDeps().HandleFileCopy(rec, req, "node-copy-error")
 
 	select {
 	case <-done:

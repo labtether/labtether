@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/groupmaintenance"
 	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
@@ -121,6 +122,59 @@ func TestDispatchAlertNotifications_SendsWebhookAndEmail(t *testing.T) {
 		if record.Status != notifications.RecordStatusSent {
 			t.Fatalf("expected sent status, got %+v", record)
 		}
+	}
+}
+
+func TestDispatchAlertNotifications_MaintenanceSuppressesDelivery(t *testing.T) {
+	sut := hubdeps.New(t)
+	sut.GroupMaintenanceStore = &maintenanceOnlyGroupMaintenanceStore{}
+	groupID := mustCreateGroup(t, sut, "Notification Maintenance", "notification-maintenance")
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "node-1",
+		GroupID: groupID,
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("seed asset: %v", err)
+	}
+	if _, err := sut.GroupMaintenanceStore.CreateGroupMaintenanceWindow(groupID, groupmaintenance.CreateMaintenanceWindowRequest{
+		Name:           "Suppress alert delivery",
+		StartAt:        time.Now().UTC().Add(-time.Minute),
+		EndAt:          time.Now().UTC().Add(time.Minute),
+		SuppressAlerts: true,
+	}); err != nil {
+		t.Fatalf("create maintenance window: %v", err)
+	}
+
+	store := newNotificationStoreStub()
+	store.channels["chan-webhook"] = notifications.Channel{
+		ID:      "chan-webhook",
+		Name:    "Webhook",
+		Type:    notifications.ChannelTypeWebhook,
+		Enabled: true,
+	}
+	store.routes["route-all"] = notifications.Route{
+		ID:         "route-all",
+		Name:       "All alerts",
+		ChannelIDs: []string{"chan-webhook"},
+		Enabled:    true,
+	}
+	adapter := &fakeNotificationAdapter{typ: notifications.ChannelTypeWebhook}
+	sut.NotificationStore = store
+	sut.NotificationDispatcher.Adapters = map[string]notifications.Adapter{
+		notifications.ChannelTypeWebhook: adapter,
+	}
+	rule := alerts.Rule{
+		ID:       "rule-1",
+		Name:     "Node offline",
+		Severity: alerts.SeverityCritical,
+		Targets:  []alerts.RuleTarget{{ID: "target-1", AssetID: "node-1"}},
+	}
+
+	sut.AlertingDeps().DispatchAlertNotifications(rule, "inst-1", "firing")
+	sut.AlertingDeps().WaitForNotificationDispatches()
+
+	if len(adapter.calls) != 0 || len(store.records) != 0 {
+		t.Fatalf("maintenance-suppressed delivery calls=%d records=%d", len(adapter.calls), len(store.records))
 	}
 }
 

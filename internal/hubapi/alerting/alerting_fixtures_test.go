@@ -1,10 +1,17 @@
 package alerting_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/groupmaintenance"
 	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/persistence"
@@ -66,4 +73,95 @@ func (c *countingIncidentStore) LinkIncidentAlertContext(ctx context.Context, id
 func (c *countingIncidentStore) CreateAutoIncidentForAlertInstanceContext(ctx context.Context, id string, req incidents.CreateIncidentRequest) (incidents.Incident, bool, error) {
 	c.createAutoIncidentCalls++
 	return c.IncidentStore.(persistence.AlertAutoIncidentContextStore).CreateAutoIncidentForAlertInstanceContext(ctx, id, req)
+}
+
+// mustCreateGroup and maintenanceOnlyGroupMaintenanceStore are copies of
+// cmd's helpers (alerts_incidents_api_test.go, actions_updates_api_test.go),
+// which many cmd tests still use: mustCreateGroup over the Hub, the store
+// verbatim.
+
+// mustCreateGroup creates a group via the HTTP API and returns its ID.
+func mustCreateGroup(t *testing.T, sut *hubdeps.Hub, name, slug string) string {
+	t.Helper()
+
+	payload := []byte(`{"name":"` + name + `","slug":"` + slug + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	sut.ResourcesDeps().HandleGroups(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating group, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Group struct {
+			ID string `json:"id"`
+		} `json:"group"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode group response: %v", err)
+	}
+	groupID := resp.Group.ID
+	t.Cleanup(func() {
+		if sut == nil || sut.GroupStore == nil || groupID == "" {
+			return
+		}
+		if err := sut.GroupStore.DeleteGroup(groupID); err != nil {
+			t.Logf("group cleanup warning: failed to delete group %q: %v", groupID, err)
+		}
+	})
+	return groupID
+}
+
+type maintenanceOnlyGroupMaintenanceStore struct {
+	windows map[string][]groupmaintenance.MaintenanceWindow
+}
+
+func (m *maintenanceOnlyGroupMaintenanceStore) CreateGroupMaintenanceWindow(groupID string, req groupmaintenance.CreateMaintenanceWindowRequest) (groupmaintenance.MaintenanceWindow, error) {
+	window := groupmaintenance.MaintenanceWindow{
+		ID:             "mw-" + groupID,
+		GroupID:        groupID,
+		Name:           req.Name,
+		StartAt:        req.StartAt.UTC(),
+		EndAt:          req.EndAt.UTC(),
+		SuppressAlerts: req.SuppressAlerts,
+		BlockActions:   req.BlockActions,
+		BlockUpdates:   req.BlockUpdates,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+	if m.windows == nil {
+		m.windows = make(map[string][]groupmaintenance.MaintenanceWindow)
+	}
+	m.windows[groupID] = append(m.windows[groupID], window)
+	return window, nil
+}
+
+func (m *maintenanceOnlyGroupMaintenanceStore) GetGroupMaintenanceWindow(groupID, windowID string) (groupmaintenance.MaintenanceWindow, bool, error) {
+	for _, window := range m.windows[groupID] {
+		if window.ID == windowID {
+			return window, true, nil
+		}
+	}
+	return groupmaintenance.MaintenanceWindow{}, false, nil
+}
+
+func (m *maintenanceOnlyGroupMaintenanceStore) ListGroupMaintenanceWindows(groupID string, activeAt *time.Time, limit int) ([]groupmaintenance.MaintenanceWindow, error) {
+	windows := append([]groupmaintenance.MaintenanceWindow(nil), m.windows[groupID]...)
+	if activeAt == nil {
+		return windows, nil
+	}
+	filtered := make([]groupmaintenance.MaintenanceWindow, 0, len(windows))
+	for _, window := range windows {
+		if !window.StartAt.After(activeAt.UTC()) && !window.EndAt.Before(activeAt.UTC()) {
+			filtered = append(filtered, window)
+		}
+	}
+	return filtered, nil
+}
+
+func (m *maintenanceOnlyGroupMaintenanceStore) UpdateGroupMaintenanceWindow(groupID, windowID string, req groupmaintenance.UpdateMaintenanceWindowRequest) (groupmaintenance.MaintenanceWindow, error) {
+	return groupmaintenance.MaintenanceWindow{}, errors.New("not implemented")
+}
+
+func (m *maintenanceOnlyGroupMaintenanceStore) DeleteGroupMaintenanceWindow(groupID, windowID string) error {
+	return errors.New("not implemented")
 }

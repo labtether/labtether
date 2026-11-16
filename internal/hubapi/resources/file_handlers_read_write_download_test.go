@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/base64"
@@ -11,17 +11,20 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleFileDownloadFirstPayloadErrorReturnsBadRequest(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-error", "linux"))
-	defer sut.agentMgr.Unregister("node-download-error")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-error", "linux"))
+	defer sut.AgentMgr.Unregister("node-download-error")
 
 	done := make(chan struct{})
 	go func() {
@@ -50,7 +53,7 @@ func TestHandleFileDownloadFirstPayloadErrorReturnsBadRequest(t *testing.T) {
 			RequestID: readReq.RequestID,
 			Error:     "permission denied",
 		})
-		sut.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-error"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-error"}, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   readReq.RequestID,
 			Data: raw,
@@ -59,7 +62,7 @@ func TestHandleFileDownloadFirstPayloadErrorReturnsBadRequest(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-download-error/download?path=%2Ftmp%2Fbad.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileDownload(rec, req, "node-download-error")
+	sut.ResourcesDeps().HandleFileDownload(rec, req, "node-download-error")
 
 	select {
 	case <-done:
@@ -79,14 +82,14 @@ func TestHandleFileDownloadFirstPayloadErrorReturnsBadRequest(t *testing.T) {
 }
 
 func TestHandleFileDownloadFirstPayloadTimeoutReturnsGatewayTimeout(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-timeout", "linux"))
-	defer sut.agentMgr.Unregister("node-download-timeout")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-timeout", "linux"))
+	defer sut.AgentMgr.Unregister("node-download-timeout")
 
 	outboundSent := make(chan struct{})
 	go func() {
@@ -103,7 +106,7 @@ func TestHandleFileDownloadFirstPayloadTimeoutReturnsGatewayTimeout(t *testing.T
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-download-timeout/download?path=%2Ftmp%2Fslow.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileDownloadWithTimeout(rec, req, "node-download-timeout", 25*time.Millisecond)
+	sut.ResourcesDeps().HandleFileDownloadWithTimeout(rec, req, "node-download-timeout", 25*time.Millisecond)
 
 	select {
 	case <-outboundSent:
@@ -123,14 +126,14 @@ func TestHandleFileDownloadFirstPayloadTimeoutReturnsGatewayTimeout(t *testing.T
 }
 
 func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-ok", "linux"))
-	defer sut.agentMgr.Unregister("node-download-ok")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-ok", "linux"))
+	defer sut.AgentMgr.Unregister("node-download-ok")
 
 	done := make(chan struct{})
 	go func() {
@@ -154,7 +157,7 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 			Offset:    0,
 			Done:      false,
 		})
-		sut.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-ok"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-ok"}, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   readReq.RequestID,
 			Data: firstRaw,
@@ -166,7 +169,7 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 			Offset:    6,
 			Done:      true,
 		})
-		sut.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-ok"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-ok"}, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   readReq.RequestID,
 			Data: secondRaw,
@@ -175,7 +178,7 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-download-ok/download?path=%2Ftmp%2Fhello.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileDownloadWithTimeout(rec, req, "node-download-ok", 2*time.Second)
+	sut.ResourcesDeps().HandleFileDownloadWithTimeout(rec, req, "node-download-ok", 2*time.Second)
 
 	select {
 	case <-done:
@@ -202,14 +205,14 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 // Downloads stream as they arrive, so an agent error after the first chunk
 // must abort the response rather than end it as if the file were complete.
 func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-midstream", "linux"))
-	defer sut.agentMgr.Unregister("node-download-midstream")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-download-midstream", "linux"))
+	defer sut.AgentMgr.Unregister("node-download-midstream")
 
 	done := make(chan struct{})
 	go func() {
@@ -233,7 +236,7 @@ func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
 			Offset:    0,
 			Done:      false,
 		})
-		sut.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-midstream"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-midstream"}, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   readReq.RequestID,
 			Data: firstRaw,
@@ -244,7 +247,7 @@ func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
 			Error:     "disk read failed",
 			Done:      true,
 		})
-		sut.processAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-midstream"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentFileData(&agentmgr.AgentConn{AssetID: "node-download-midstream"}, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   readReq.RequestID,
 			Data: secondRaw,
@@ -255,7 +258,7 @@ func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	aborted := func() (aborted bool) {
 		defer func() { aborted = recover() == http.ErrAbortHandler }()
-		sut.handleFileDownloadWithTimeout(rec, req, "node-download-midstream", 2*time.Second)
+		sut.ResourcesDeps().HandleFileDownloadWithTimeout(rec, req, "node-download-midstream", 2*time.Second)
 		return false
 	}()
 
@@ -271,13 +274,13 @@ func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
 }
 
 func TestDeliverFileResponseFailsBackpressuredConsumer(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	const requestID = "req-backpressure"
-	bridge := newFileBridge(1, "node-download-test")
-	sut.fileBridges.Store(requestID, bridge)
+	bridge := respkg.NewFileBridge(1, "node-download-test")
+	sut.FileBridges.Store(requestID, bridge)
 	defer bridge.Close()
-	defer sut.fileBridges.Delete(requestID)
+	defer sut.FileBridges.Delete(requestID)
 
 	firstRaw, _ := json.Marshal(agentmgr.FileDataPayload{
 		RequestID: requestID,
@@ -293,7 +296,7 @@ func TestDeliverFileResponseFailsBackpressuredConsumer(t *testing.T) {
 	delivered := make(chan struct{})
 	go func() {
 		defer close(delivered)
-		sut.deliverFileResponse(requestID, agentmgr.Message{
+		sut.ResourcesDeps().DeliverFileResponse(requestID, agentmgr.Message{
 			Type: agentmgr.MsgFileData,
 			ID:   requestID,
 			Data: secondRaw,
@@ -316,7 +319,7 @@ func TestDeliverFileResponseFailsBackpressuredConsumer(t *testing.T) {
 		if err := json.Unmarshal(msg.Data, &payload); err != nil {
 			t.Fatalf("decode delivered payload: %v", err)
 		}
-		decoded, err := decodeFileDownloadChunk(payload)
+		decoded, err := respkg.DecodeFileDownloadChunk(payload)
 		if err != nil {
 			t.Fatalf("decode chunk contents: %v", err)
 		}

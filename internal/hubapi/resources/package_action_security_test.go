@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandlePackageActionRejectsOptionInjectionWithoutForwarding(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-pkg-security", "linux"))
-	defer sut.agentMgr.Unregister("node-pkg-security")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-pkg-security", "linux"))
+	defer sut.AgentMgr.Unregister("node-pkg-security")
 
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -32,7 +34,7 @@ func TestHandlePackageActionRejectsOptionInjectionWithoutForwarding(t *testing.T
 	}
 	go func() {
 		recorder := httptest.NewRecorder()
-		sut.handlePackages(recorder, request)
+		sut.ResourcesDeps().HandlePackages(recorder, request)
 		responseCh <- recorder
 	}()
 
@@ -47,7 +49,7 @@ func TestHandlePackageActionRejectsOptionInjectionWithoutForwarding(t *testing.T
 				RequestID: forwarded.RequestID,
 				Error:     "unexpected forwarded request",
 			})
-			sut.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg-security"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg-security"}, agentmgr.Message{
 				Type: agentmgr.MsgPackageResult,
 				ID:   forwarded.RequestID,
 				Data: raw,

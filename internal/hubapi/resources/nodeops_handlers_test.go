@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"encoding/json"
@@ -8,17 +8,19 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleProcessListBridgesAgentInventory(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-proc", "linux"))
-	defer sut.agentMgr.Unregister("node-proc")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-proc", "linux"))
+	defer sut.AgentMgr.Unregister("node-proc")
 
 	done := make(chan struct{})
 	go func() {
@@ -53,7 +55,7 @@ func TestHandleProcessListBridgesAgentInventory(t *testing.T) {
 				Command: "/usr/bin/postgres",
 			}},
 		})
-		sut.processAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-proc"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentProcessListed(&agentmgr.AgentConn{AssetID: "node-proc"}, agentmgr.Message{
 			Type: agentmgr.MsgProcessListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -62,7 +64,7 @@ func TestHandleProcessListBridgesAgentInventory(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/processes/node-proc?sort=memory&limit=2", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProcesses(rec, req)
+	sut.ResourcesDeps().HandleProcesses(rec, req)
 
 	<-done
 
@@ -80,14 +82,14 @@ func TestHandleProcessListBridgesAgentInventory(t *testing.T) {
 }
 
 func TestHandleProcessKillBridgesAgentResult(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-proc", "linux"))
-	defer sut.agentMgr.Unregister("node-proc")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-proc", "linux"))
+	defer sut.AgentMgr.Unregister("node-proc")
 
 	done := make(chan struct{})
 	go func() {
@@ -120,7 +122,7 @@ func TestHandleProcessKillBridgesAgentResult(t *testing.T) {
 			PID:     4242,
 			Success: true,
 		})
-		sut.processAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-proc"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentProcessKillResult(&agentmgr.AgentConn{AssetID: "node-proc"}, agentmgr.Message{
 			Type: agentmgr.MsgProcessKillResult,
 			ID:   outbound.ID,
 			Data: raw,
@@ -129,7 +131,7 @@ func TestHandleProcessKillBridgesAgentResult(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/processes/node-proc/kill", strings.NewReader(`{"pid":4242,"signal":"term"}`))
 	rec := httptest.NewRecorder()
-	sut.handleProcesses(rec, req)
+	sut.ResourcesDeps().HandleProcesses(rec, req)
 
 	<-done
 
@@ -147,14 +149,14 @@ func TestHandleProcessKillBridgesAgentResult(t *testing.T) {
 }
 
 func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-svc", "linux"))
-	defer sut.agentMgr.Unregister("node-svc")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-svc", "linux"))
+	defer sut.AgentMgr.Unregister("node-svc")
 
 	t.Run("service list", func(t *testing.T) {
 		done := make(chan struct{})
@@ -188,7 +190,7 @@ func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
 					LoadState:   "loaded",
 				}},
 			})
-			sut.processAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentServiceListed(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
 				Type: agentmgr.MsgServiceListed,
 				ID:   req.RequestID,
 				Data: raw,
@@ -197,7 +199,7 @@ func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/services/node-svc", nil)
 		rec := httptest.NewRecorder()
-		sut.handleServices(rec, req)
+		sut.ResourcesDeps().HandleServices(rec, req)
 
 		<-done
 
@@ -243,7 +245,7 @@ func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
 				OK:        true,
 				Output:    "restarted",
 			})
-			sut.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentServiceResult(&agentmgr.AgentConn{AssetID: "node-svc"}, agentmgr.Message{
 				Type: agentmgr.MsgServiceResult,
 				ID:   req.RequestID,
 				Data: raw,
@@ -252,7 +254,7 @@ func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/services/node-svc/restart", strings.NewReader(`{"service":"sshd"}`))
 		rec := httptest.NewRecorder()
-		sut.handleServices(rec, req)
+		sut.ResourcesDeps().HandleServices(rec, req)
 
 		<-done
 
@@ -271,14 +273,14 @@ func TestHandleServiceListAndActionBridgeAgentResponses(t *testing.T) {
 }
 
 func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-pkg", "linux"))
-	defer sut.agentMgr.Unregister("node-pkg")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-pkg", "linux"))
+	defer sut.AgentMgr.Unregister("node-pkg")
 
 	t.Run("package list", func(t *testing.T) {
 		done := make(chan struct{})
@@ -309,7 +311,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 					Status:  "installed",
 				}},
 			})
-			sut.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
 				Type: agentmgr.MsgPackageListed,
 				ID:   req.RequestID,
 				Data: raw,
@@ -318,7 +320,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/packages/node-pkg", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePackages(rec, req)
+		sut.ResourcesDeps().HandlePackages(rec, req)
 
 		<-done
 
@@ -372,7 +374,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 					"status":            "upgradable",
 				}},
 			})
-			sut.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
 				Type: agentmgr.MsgPackageListed,
 				ID:   request.RequestID,
 				Data: raw,
@@ -381,7 +383,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/packages/node-pkg/upgradable", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePackages(rec, req)
+		sut.ResourcesDeps().HandlePackages(rec, req)
 		<-done
 
 		if rec.Code != http.StatusOK {
@@ -436,7 +438,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 				Output:         "installed",
 				RebootRequired: true,
 			})
-			sut.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
 				Type: agentmgr.MsgPackageResult,
 				ID:   req.RequestID,
 				Data: raw,
@@ -445,7 +447,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/packages/node-pkg/install", strings.NewReader(`{"packages":[" jq ","jq"],"package":"curl"}`))
 		rec := httptest.NewRecorder()
-		sut.handlePackages(rec, req)
+		sut.ResourcesDeps().HandlePackages(rec, req)
 
 		<-done
 
@@ -481,7 +483,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 				return
 			}
 			raw, _ := json.Marshal(agentmgr.PackageResultData{RequestID: request.RequestID, OK: true, Output: "updated"})
-			sut.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+			sut.ResourcesDeps().ProcessAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
 				Type: agentmgr.MsgPackageResult,
 				ID:   request.RequestID,
 				Data: raw,
@@ -490,7 +492,7 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/packages/node-pkg/update", strings.NewReader(`{"packages":["curl"]}`))
 		rec := httptest.NewRecorder()
-		sut.handlePackages(rec, req)
+		sut.ResourcesDeps().HandlePackages(rec, req)
 		<-done
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -499,14 +501,14 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 }
 
 func TestHandleJournalLogsBridgesAgentEntries(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-journal", "linux"))
-	defer sut.agentMgr.Unregister("node-journal")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-journal", "linux"))
+	defer sut.AgentMgr.Unregister("node-journal")
 
 	done := make(chan struct{})
 	go func() {
@@ -540,7 +542,7 @@ func TestHandleJournalLogsBridgesAgentEntries(t *testing.T) {
 				Source:    "sshd",
 			}},
 		})
-		sut.processAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-journal"}, agentmgr.Message{
+		sut.ResourcesDeps().ProcessAgentJournalEntries(&agentmgr.AgentConn{AssetID: "node-journal"}, agentmgr.Message{
 			Type: agentmgr.MsgJournalEntries,
 			ID:   req.RequestID,
 			Data: raw,
@@ -549,7 +551,7 @@ func TestHandleJournalLogsBridgesAgentEntries(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/logs/journal/node-journal?since=1h%20ago&until=now&unit=sshd.service&priority=err&q=denied&limit=5", nil)
 	rec := httptest.NewRecorder()
-	sut.handleJournalLogs(rec, req)
+	sut.ResourcesDeps().HandleJournalLogs(rec, req)
 
 	<-done
 

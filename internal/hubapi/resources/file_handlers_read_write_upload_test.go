@@ -1,4 +1,4 @@
-package main
+package resources_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 )
 
 func decodeChunk(t *testing.T, encoded string) string {
@@ -25,7 +26,7 @@ func TestRelayFileUploadChunksExactChunkBoundaryAddsTerminalMarker(t *testing.T)
 	payload := []byte("abcdefgh")
 	var writes []agentmgr.FileWriteData
 
-	total, err := relayFileUploadChunks(bytes.NewReader(payload), "req-1", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
+	total, err := respkg.RelayFileUploadChunks(bytes.NewReader(payload), "req-1", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
 		writes = append(writes, msg)
 		return nil
 	})
@@ -57,7 +58,7 @@ func TestRelayFileUploadChunksPartialFinalChunkUsesInlineDone(t *testing.T) {
 	payload := []byte("abcdefghij")
 	var writes []agentmgr.FileWriteData
 
-	total, err := relayFileUploadChunks(bytes.NewReader(payload), "req-2", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
+	total, err := respkg.RelayFileUploadChunks(bytes.NewReader(payload), "req-2", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
 		writes = append(writes, msg)
 		return nil
 	})
@@ -96,7 +97,7 @@ func TestRelayFileUploadChunksPartialFinalChunkUsesInlineDone(t *testing.T) {
 
 func TestRelayFileUploadChunksEmptyBodySendsDoneMarker(t *testing.T) {
 	var writes []agentmgr.FileWriteData
-	total, err := relayFileUploadChunks(bytes.NewReader(nil), "req-3", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
+	total, err := respkg.RelayFileUploadChunks(bytes.NewReader(nil), "req-3", "/tmp/file.txt", 4, func(msg agentmgr.FileWriteData) error {
 		writes = append(writes, msg)
 		return nil
 	})
@@ -115,13 +116,13 @@ func TestRelayFileUploadChunksEmptyBodySendsDoneMarker(t *testing.T) {
 }
 
 func TestRelayFileUploadChunksWrapsSendErrors(t *testing.T) {
-	_, err := relayFileUploadChunks(bytes.NewReader([]byte("abc")), "req-4", "/tmp/file.txt", 4, func(_ agentmgr.FileWriteData) error {
+	_, err := respkg.RelayFileUploadChunks(bytes.NewReader([]byte("abc")), "req-4", "/tmp/file.txt", 4, func(_ agentmgr.FileWriteData) error {
 		return errors.New("socket closed")
 	})
 	if err == nil {
 		t.Fatal("expected send error")
 	}
-	var sendErr uploadRelaySendError
+	var sendErr respkg.UploadRelaySendError
 	if !errors.As(err, &sendErr) {
 		t.Fatalf("expected uploadRelaySendError, got %T (%v)", err, err)
 	}
