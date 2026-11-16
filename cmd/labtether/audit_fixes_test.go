@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
@@ -81,7 +82,7 @@ func TestBroadcasterDropsBackpressuredClientWithoutBlocking(t *testing.T) {
 
 func TestDeliverFileResponseFailsStalledBridgeCapacity(t *testing.T) {
 	sut := newTestAPIServer(t)
-	bridge := newFileBridge(1, "node-audit")
+	bridge := respkg.NewFileBridge(1, "node-audit")
 	defer bridge.Close()
 	sut.fileBridges.Store("req-1", bridge)
 	defer sut.fileBridges.Delete("req-1")
@@ -92,7 +93,7 @@ func TestDeliverFileResponseFailsStalledBridgeCapacity(t *testing.T) {
 
 	delivered := make(chan struct{})
 	go func() {
-		sut.deliverFileResponse("req-1", second)
+		sut.ensureResourcesDeps().DeliverFileResponse("req-1", second)
 		close(delivered)
 	}()
 

@@ -54,7 +54,7 @@ func TestHandleCronListBridgesAgentInventory(t *testing.T) {
 				User:     "root",
 			}},
 		})
-		sut.processAgentCronListed(&agentmgr.AgentConn{AssetID: "node-cron"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentCronListed(&agentmgr.AgentConn{AssetID: "node-cron"}, agentmgr.Message{
 			Type: agentmgr.MsgCronListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -63,7 +63,7 @@ func TestHandleCronListBridgesAgentInventory(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/cron/node-cron", nil)
 	rec := httptest.NewRecorder()
-	sut.handleCrons(rec, req)
+	sut.ensureResourcesDeps().HandleCrons(rec, req)
 
 	<-done
 
@@ -119,7 +119,7 @@ func TestHandleUsersListBridgesAgentInventory(t *testing.T) {
 				LoginTime:  "2026-03-08T14:30:00Z",
 			}},
 		})
-		sut.processAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-users"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentUsersListed(&agentmgr.AgentConn{AssetID: "node-users"}, agentmgr.Message{
 			Type: agentmgr.MsgUsersListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -128,7 +128,7 @@ func TestHandleUsersListBridgesAgentInventory(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/users/node-users", nil)
 	rec := httptest.NewRecorder()
-	sut.handleUsers(rec, req)
+	sut.ensureResourcesDeps().HandleUsers(rec, req)
 
 	<-done
 
@@ -187,7 +187,7 @@ func TestHandleDiskListBridgesAgentInventory(t *testing.T) {
 				UsePct:     40,
 			}},
 		})
-		sut.processAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk"}, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentDiskListed(&agentmgr.AgentConn{AssetID: "node-disk"}, agentmgr.Message{
 			Type: agentmgr.MsgDiskListed,
 			ID:   req.RequestID,
 			Data: raw,
@@ -196,7 +196,7 @@ func TestHandleDiskListBridgesAgentInventory(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/disks/node-disk", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDisks(rec, req)
+	sut.ensureResourcesDeps().HandleDisks(rec, req)
 
 	<-done
 
@@ -349,7 +349,7 @@ func TestHandleWakeOnLANDirectSendUsesFallbackWhenNoRelay(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/sleepy-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "sleepy-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "sleepy-node")
 
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -380,7 +380,7 @@ func TestHandleWakeOnLANUsesFirstValidMACCandidate(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/sleepy-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "sleepy-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "sleepy-node")
 
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -396,7 +396,7 @@ func TestHandleWakeOnLANRejectsInvalidMACWhenNoValidFallbackExists(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/sleepy-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "sleepy-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "sleepy-node")
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -446,7 +446,7 @@ func TestHandleWakeOnLANPrefersAgentRelayWhenAvailable(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/target-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "target-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "target-node")
 
 	<-done
 
@@ -483,7 +483,7 @@ func TestHandleWakeOnLANPrefersLinuxRelayOverOtherPlatforms(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/target-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "target-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "target-node")
 
 	assertWakeRelayMessage(t, linuxClientConn, "target-node")
 	assertNoAgentMessage(t, darwinClientConn)
@@ -521,7 +521,7 @@ func TestHandleWakeOnLANUsesStableRelayIDOrderingWithinPlatform(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/assets/target-node/wake", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWakeOnLAN(rec, req, "target-node")
+	sut.ensureResourcesDeps().HandleWakeOnLAN(rec, req, "target-node")
 
 	assertWakeRelayMessage(t, clientConnA, "target-node")
 	assertNoAgentMessage(t, clientConnZ)

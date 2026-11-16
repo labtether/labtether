@@ -18,7 +18,7 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 
 	groupReq := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader([]byte(`{"name":"Incident Lab","slug":"incident-lab"}`)))
 	groupRec := httptest.NewRecorder()
-	sut.handleGroups(groupRec, groupReq)
+	sut.ensureResourcesDeps().HandleGroups(groupRec, groupReq)
 	if groupRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", groupRec.Code)
 	}

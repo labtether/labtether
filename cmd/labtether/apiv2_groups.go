@@ -17,7 +17,7 @@ func (s *apiServer) handleV2Groups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/groups"
-	apiv2.WrapV1Handler(s.handleGroups)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleGroups)(w, r)
 }
 
 func (s *apiServer) handleV2GroupActions(w http.ResponseWriter, r *http.Request) {

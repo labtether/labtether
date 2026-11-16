@@ -8,6 +8,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/enrollment"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/securityruntime"
@@ -194,7 +195,7 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Publish presence inside the same lifecycle transition as replacement.
-	sessionID := generateRequestID()
+	sessionID := respkg.GenerateRequestID()
 	conn.SetMeta("presence.session_id", sessionID)
 	s.agentMgr.RegisterWithLifecycle(conn, func(owner *agentmgr.AgentConn) {
 		s.cleanupAgentConnectionState(owner.AssetID, owner.Meta("presence.session_id"))

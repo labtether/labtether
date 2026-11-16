@@ -22,7 +22,7 @@ func mustCreateGroupWithParent(t *testing.T, sut *apiServer, name string, parent
 	payload, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleGroups(rec, req)
+	sut.ensureResourcesDeps().HandleGroups(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating group %q, got %d body=%s", name, rec.Code, rec.Body.String())
 	}

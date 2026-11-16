@@ -98,7 +98,7 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 	call(s.handleAlertRuleActions, http.MethodPatch, "/alerts/rules/"+ruleID, `{"name":"Disk full"}`)
 	call(s.handleAlertRuleActions, http.MethodDelete, "/alerts/rules/"+ruleID, "")
 
-	group := call(s.handleGroups, http.MethodPost, "/groups", `{"name":"Rack A"}`)
+	group := call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleGroups(w, r) }, http.MethodPost, "/groups", `{"name":"Rack A"}`)
 	groupID := field(group, "group", "id")
 	call(s.handleGroupActions, http.MethodPatch, "/groups/"+groupID, `{"name":"Rack B"}`)
 	call(s.handleGroupActions, http.MethodDelete, "/groups/"+groupID, "")
@@ -129,7 +129,7 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 // change wrote no named audit row, so nobody could see who made it.
 func TestRetentionChangeWritesNamedAuditRow(t *testing.T) {
 	s := newTestAPIServer(t)
-	auditedCall(t, s.handleRetentionSettings, http.MethodPost, "/settings/retention", `{"logs_window":"2d"}`)
+	auditedCall(t, func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleRetentionSettings(w, r) }, http.MethodPost, "/settings/retention", `{"logs_window":"2d"}`)
 	events, err := s.auditStore.List(50, 0)
 	if err != nil {
 		t.Fatalf("list audit: %v", err)

@@ -60,7 +60,7 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 	if _, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "nas01", Type: "host", Name: "nas01", Source: "agent", Status: "online"}); err != nil {
 		t.Fatalf("seed device: %v", err)
 	}
-	groupID := field(call(s.handleGroups, http.MethodPost, "/groups", `{"name":"Rack A"}`), "group", "id")
+	groupID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleGroups(w, r) }, http.MethodPost, "/groups", `{"name":"Rack A"}`), "group", "id")
 	call(s.handleAssetActions, http.MethodPatch, "/assets/nas01", `{"name":"nas-main","group_id":"`+groupID+`"}`)
 	call(s.handleAssetActions, http.MethodPatch, "/assets/nas01", `{"name":"nas-main"}`)
 	call(s.handleV2AssetActions, http.MethodPatch, "/api/v2/assets/nas01", `{"tags":["storage"]}`)

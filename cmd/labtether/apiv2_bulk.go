@@ -147,7 +147,7 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 			rec := httptest.NewRecorder()
 			// Use the raw v1 handler directly — WrapV1Handler would re-wrap the
 			// response, but we only need the transfer ID from the raw JSON.
-			s.handleFileTransfers(rec, syntheticReq)
+			s.ensureResourcesDeps().HandleFileTransfers(rec, syntheticReq)
 
 			if rec.Code >= 400 {
 				// Extract error message from the v1 response if possible.

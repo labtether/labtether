@@ -66,7 +66,7 @@ func TestUpdatePlanDryRunRequestsValidatedAgentPackagePreview(t *testing.T) {
 			t.Errorf("encode package preview response: %v", err)
 			return
 		}
-		sut.processAgentPackageListed(agentConn, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentPackageListed(agentConn, agentmgr.Message{
 			Type: agentmgr.MsgPackageListed,
 			ID:   request.RequestID,
 			Data: data,
@@ -124,7 +124,7 @@ func TestUpdatePlanDryRunRejectsLegacyInstalledInventoryResponse(t *testing.T) {
 			t.Errorf("encode legacy response: %v", err)
 			return
 		}
-		sut.processAgentPackageListed(agentConn, agentmgr.Message{
+		sut.ensureResourcesDeps().ProcessAgentPackageListed(agentConn, agentmgr.Message{
 			Type: agentmgr.MsgPackageListed,
 			ID:   request.RequestID,
 			Data: data,

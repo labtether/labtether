@@ -266,7 +266,7 @@ func TestMetricsOverviewUsesBatchTelemetrySnapshots(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics/overview?window=15m", nil)
 	rec := httptest.NewRecorder()
-	sut.handleMetricsOverview(rec, req)
+	sut.ensureResourcesDeps().HandleMetricsOverview(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)

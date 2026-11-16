@@ -262,7 +262,7 @@ func (s *apiServer) handleV2SyntheticChecks(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.URL.Path = "/synthetic-checks"
-	apiv2.WrapV1Handler(s.handleSyntheticChecks)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleSyntheticChecks)(w, r)
 }
 
 func (s *apiServer) handleV2SyntheticCheckActions(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +275,7 @@ func (s *apiServer) handleV2SyntheticCheckActions(w http.ResponseWriter, r *http
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/synthetic-checks/", "/synthetic-checks/", 1)
-	apiv2.WrapV1Handler(s.handleSyntheticCheckActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleSyntheticCheckActions)(w, r)
 }
 
 // --- Dead Letters ---
@@ -304,7 +304,7 @@ func (s *apiServer) handleV2AuditEvents(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	r.URL.Path = "/audit/events"
-	apiv2.WrapV1Handler(s.handleAuditEvents)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleAuditEvents)(w, r)
 }
 
 // --- Log Views ---
@@ -371,14 +371,14 @@ func (s *apiServer) handleV2FileTransfers(w http.ResponseWriter, r *http.Request
 			return
 		}
 		r.URL.Path = "/api/v1/file-transfers"
-		apiv2.WrapV1Handler(s.handleFileTransfers)(w, r)
+		apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleFileTransfers)(w, r)
 	case http.MethodPost:
 		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:write") {
 			apiv2.WriteScopeForbidden(w, "files:write")
 			return
 		}
 		r.URL.Path = "/api/v1/file-transfers"
-		apiv2.WrapV1Handler(s.handleFileTransfers)(w, r)
+		apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleFileTransfers)(w, r)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
@@ -414,7 +414,7 @@ func (s *apiServer) handleV2FileTransferActions(w http.ResponseWriter, r *http.R
 
 	// Rewrite to the v1 path so the existing handler can parse the ID.
 	r.URL.Path = "/api/v1/file-transfers/" + transferID
-	apiv2.WrapV1Handler(s.handleFileTransfers)(w, r)
+	apiv2.WrapV1Handler(s.ensureResourcesDeps().HandleFileTransfers)(w, r)
 }
 
 // --- Prometheus Test ---

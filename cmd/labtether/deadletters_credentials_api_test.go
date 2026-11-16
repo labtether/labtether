@@ -189,7 +189,7 @@ func TestHandleAuditEventsReturnsServiceUnavailableWithoutAuditStore(t *testing.
 
 	req := httptest.NewRequest(http.MethodGet, "/audit/events?limit=5", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAuditEvents(rec, req)
+	sut.ensureResourcesDeps().HandleAuditEvents(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rec.Code)
 	}

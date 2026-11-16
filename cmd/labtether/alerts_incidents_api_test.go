@@ -19,7 +19,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 
 	groupReq := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader([]byte(`{"name":"Alert Lab","slug":"alert-lab"}`)))
 	groupRec := httptest.NewRecorder()
-	sut.handleGroups(groupRec, groupReq)
+	sut.ensureResourcesDeps().HandleGroups(groupRec, groupReq)
 	if groupRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", groupRec.Code)
 	}
@@ -441,7 +441,7 @@ func mustCreateGroup(t *testing.T, sut *apiServer, name, slug string) string {
 	payload := []byte(`{"name":"` + name + `","slug":"` + slug + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleGroups(rec, req)
+	sut.ensureResourcesDeps().HandleGroups(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating group, got %d: %s", rec.Code, rec.Body.String())
 	}

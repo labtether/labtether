@@ -90,7 +90,7 @@ func TestHandleV2AssetServiceActionAdaptsPathToLegacyPayload(t *testing.T) {
 			t.Errorf("service action=%+v, want path-derived fixture restart", action)
 		}
 		data, _ := json.Marshal(agentmgr.ServiceResultData{RequestID: action.RequestID, OK: true})
-		s.processAgentServiceResult(&agentmgr.AgentConn{AssetID: "srv1"}, agentmgr.Message{
+		s.ensureResourcesDeps().ProcessAgentServiceResult(&agentmgr.AgentConn{AssetID: "srv1"}, agentmgr.Message{
 			Type: agentmgr.MsgServiceResult,
 			ID:   action.RequestID,
 			Data: data,

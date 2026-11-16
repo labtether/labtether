@@ -33,7 +33,7 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.processAgentLogBatch(conn, msg)
 	}
 	router[agentmgr.MsgJournalEntries] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentJournalEntries(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentJournalEntries(conn, msg)
 	}
 	router[agentmgr.MsgUpdateProgress] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentUpdateProgress(conn, msg)
@@ -93,52 +93,52 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.processAgentWebRTCStopped(conn, msg)
 	}
 	router[agentmgr.MsgWoLResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWoLResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentWoLResult(conn, msg)
 	}
 	router[agentmgr.MsgFileListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentFileListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentFileListed(conn, msg)
 	}
 	router[agentmgr.MsgFileData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentFileData(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentFileData(conn, msg)
 	}
 	router[agentmgr.MsgFileWritten] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentFileWritten(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentFileWritten(conn, msg)
 	}
 	router[agentmgr.MsgFileResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentFileResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentFileResult(conn, msg)
 	}
 	router[agentmgr.MsgProcessListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentProcessListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentProcessListed(conn, msg)
 	}
 	router[agentmgr.MsgProcessKillResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentProcessKillResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentProcessKillResult(conn, msg)
 	}
 	router[agentmgr.MsgServiceListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentServiceListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentServiceListed(conn, msg)
 	}
 	router[agentmgr.MsgServiceResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentServiceResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentServiceResult(conn, msg)
 	}
 	router[agentmgr.MsgDiskListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDiskListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentDiskListed(conn, msg)
 	}
 	router[agentmgr.MsgNetworkListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentNetworkListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentNetworkListed(conn, msg)
 	}
 	router[agentmgr.MsgNetworkResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentNetworkResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentNetworkResult(conn, msg)
 	}
 	router[agentmgr.MsgPackageListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentPackageListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentPackageListed(conn, msg)
 	}
 	router[agentmgr.MsgPackageResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentPackageResult(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentPackageResult(conn, msg)
 	}
 	router[agentmgr.MsgCronListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentCronListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentCronListed(conn, msg)
 	}
 	router[agentmgr.MsgUsersListed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentUsersListed(conn, msg)
+		s.ensureResourcesDeps().ProcessAgentUsersListed(conn, msg)
 	}
 	router[agentmgr.MsgConfigApplied] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentConfigApplied(conn, msg)
