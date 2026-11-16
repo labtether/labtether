@@ -128,7 +128,7 @@ type apiServer struct {
 	desktopBridges                sync.Map // map[sessionID]*desktopBridge
 	webrtcBridges                 sync.Map // map[sessionID]*webrtcSignalingBridge
 	displayReplies                desktoppkg.DisplayReplies
-	fileBridges                   sync.Map // map[requestID]*fileBridge
+	fileBridges                   sync.Map // map[requestID]*respkg.FileBridge
 	processReplies                respkg.AgentReplies
 	serviceReplies                respkg.AgentReplies
 	journalReplies                respkg.AgentReplies

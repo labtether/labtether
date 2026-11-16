@@ -12,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/terminal"
@@ -66,7 +67,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return canAccessOwnedSession(r, sessionActorID)
 		},
 		GenerateRequestID: func() string {
-			return generateRequestID()
+			return respkg.GenerateRequestID()
 		},
 		SanitizeUpstreamError: func(msg string) string {
 			return sanitizeUpstreamError(msg)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
@@ -331,7 +332,7 @@ func TestProcessAgentDesktopDisplaysRejectsMismatchedSender(t *testing.T) {
 
 func TestProcessAgentFileDataRejectsMismatchedSender(t *testing.T) {
 	var srv apiServer
-	bridge := newFileBridge(1, "node-1")
+	bridge := respkg.NewFileBridge(1, "node-1")
 	defer bridge.Close()
 	srv.fileBridges.Store("req-file-asset-bound", bridge)
 
@@ -379,16 +380,16 @@ func TestProcessAgentJournalEntriesRejectsMismatchedSender(t *testing.T) {
 }
 
 func TestParseProcessListLimitClamp(t *testing.T) {
-	if got := parseProcessListLimit(""); got != defaultProcessListLimit {
-		t.Fatalf("empty limit should default to %d, got %d", defaultProcessListLimit, got)
+	if got := respkg.ParseProcessListLimit(""); got != respkg.DefaultProcessListLimit {
+		t.Fatalf("empty limit should default to %d, got %d", respkg.DefaultProcessListLimit, got)
 	}
-	if got := parseProcessListLimit("-5"); got != defaultProcessListLimit {
-		t.Fatalf("negative limit should default to %d, got %d", defaultProcessListLimit, got)
+	if got := respkg.ParseProcessListLimit("-5"); got != respkg.DefaultProcessListLimit {
+		t.Fatalf("negative limit should default to %d, got %d", respkg.DefaultProcessListLimit, got)
 	}
-	if got := parseProcessListLimit("9999"); got != maxProcessListLimit {
-		t.Fatalf("oversized limit should clamp to %d, got %d", maxProcessListLimit, got)
+	if got := respkg.ParseProcessListLimit("9999"); got != respkg.MaxProcessListLimit {
+		t.Fatalf("oversized limit should clamp to %d, got %d", respkg.MaxProcessListLimit, got)
 	}
-	if got := parseProcessListLimit("30"); got != 30 {
+	if got := respkg.ParseProcessListLimit("30"); got != 30 {
 		t.Fatalf("expected explicit valid limit, got %d", got)
 	}
 }

@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
 
-	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
-	"github.com/labtether/labtether/internal/dependencies"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -156,44 +153,10 @@ func (s *apiServer) ensureResourcesDeps() *respkg.Deps {
 	return s.buildResourcesDeps()
 }
 
-// Forwarding methods from apiServer to resources.Deps so that existing
-// cmd/labtether callers keep compiling.
-
-// Type aliases for bridge types used in cmd/labtether/.
-type uploadRelaySendError = respkg.UploadRelaySendError
-type fileBridge = respkg.FileBridge
-
-func newFileBridge(buffer int, expectedAssetID string) *fileBridge {
-	return respkg.NewFileBridge(buffer, expectedAssetID)
-}
-
-func generateRequestID() string { return respkg.GenerateRequestID() }
-
-// Function aliases for test accessibility.
-func parseProcessListLimit(raw string) int             { return respkg.ParseProcessListLimit(raw) }
-func normalizeProcessSortBy(raw string) string         { return respkg.NormalizeProcessSortBy(raw) }
-func normalizeProcessSignal(raw string) (string, bool) { return respkg.NormalizeProcessSignal(raw) }
-func parseProcessCommandOutput(output string) []agentmgr.ProcessInfo {
-	return respkg.ParseProcessCommandOutput(output)
-}
-func normalizeFrontendPerfMetadata(input map[string]any) map[string]string {
-	return respkg.NormalizeFrontendPerfMetadata(input)
-}
-func sanitizeMobileTelemetryKey(value string) string { return respkg.SanitizeMobileTelemetryKey(value) }
-
-// Constant aliases.
-const (
-	defaultProcessListLimit = respkg.DefaultProcessListLimit
-	maxProcessListLimit     = respkg.MaxProcessListLimit
-)
-
-func decodeFileDownloadChunk(payload agentmgr.FileDataPayload) ([]byte, error) {
-	return respkg.DecodeFileDownloadChunk(payload)
-}
-
-func relayFileUploadChunks(body io.Reader, requestID, filePath string, chunkSize int, send func(agentmgr.FileWriteData) error) (int64, error) {
-	return respkg.RelayFileUploadChunks(body, requestID, filePath, chunkSize, send)
-}
+// The two handlers below stay in cmd/labtether because each runs cmd code
+// of its own. Every other caller calls the resources package through
+// ensureResourcesDeps(): route entries inside a closure, so the Deps are
+// still built for each request and never once when the route table is built.
 
 // handleGroupActions routes group sub-paths. Simple CRUD and move/reorder
 // delegate to the resources package; timeline, reliability, and maintenance
@@ -255,7 +218,7 @@ func (s *apiServer) handleGroupActions(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleGroupActions(w, r)
 }
 
-// Discovery run handler
+// handleDiscoveryRun runs cmd's link detection (detectLinkSuggestions).
 func (s *apiServer) handleDiscoveryRun(w http.ResponseWriter, r *http.Request) {
 	if denyAssetRestrictedGlobalAPI(w, r, "discovery") {
 		return
@@ -269,43 +232,4 @@ func (s *apiServer) handleDiscoveryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "completed"})
-}
-
-// hubRestartSelf and restartSettingsRoute aliases for test compatibility.
-var hubRestartSelf = respkg.HubRestartSelf
-
-const restartSettingsRoute = respkg.RestartSettingsRoute
-
-type restartSettingsResponse = respkg.RestartSettingsResponse
-
-// sendWakeOnLAN is an alias for test compatibility. Tests that override this
-// must also set respkg.SendWakeOnLAN to propagate to the extracted handler.
-var sendWakeOnLAN = respkg.SendWakeOnLAN
-
-// Function aliases for test accessibility.
-func findAssetMAC(metadata map[string]string) string { return respkg.FindAssetMAC(metadata) }
-
-type wolRelayCandidate = respkg.WoLRelayCandidate
-
-func wolRelayPlatformPriority(platform string) int { return respkg.WoLRelayPlatformPriority(platform) }
-
-func (s *apiServer) eligibleWoLRelays(targetAssetID string, target assets.Asset) []wolRelayCandidate {
-	return s.ensureResourcesDeps().EligibleWoLRelays(targetAssetID, target)
-}
-
-func (s *apiServer) findAssetMAC(metadata map[string]string) string {
-	return respkg.FindAssetMAC(metadata)
-}
-
-type dependencyBatchLister = respkg.DependencyBatchLister
-type dependencySingleLister = respkg.DependencySingleLister
-
-func parseDependencyAssetIDs(csv string, singular []string) []string {
-	return respkg.ParseDependencyAssetIDs(csv, singular)
-}
-func listAssetDependenciesBatch(store dependencySingleLister, assetIDs []string, limit int) ([]dependencies.Dependency, error) {
-	return respkg.ListAssetDependenciesBatch(store, assetIDs, limit)
-}
-func validateDependencyRequest(req dependencies.CreateDependencyRequest) error {
-	return respkg.ValidateDependencyRequest(req)
 }

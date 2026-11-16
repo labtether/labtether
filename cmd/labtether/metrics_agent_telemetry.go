@@ -190,7 +190,7 @@ func (a *agentTelemetryAdapter) collectProcesses(assetID string, topN int) []bri
 	if !ok || conn == nil || a.processReplies == nil {
 		return nil
 	}
-	requestID := generateRequestID()
+	requestID := respkg.GenerateRequestID()
 	msg, ok := a.request(a.processReplies, conn, agentmgr.MsgProcessList, requestID,
 		agentmgr.ProcessListData{RequestID: requestID, SortBy: "cpu", Limit: topN}, assetID)
 	if !ok {
@@ -250,7 +250,7 @@ func (a *agentTelemetryAdapter) collectNetworkInterfaces(assetID string) []bridg
 	if !ok || conn == nil || a.networkReplies == nil {
 		return nil
 	}
-	requestID := generateRequestID()
+	requestID := respkg.GenerateRequestID()
 	msg, ok := a.request(a.networkReplies, conn, agentmgr.MsgNetworkList, requestID,
 		agentmgr.NetworkListData{RequestID: requestID}, assetID)
 	if !ok {
@@ -325,7 +325,7 @@ func (a *agentTelemetryAdapter) collectDiskMounts(assetID string) []bridge.DiskM
 	if !ok || conn == nil || a.diskReplies == nil {
 		return nil
 	}
-	requestID := generateRequestID()
+	requestID := respkg.GenerateRequestID()
 	msg, ok := a.request(a.diskReplies, conn, agentmgr.MsgDiskList, requestID,
 		agentmgr.DiskListData{RequestID: requestID}, assetID)
 	if !ok {
