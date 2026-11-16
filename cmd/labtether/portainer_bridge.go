@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 
-	"github.com/labtether/labtether/internal/assets"
 	portainerpkg "github.com/labtether/labtether/internal/hubapi/portainer"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
@@ -30,11 +29,6 @@ func (s *apiServer) buildPortainerDeps() *portainerpkg.Deps {
 	}
 }
 
-// Type aliases for portainer types used in cmd/labtether/.
-type portainerRuntime = portainerpkg.PortainerRuntime
-type cachedPortainerRuntime = portainerpkg.CachedPortainerRuntime
-type portainerCapabilities = portainerpkg.PortainerCapabilities
-
 // ensurePortainerDeps returns portainerDeps, initializing once with sync.Once
 // so concurrent callers can't race on the lazy-init. Store pointers are
 // refreshed from apiServer on every call so tests that swap stores mid-run
@@ -56,23 +50,14 @@ func (s *apiServer) ensurePortainerDeps() *portainerpkg.Deps {
 	return d
 }
 
-// Forwarding methods.
-
-func (s *apiServer) handlePortainerEndpoints(w http.ResponseWriter, r *http.Request) {
-	s.ensurePortainerDeps().HandlePortainerEndpoints(w, r)
-}
-
+// handlePortainerAssets stays in cmd: it refuses a connector write while
+// Settings › Integration actions is off (refuseIntegrationActionWhenOff, cmd
+// code) before the package handler runs. The v1 route and its v2 wrapper both
+// call it, so the check is in one place. Other callers call
+// ensurePortainerDeps() themselves, when the request or call is made.
 func (s *apiServer) handlePortainerAssets(w http.ResponseWriter, r *http.Request) {
 	if s.refuseIntegrationActionWhenOff(w, r) {
 		return
 	}
 	s.ensurePortainerDeps().HandlePortainerAssets(w, r)
-}
-
-func (s *apiServer) handlePortainerCapabilities(w http.ResponseWriter, asset assets.Asset) {
-	s.ensurePortainerDeps().HandlePortainerCapabilities(w, asset)
-}
-
-func (s *apiServer) handlePortainerContainerExec(w http.ResponseWriter, r *http.Request, assetID, containerID string) {
-	s.ensurePortainerDeps().HandlePortainerContainerExec(w, r, assetID, containerID)
 }

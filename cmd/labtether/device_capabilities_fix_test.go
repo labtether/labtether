@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
+	portainerpkg "github.com/labtether/labtether/internal/hubapi/portainer"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
@@ -36,7 +37,7 @@ func TestHandlePortainerContainerExecRequiresAdmin(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-1", "operator"))
 	rec := httptest.NewRecorder()
 
-	sut.handlePortainerContainerExec(rec, req, "portainer-host", "abc123")
+	sut.ensurePortainerDeps().HandlePortainerContainerExec(rec, req, "portainer-host", "abc123")
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for non-admin portainer exec, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -50,7 +51,7 @@ func TestHandlePortainerContainerExecRequiresWebSocketUpgrade(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec := httptest.NewRecorder()
 
-	sut.handlePortainerContainerExec(rec, req, "portainer-host", "abc123")
+	sut.ensurePortainerDeps().HandlePortainerContainerExec(rec, req, "portainer-host", "abc123")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 without websocket upgrade, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
@@ -86,7 +87,7 @@ func TestHandlePortainerCapabilitiesReportsExecSupportFromAuthMethod(t *testing.
 			}
 
 			rec := httptest.NewRecorder()
-			sut.handlePortainerCapabilities(rec, assets.Asset{
+			sut.ensurePortainerDeps().HandlePortainerCapabilities(rec, assets.Asset{
 				ID:     "portainer-host-1",
 				Source: "portainer",
 				Type:   "container-host",
@@ -99,7 +100,7 @@ func TestHandlePortainerCapabilitiesReportsExecSupportFromAuthMethod(t *testing.
 				t.Fatalf("expected 200, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 			}
 
-			var payload portainerCapabilities
+			var payload portainerpkg.PortainerCapabilities
 			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 				t.Fatalf("decode capabilities: %v", err)
 			}

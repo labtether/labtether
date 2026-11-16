@@ -78,7 +78,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/pbs/assets/":                               s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSAssets)),
 		"/pbs/tasks/":                                s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSTaskRoutes)),
 		"/truenas/assets/":                           s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleTrueNASAssets)),
-		"/portainer/endpoints":                       s.withAuth(requireScope("connectors:read", s.handlePortainerEndpoints)),
+		"/portainer/endpoints":                       s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensurePortainerDeps().HandlePortainerEndpoints(w, r) })),
 		"/portainer/assets/":                         s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePortainerAssets)),
 		"/api/v1/services/web":                       s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServices)),
 		"/api/v1/services/web/compat":                s.withAuth(requireScope("web-services:read", s.handleWebServiceCompat)),
