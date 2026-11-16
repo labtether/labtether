@@ -96,10 +96,12 @@ func (a *agentTelemetryAdapter) timeout() time.Duration {
 }
 
 // request sends one message on conn and waits in p for the reply from
-// assetID. The wait is read after the send. Any failure gives no reply.
+// assetID. The wait is read after the send and ends when conn closes. Any
+// failure gives no reply.
 func (a *agentTelemetryAdapter) request(p *respkg.AgentReplies, conn *agentmgr.AgentConn, msgType, requestID string, payload any, assetID string) (agentmgr.Message, bool) {
 	msg, err := agentmgr.Request(context.Background(), p, agentmgr.Call[any, agentmgr.Message]{
-		Type: msgType, ID: requestID, Payload: payload, Send: conn.Send, Device: assetID, TimeoutFunc: a.timeout,
+		Type: msgType, ID: requestID, Payload: payload, Send: conn.Send, Device: assetID,
+		Accept: respkg.AcceptReplyTo(msgType), TimeoutFunc: a.timeout, Disconnect: conn.Done(),
 	})
 	return msg, err == nil
 }

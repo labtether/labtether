@@ -186,6 +186,7 @@ func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, a
 		Send:       func(msg agentmgr.Message) error { return agentConn.SendContext(ctx, msg) },
 		Device:     assetID,
 		ExactConn:  agentConn,
+		Accept:     AcceptReplyTo(agentmgr.MsgPackageList),
 		Timeout:    timeout,
 		Disconnect: agentConn.Done(),
 	})
@@ -330,7 +331,7 @@ func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.
 	if requestID == "" || len(requestID) > maxPackageRequestIDBytes {
 		return
 	}
-	deliverAgentReply(d.PackageReplies, matchPackage, conn, msg, data.RequestID)
+	deliverAgentReply(d.PackageReplies, matchPackage, agentmgr.MsgPackageListed, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -343,5 +344,5 @@ func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.
 	if requestID == "" || len(requestID) > maxPackageRequestIDBytes {
 		return
 	}
-	deliverAgentReply(d.PackageReplies, matchPackage, conn, msg, data.RequestID)
+	deliverAgentReply(d.PackageReplies, matchPackage, agentmgr.MsgPackageResult, conn, msg, data.RequestID)
 }

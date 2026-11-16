@@ -70,5 +70,5 @@ func (d *Deps) ProcessAgentUsersListed(conn *agentmgr.AgentConn, msg agentmgr.Me
 		log.Printf("agentws: invalid users listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.UsersReplies, matchListAcceptsNoConn, conn, msg, data.RequestID)
+	deliverAgentReply(d.UsersReplies, matchPayloadID, agentmgr.MsgUsersListed, conn, msg, data.RequestID)
 }

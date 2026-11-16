@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,47 +14,74 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/groupmaintenance"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/powercontrol"
 )
 
+// powerTestSender stands in for the agent manager. A connected one hands out
+// a real WebSocket connection; its agent end counts each action and passes
+// it to onSend with the agent it came to, and runs nothing.
 type powerTestSender struct {
-	connected bool
-	sendErr   error
-	onSend    func(string, agentmgr.Message)
-	sentCh    chan agentmgr.Message
-	mu        sync.Mutex
-	count     int
+	peer   *testutil.AgentPeer // nil: the agent is not connected
+	onSend func(*testutil.AgentPeer, agentmgr.Message)
+	sentCh chan agentmgr.Message
+	mu     sync.Mutex // guards onSend and count
+	count  int
 }
 
-func (s *powerTestSender) IsConnected(string) bool { return s.connected }
+func offlinePowerSender(*testing.T) *powerTestSender { return &powerTestSender{} }
 
-func (s *powerTestSender) SendToAgent(assetID string, msg agentmgr.Message) error {
-	s.mu.Lock()
-	s.count++
-	s.mu.Unlock()
-	if s.sentCh != nil {
-		select {
-		case s.sentCh <- msg:
-		default:
+// connectedPowerSender connects node-1's agent. sentCh may be nil.
+func connectedPowerSender(t *testing.T, sentCh chan agentmgr.Message) *powerTestSender {
+	s := &powerTestSender{peer: testutil.NewAgentPeer(t, "node-1"), sentCh: sentCh}
+	go func() {
+		for msg := range s.peer.Sent() {
+			s.mu.Lock()
+			s.count++
+			onSend := s.onSend
+			s.mu.Unlock()
+			if s.sentCh != nil {
+				select {
+				case s.sentCh <- msg:
+				default:
+				}
+			}
+			if onSend != nil {
+				onSend(s.peer, msg)
+			}
 		}
+	}()
+	return s
+}
+
+func (s *powerTestSender) respond(onSend func(*testutil.AgentPeer, agentmgr.Message)) *powerTestSender {
+	s.mu.Lock()
+	s.onSend = onSend
+	s.mu.Unlock()
+	return s
+}
+
+func (s *powerTestSender) Get(string) (*agentmgr.AgentConn, bool) {
+	if s.peer == nil {
+		return nil, false
 	}
-	if s.sendErr != nil {
-		return s.sendErr
-	}
-	if s.onSend != nil {
-		s.onSend(assetID, msg)
-	}
-	return nil
+	return s.peer.Conn, true
+}
+
+func (s *powerTestSender) sends() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.count
 }
 
 func installPowerResponder(t *testing.T, sut *apiServer, status agentmgr.PowerResultStatus, code agentmgr.PowerResultCode) *powerTestSender {
 	t.Helper()
-	sender := &powerTestSender{connected: true}
+	sender := connectedPowerSender(t, nil)
 	coordinator := powercontrol.New(sender, 50*time.Millisecond)
-	sender.onSend = func(assetID string, msg agentmgr.Message) {
+	sender.respond(func(peer *testutil.AgentPeer, msg agentmgr.Message) {
 		var action agentmgr.PowerActionData
 		if err := json.Unmarshal(msg.Data, &action); err != nil {
-			t.Fatalf("decode outbound action: %v", err)
+			t.Errorf("decode outbound action: %v", err)
 		}
 		result := agentmgr.PowerResultData{
 			RequestID: action.RequestID,
@@ -71,12 +97,12 @@ func installPowerResponder(t *testing.T, sut *apiServer, status agentmgr.PowerRe
 		}
 		raw, err := json.Marshal(result)
 		if err != nil {
-			t.Fatalf("encode result: %v", err)
+			t.Errorf("encode result: %v", err)
 		}
-		if !coordinator.HandleResult(assetID, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw}) {
-			t.Fatal("result was not delivered")
+		if !coordinator.HandleResult(peer.Conn, agentmgr.Message{Type: agentmgr.MsgPowerResult, ID: action.RequestID, Data: raw}) {
+			t.Error("result was not delivered")
 		}
-	}
+	})
 	sut.powerCoordinator = coordinator
 	return sender
 }
@@ -154,15 +180,27 @@ func TestV2PowerActionOfflineDeliveryAndTimeoutNeverSucceed(t *testing.T) {
 	tests := []struct {
 		name       string
 		device     string
-		sender     *powerTestSender
+		sender     func(*testing.T) *powerTestSender
 		timeout    time.Duration
 		wantStatus int
 		wantCode   string
 	}{
-		{"offline", "node-1", &powerTestSender{}, time.Second, http.StatusConflict, "agent is not connected"},
-		{"unknown device", "node-missing", &powerTestSender{}, time.Second, http.StatusNotFound, "device not found"},
-		{"send failed", "node-1", &powerTestSender{connected: true, sendErr: errors.New("closed")}, time.Second, http.StatusBadGateway, "power_delivery_failed"},
-		{"timeout", "node-1", &powerTestSender{connected: true}, 10 * time.Millisecond, http.StatusGatewayTimeout, "power_timed_out"},
+		{"offline", "node-1", offlinePowerSender, time.Second, http.StatusConflict, "agent is not connected"},
+		{"unknown device", "node-missing", offlinePowerSender, time.Second, http.StatusNotFound, "device not found"},
+		{"send failed", "node-1", func(t *testing.T) *powerTestSender {
+			s := connectedPowerSender(t, nil)
+			s.peer.Conn.Close() // stays node-1's connection; every send fails
+			return s
+		}, time.Second, http.StatusBadGateway, "power_delivery_failed"},
+		{"timeout", "node-1", func(t *testing.T) *powerTestSender { return connectedPowerSender(t, nil) },
+			10 * time.Millisecond, http.StatusGatewayTimeout, "power_timed_out"},
+		// The connection the action went out on closes during the wait, as
+		// it does when the device goes down: still a timeout, never offline.
+		{"agent disconnects", "node-1", func(t *testing.T) *powerTestSender {
+			return connectedPowerSender(t, nil).respond(func(peer *testutil.AgentPeer, _ agentmgr.Message) {
+				peer.Manager.UnregisterIfMatch("node-1", peer.Conn)
+			})
+		}, 10 * time.Millisecond, http.StatusGatewayTimeout, "power_timed_out"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,7 +208,7 @@ func TestV2PowerActionOfflineDeliveryAndTimeoutNeverSucceed(t *testing.T) {
 			if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "node-1", Status: "online"}); err != nil {
 				t.Fatalf("seed asset: %v", err)
 			}
-			sut.powerCoordinator = powercontrol.New(tc.sender, tc.timeout)
+			sut.powerCoordinator = powercontrol.New(tc.sender(t), tc.timeout)
 			rec := httptest.NewRecorder()
 			sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/"+tc.device+"/reboot", nil, nil), tc.device)
 			if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), tc.wantCode) {
@@ -182,7 +220,7 @@ func TestV2PowerActionOfflineDeliveryAndTimeoutNeverSucceed(t *testing.T) {
 
 func TestV2PowerActionReturnsTooManyRequestsAtGlobalAdmissionLimit(t *testing.T) {
 	sut := newTestAPIServer(t)
-	sender := &powerTestSender{connected: true, sentCh: make(chan agentmgr.Message, 1)}
+	sender := connectedPowerSender(t, make(chan agentmgr.Message, 1))
 	coordinator := powercontrol.NewWithLimit(sender, time.Second, 1)
 	sut.powerCoordinator = coordinator
 
@@ -222,8 +260,8 @@ func TestV2PowerActionEnforcesScopeAssetAllowlistAndRateLimit(t *testing.T) {
 		sender := installPowerResponder(t, sut, agentmgr.PowerResultAccepted, "")
 		rec := httptest.NewRecorder()
 		sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/node-1/reboot", []string{"assets:read"}, nil), "node-1")
-		if rec.Code != http.StatusForbidden || sender.count != 0 {
-			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.count, rec.Body.String())
+		if rec.Code != http.StatusForbidden || sender.sends() != 0 {
+			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.sends(), rec.Body.String())
 		}
 	})
 
@@ -232,8 +270,8 @@ func TestV2PowerActionEnforcesScopeAssetAllowlistAndRateLimit(t *testing.T) {
 		sender := installPowerResponder(t, sut, agentmgr.PowerResultAccepted, "")
 		rec := httptest.NewRecorder()
 		sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/node-1/reboot", []string{"assets:power"}, []string{"node-2"}), "node-1")
-		if rec.Code != http.StatusForbidden || sender.count != 0 {
-			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.count, rec.Body.String())
+		if rec.Code != http.StatusForbidden || sender.sends() != 0 {
+			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.sends(), rec.Body.String())
 		}
 	})
 
@@ -249,8 +287,8 @@ func TestV2PowerActionEnforcesScopeAssetAllowlistAndRateLimit(t *testing.T) {
 		}
 		rec := httptest.NewRecorder()
 		sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/node-1/reboot", nil, nil), "node-1")
-		if rec.Code != http.StatusTooManyRequests || sender.count != powerActionRateLimit {
-			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.count, rec.Body.String())
+		if rec.Code != http.StatusTooManyRequests || sender.sends() != powerActionRateLimit {
+			t.Fatalf("status=%d sends=%d body=%s", rec.Code, sender.sends(), rec.Body.String())
 		}
 	})
 }
@@ -282,8 +320,8 @@ func TestV2PowerActionMaintenanceBlockPreventsAgentDispatch(t *testing.T) {
 	if recorder.Code != http.StatusLocked || !strings.Contains(recorder.Body.String(), "maintenance_blocked") {
 		t.Fatalf("status=%d body=%s, want 423/maintenance_blocked", recorder.Code, recorder.Body.String())
 	}
-	if sender.count != 0 {
-		t.Fatalf("agent sends = %d, want zero", sender.count)
+	if sender.sends() != 0 {
+		t.Fatalf("agent sends = %d, want zero", sender.sends())
 	}
 	events, err := sut.auditStore.List(10, 0)
 	if err != nil {

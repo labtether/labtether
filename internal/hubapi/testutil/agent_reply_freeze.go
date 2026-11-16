@@ -12,11 +12,12 @@ import (
 )
 
 // The checks below pin how each Hub request that sends one message to an
-// agent and waits for one reply behaves today: what a timeout and a failed
-// send answer, that a late or duplicate reply never blocks the agent's read
-// loop (it runs under a per-device lock), which replies count as the answer,
-// and which ID matches a reply to its request. Each package lists its own
-// requests; a change to any of this must change those lists on purpose.
+// agent and waits for one reply behaves: what a timeout, a failed send and a
+// closed connection answer, that a late or duplicate reply never blocks the
+// agent's read loop (it runs under a per-device lock), which replies count as
+// the answer, and which ID matches a reply to its request. Each package lists
+// its own requests; a change to any of this must change those lists on
+// purpose.
 
 // ReplyDevice is the device every request is made for.
 const ReplyDevice = "nas01"
@@ -35,10 +36,8 @@ const (
 	replyMarker          = "from-agent"
 	replyVariantMarker   = "from-variant"
 	replyDuplicateMarker = "duplicate-reply"
-	// The handlers write 504 "agent did not respond in time", but
-	// servicehttp.WriteError replaces every 5xx text with this one, so this
-	// is what the person sees.
-	replyTimeoutAnswer    = "An internal error occurred."
+	// A timeout answers 504 with these fixed words (servicehttp.AgentTimeoutMessage).
+	replyTimeoutAnswer    = "device did not answer in time"
 	replyNotConnectedText = "agent is not connected"
 )
 
@@ -58,6 +57,9 @@ type ReplySite struct {
 	// Accepts says, for each reply variant, whether it counts as the answer.
 	// A variant left out is pinned by an older test.
 	Accepts map[string]bool
+	// Foreign lists replies of other types that the same registry handles.
+	// None of them may answer this request, even with its ID.
+	Foreign []ForeignReply
 	// OfflinePinnedBy names the older test that pins the answer for a device
 	// whose agent is not connected; empty means RunReplyOffline checks it.
 	OfflinePinnedBy string
@@ -65,10 +67,18 @@ type ReplySite struct {
 	Bind func(*testing.T, *agentmgr.AgentManager) ReplyHarness
 }
 
+// ForeignReply is a reply of another type, carried in a shared registry.
+type ForeignReply struct {
+	Type  string
+	Reply func(requestID, marker string) any
+}
+
 // ReplyHarness is a site bound to one set of package dependencies.
 type ReplyHarness struct {
-	Handle     http.HandlerFunc
-	Deliver    func(*agentmgr.AgentConn, agentmgr.Message)
+	Handle  http.HandlerFunc
+	Deliver func(*agentmgr.AgentConn, agentmgr.Message)
+	// Route hands a reply to the package's handler for its message type.
+	Route      func(*agentmgr.AgentConn, agentmgr.Message)
 	Pending    func() int // waiters still registered
 	SetTimeout func(func(defaultTimeout time.Duration) time.Duration)
 }

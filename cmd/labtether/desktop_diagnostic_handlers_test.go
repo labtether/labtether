@@ -153,8 +153,8 @@ func TestProcessAgentDesktopDiagnosedIgnoresUnknownRequestID(t *testing.T) {
 func TestProcessAgentDesktopDiagnosedDeliversToChan(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	// The diagnostic checks no device, so the waiter expects none.
-	ch := testutil.AwaitReply(t, &sut.diagnosticReplies, "req-deliver", "")
+	// The reply comes from the device the request was sent to.
+	ch := testutil.AwaitReply(t, &sut.diagnosticReplies, "req-deliver", "any-node")
 
 	raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{
 		RequestID:   "req-deliver",

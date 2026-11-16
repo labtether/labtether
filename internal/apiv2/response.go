@@ -49,11 +49,21 @@ func WriteList(w http.ResponseWriter, status int, data any, total, page, perPage
 // For 5xx responses, the original message is logged server-side and a generic
 // message is returned to the client to avoid leaking internal details.
 func WriteError(w http.ResponseWriter, status int, errorCode, message string) {
-	markV2Envelope(w)
 	if status >= 500 {
 		log.Printf("[error-sanitized] %d %s: %s", status, errorCode, message)
 		message = "An internal error occurred."
 	}
+	writeErrorEnvelope(w, status, errorCode, message)
+}
+
+// writeAgentTimeout gives a v2 client the fixed words of a device that did
+// not answer in time (servicehttp.WriteAgentTimeout), with its own code.
+func writeAgentTimeout(w http.ResponseWriter) {
+	writeErrorEnvelope(w, http.StatusGatewayTimeout, "agent_timeout", servicehttp.AgentTimeoutMessage)
+}
+
+func writeErrorEnvelope(w http.ResponseWriter, status int, errorCode, message string) {
+	markV2Envelope(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	resp := map[string]any{
@@ -132,6 +142,10 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 								errMsg = msg
 							}
 						}
+					}
+					if rec.Code == http.StatusGatewayTimeout && errMsg == servicehttp.AgentTimeoutMessage {
+						writeAgentTimeout(w)
+						return
 					}
 					WriteError(w, rec.Code, errCode, errMsg)
 					return

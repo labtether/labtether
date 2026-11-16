@@ -67,7 +67,8 @@ func (d *Deps) RunDockerEndpointTest(
 		Accept: func(result agentmgr.DockerEndpointTestResultData) bool {
 			return result.AssetID == assetID && result.Endpoint == endpoint
 		},
-		Timeout: timeout,
+		Timeout:    timeout,
+		Disconnect: conn.Done(),
 	})
 	if err == nil {
 		return result, nil

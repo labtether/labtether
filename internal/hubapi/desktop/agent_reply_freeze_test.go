@@ -10,10 +10,10 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
-// These pin today's behaviour of the Remote View requests that send one
-// message to the agent and wait for one reply (see
-// testutil/agent_reply_freeze.go). Display list, diagnostic and clipboard
-// each check the replying device differently; a shared helper must keep that.
+// These pin how the Remote View requests that send one message to the agent
+// and wait for one reply behave (see testutil/agent_reply_freeze.go).
+// Display list, diagnostic and clipboard check the replying device the same
+// way: its own connection, with the exact device ID.
 
 type depsHandler func(*Deps, http.ResponseWriter, *http.Request)
 type depsDeliver func(*Deps, *agentmgr.AgentConn, agentmgr.Message)
@@ -30,11 +30,18 @@ func bindDeps(site testutil.ReplySite, handle depsHandler, deliver depsDeliver, 
 		return testutil.ReplyHarness{
 			Handle:     func(w http.ResponseWriter, r *http.Request) { handle(d, w, r) },
 			Deliver:    func(conn *agentmgr.AgentConn, msg agentmgr.Message) { deliver(d, conn, msg) },
+			Route:      func(conn *agentmgr.AgentConn, msg agentmgr.Message) { desktopReplyHandlers[msg.Type](d, conn, msg) },
 			Pending:    func() int { return waiters(d).Len() },
 			SetTimeout: func(pick func(time.Duration) time.Duration) { d.replyTimeout = pick },
 		}
 	}
 	return site
+}
+
+// The reply handlers the agent router calls, by message type.
+var desktopReplyHandlers = map[string]depsDeliver{
+	agentmgr.MsgDesktopDisplays: (*Deps).ProcessAgentDesktopDisplays, agentmgr.MsgDesktopDiagnosed: (*Deps).ProcessAgentDesktopDiagnosed,
+	agentmgr.MsgClipboardData: (*Deps).ProcessAgentClipboardData, agentmgr.MsgClipboardSetAck: (*Deps).ProcessAgentClipboardSetAck,
 }
 
 func desktopReplySites() []testutil.ReplySite {
@@ -46,15 +53,15 @@ func desktopReplySites() []testutil.ReplySite {
 	// TestProcessAgentDesktopDisplaysRejectsMismatchedSender and
 	// TestProcessAgentClipboard{Data,SetAck}IgnoresUnexpectedAgent.
 	displays := map[string]bool{
-		testutil.ReplyWithoutConn: false, testutil.ReplyFromOtherCase: true,
+		testutil.ReplyWithoutConn: false, testutil.ReplyFromOtherCase: false,
 		testutil.ReplyOtherEnvelopeID: true, testutil.ReplyNoEnvelopeID: true, testutil.ReplyOtherPayloadID: false,
 	}
-	// The diagnostic checks no device at all.
+	// The diagnostic takes a reply only from the device's own connection.
 	diagnostic := map[string]bool{
-		testutil.ReplyWithoutConn: true, testutil.ReplyFromOtherCase: true, testutil.ReplyFromOtherDevice: true,
+		testutil.ReplyWithoutConn: false, testutil.ReplyFromOtherCase: false, testutil.ReplyFromOtherDevice: false,
 		testutil.ReplyOtherEnvelopeID: true, testutil.ReplyNoEnvelopeID: true, testutil.ReplyOtherPayloadID: false,
 	}
-	// Clipboard compares the device ID exactly, so other letter case is dropped.
+	// Every site compares the device ID exactly, so other letter case is dropped.
 	clipboard := map[string]bool{
 		testutil.ReplyWithoutConn: false, testutil.ReplyFromOtherCase: false,
 		testutil.ReplyOtherEnvelopeID: true, testutil.ReplyNoEnvelopeID: true, testutil.ReplyOtherPayloadID: false,
@@ -63,6 +70,13 @@ func desktopReplySites() []testutil.ReplySite {
 	// clipboard/get; clipboard/set takes the same connection check in
 	// HandleClipboardRoutes before it picks the action.
 	const offlineRemoteView = "TestRemoteViewRoutesSayAgentIsNotConnected"
+	// Clipboard get and set share one registry; each takes only its own reply.
+	clipboardData := func(id, m string) any { return agentmgr.ClipboardDataPayload{RequestID: id, Format: "text", Error: m} }
+	clipboardAck := func(id, m string) any { return agentmgr.ClipboardSetAckData{RequestID: id, Error: m} }
+	withForeign := func(site testutil.ReplySite, replyType string, build func(id, marker string) any) testutil.ReplySite {
+		site.Foreign = []testutil.ForeignReply{{Type: replyType, Reply: build}}
+		return site
+	}
 	return []testutil.ReplySite{
 		bindDeps(site("display list", http.MethodGet, "/api/v1/nodes/nas01/displays", "",
 			agentmgr.MsgDesktopListDisplays, agentmgr.MsgDesktopDisplays, 10*time.Second, displays, offlineRemoteView,
@@ -76,13 +90,13 @@ func desktopReplySites() []testutil.ReplySite {
 			func(id, m string) any { return agentmgr.DesktopDiagnosticData{RequestID: id, DesktopUser: m} }),
 			(*Deps).HandleDesktopDiagnoseRequest, (*Deps).ProcessAgentDesktopDiagnosed,
 			func(d *Deps) interface{ Len() int } { return d.DiagnosticReplies }),
-		bindDeps(site("clipboard get", http.MethodPost, "/api/v1/nodes/nas01/clipboard/get", `{}`,
+		bindDeps(withForeign(site("clipboard get", http.MethodPost, "/api/v1/nodes/nas01/clipboard/get", `{}`,
 			agentmgr.MsgClipboardGet, agentmgr.MsgClipboardData, 10*time.Second, clipboard, offlineRemoteView,
-			func(id, m string) any { return agentmgr.ClipboardDataPayload{RequestID: id, Format: "text", Error: m} }),
+			clipboardData), agentmgr.MsgClipboardSetAck, clipboardAck),
 			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardData, func(d *Deps) interface{ Len() int } { return d.ClipboardReplies }),
-		bindDeps(site("clipboard set", http.MethodPost, "/api/v1/nodes/nas01/clipboard/set", `{"format":"text","text":"x"}`,
+		bindDeps(withForeign(site("clipboard set", http.MethodPost, "/api/v1/nodes/nas01/clipboard/set", `{"format":"text","text":"x"}`,
 			agentmgr.MsgClipboardSet, agentmgr.MsgClipboardSetAck, 10*time.Second, clipboard, offlineRemoteView,
-			func(id, m string) any { return agentmgr.ClipboardSetAckData{RequestID: id, Error: m} }),
+			clipboardAck), agentmgr.MsgClipboardData, clipboardData),
 			(*Deps).HandleClipboardRoutes, (*Deps).ProcessAgentClipboardSetAck, func(d *Deps) interface{ Len() int } { return d.ClipboardReplies }),
 	}
 }
@@ -109,4 +123,13 @@ func TestDesktopAgentRequestDuplicateReplies(t *testing.T) {
 func TestDesktopAgentRequestReplyMatching(t *testing.T) {
 	noRDPGateway(t)
 	testutil.RunReplyVariants(t, desktopReplySites())
+}
+
+func TestDesktopAgentRequestDropsRepliesOfAnotherType(t *testing.T) {
+	testutil.RunReplyForeignTypes(t, desktopReplySites())
+}
+
+func TestDesktopAgentRequestEndsWhenTheAgentDisconnects(t *testing.T) {
+	noRDPGateway(t)
+	testutil.RunReplyDisconnects(t, desktopReplySites())
 }

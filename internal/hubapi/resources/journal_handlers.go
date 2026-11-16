@@ -75,5 +75,5 @@ func (d *Deps) ProcessAgentJournalEntries(conn *agentmgr.AgentConn, msg agentmgr
 		log.Printf("agentws: invalid journal entries data: %v", err)
 		return
 	}
-	deliverAgentReply(d.JournalReplies, matchPayloadID, conn, msg, data.RequestID)
+	deliverAgentReply(d.JournalReplies, matchPayloadID, agentmgr.MsgJournalEntries, conn, msg, data.RequestID)
 }

@@ -70,5 +70,5 @@ func (d *Deps) ProcessAgentCronListed(conn *agentmgr.AgentConn, msg agentmgr.Mes
 		log.Printf("agentws: invalid cron listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.CronReplies, matchListAcceptsNoConn, conn, msg, data.RequestID)
+	deliverAgentReply(d.CronReplies, matchPayloadID, agentmgr.MsgCronListed, conn, msg, data.RequestID)
 }

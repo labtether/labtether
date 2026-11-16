@@ -178,6 +178,31 @@ func TestRunDockerEndpointTestTimesOutBoundedly(t *testing.T) {
 	}
 }
 
+// Fault: the agent's connection closes during the probe and the person waits
+// out the whole probe timeout. The probe ends at once, as a failed send does.
+func TestRunDockerEndpointTestEndsWhenTheAgentDisconnects(t *testing.T) {
+	manager, conn, peer := newDockerEndpointTestAgentConn(t, "node-1", "linux")
+	deps := &Deps{AgentMgr: manager, DockerEndpointTestTimeout: 3 * time.Second}
+	done := make(chan error, 1)
+	go func() {
+		_, err := deps.RunDockerEndpointTest(context.Background(), "node-1", "/run/docker.sock")
+		done <- err
+	}()
+	_, request := readDockerEndpointTestRequest(t, peer)
+	manager.UnregisterIfMatch("node-1", conn)
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrDockerEndpointTestUnavailable) {
+			t.Fatalf("error after disconnect = %v, want %v", err, ErrDockerEndpointTestUnavailable)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("endpoint test kept waiting after the agent disconnected")
+	}
+	if _, ok := deps.DockerEndpointTestBridges.Load(request.RequestID); ok {
+		t.Fatal("endpoint test left a pending bridge after the disconnect")
+	}
+}
+
 func TestHandleAgentSettingsDockerTestUsesTypedProbeAndMapsClosedResult(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -127,7 +127,7 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 		d.writeAgentNotConnected(w, assetID)
 		return
 	case errors.Is(err, ErrServiceAgentTimeout):
-		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+		servicehttp.WriteAgentTimeout(w)
 		return
 	case err != nil:
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
@@ -148,7 +148,7 @@ func (d *Deps) ProcessAgentServiceListed(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid service listed data: %v", err)
 		return
 	}
-	deliverAgentReply(d.ServiceReplies, matchPayloadID, conn, msg, data.RequestID)
+	deliverAgentReply(d.ServiceReplies, matchPayloadID, agentmgr.MsgServiceListed, conn, msg, data.RequestID)
 }
 
 func (d *Deps) ProcessAgentServiceResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -157,5 +157,5 @@ func (d *Deps) ProcessAgentServiceResult(conn *agentmgr.AgentConn, msg agentmgr.
 		log.Printf("agentws: invalid service result data: %v", err)
 		return
 	}
-	deliverAgentReply(d.ServiceReplies, matchPayloadID, conn, msg, data.RequestID)
+	deliverAgentReply(d.ServiceReplies, matchPayloadID, agentmgr.MsgServiceResult, conn, msg, data.RequestID)
 }
