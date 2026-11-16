@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"fmt"
@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	proxmoxconnector "github.com/labtether/labtether/internal/connectors/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleProxmoxConnectorTestRedactsTokenSecret(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	const leakedSecret = "proxmox-token-secret-should-not-leak"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -19,27 +21,27 @@ func TestHandleProxmoxConnectorTestRedactsTokenSecret(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodPost, "/connectors/proxmox/test", strings.NewReader(fmt.Sprintf(`{
 		"base_url":"%s",
 		"token_id":"labtether@pve!agent",
 		"token_secret":"%s"
 	}`, server.URL, leakedSecret)))
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxConnectorTest(rec, req)
+	sut.CollectorsDeps().HandleProxmoxConnectorTest(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	// A plain reason that names the product, never the generic 5xx text.
-	assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox")
 	if strings.Contains(rec.Body.String(), leakedSecret) {
 		t.Fatalf("expected response to redact leaked token secret, got %s", rec.Body.String())
 	}
 }
 
 func TestHandleProxmoxConnectorTestRedactsPassword(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	const leakedPassword = "proxmox-password-should-not-leak"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +49,7 @@ func TestHandleProxmoxConnectorTestRedactsPassword(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodPost, "/connectors/proxmox/test", strings.NewReader(fmt.Sprintf(`{
 		"base_url":"%s",
 		"auth_method":"password",
@@ -55,28 +57,28 @@ func TestHandleProxmoxConnectorTestRedactsPassword(t *testing.T) {
 		"password":"%s"
 	}`, server.URL, leakedPassword)))
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxConnectorTest(rec, req)
+	sut.CollectorsDeps().HandleProxmoxConnectorTest(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	// A plain reason that names the product, never the generic 5xx text.
-	assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox")
 	if strings.Contains(rec.Body.String(), leakedPassword) {
 		t.Fatalf("expected response to redact leaked password, got %s", rec.Body.String())
 	}
 }
 
 func TestHandleConnectorActionsProxmoxTestRateLimit(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	sut.connectorRegistry.Register(proxmoxconnector.New())
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	sut.ConnectorRegistry.Register(proxmoxconnector.New())
 
 	for i := 0; i < 12; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/connectors/proxmox/test", strings.NewReader(`{"base_url":"https://proxmox.local:8006"}`))
 		req.RemoteAddr = "203.0.113.43:4403"
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.CollectorsDeps().HandleConnectorActions(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("request %d: expected 400 before rate limit, got %d", i+1, rec.Code)
 		}
@@ -85,9 +87,9 @@ func TestHandleConnectorActionsProxmoxTestRateLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/connectors/proxmox/test", strings.NewReader(`{"base_url":"https://proxmox.local:8006"}`))
 	req.RemoteAddr = "203.0.113.43:4403"
 	rec := httptest.NewRecorder()
-	sut.handleConnectorActions(rec, req)
+	sut.CollectorsDeps().HandleConnectorActions(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 after connector test burst, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "rate limit exceeded")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "rate limit exceeded")
 }

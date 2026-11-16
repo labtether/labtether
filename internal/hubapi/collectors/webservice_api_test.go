@@ -1,9 +1,11 @@
-package main
+package collectors_test
 
 import (
 	"encoding/json"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,13 +13,13 @@ import (
 )
 
 func TestHandleWebServiceSyncMethodNotAllowed(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/sync", nil)
 	rec := httptest.NewRecorder()
 
-	sut.handleWebServiceSync(rec, req)
+	sut.CollectorsDeps().HandleWebServiceSync(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", rec.Code)
@@ -25,13 +27,13 @@ func TestHandleWebServiceSyncMethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleWebServiceSyncNoConnectedAgents(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/sync", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 
-	sut.handleWebServiceSync(rec, req)
+	sut.CollectorsDeps().HandleWebServiceSync(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rec.Code)
@@ -39,13 +41,13 @@ func TestHandleWebServiceSyncNoConnectedAgents(t *testing.T) {
 }
 
 func TestHandleWebServiceSyncHostNotConnected(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/sync?host=node-1", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 
-	sut.handleWebServiceSync(rec, req)
+	sut.CollectorsDeps().HandleWebServiceSync(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rec.Code)
@@ -53,13 +55,13 @@ func TestHandleWebServiceSyncHostNotConnected(t *testing.T) {
 }
 
 func TestHandleWebServiceSyncInvalidBody(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/sync", strings.NewReader(`{"host_asset_id"`))
 	rec := httptest.NewRecorder()
 
-	sut.handleWebServiceSync(rec, req)
+	sut.CollectorsDeps().HandleWebServiceSync(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
@@ -67,9 +69,9 @@ func TestHandleWebServiceSyncInvalidBody(t *testing.T) {
 }
 
 func TestHandleWebServiceManualCRUD(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "host-1",
 		Type:    "node",
 		Name:    "Host 1",
@@ -87,7 +89,7 @@ func TestHandleWebServiceManualCRUD(t *testing.T) {
 		"url":"http://host-1:9999"
 	}`))
 	createRec := httptest.NewRecorder()
-	sut.handleWebServiceManual(createRec, createReq)
+	sut.CollectorsDeps().HandleWebServiceManual(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 on create, got %d body=%s", createRec.Code, createRec.Body.String())
 	}
@@ -105,7 +107,7 @@ func TestHandleWebServiceManualCRUD(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/manual?host=host-1", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleWebServiceManual(listRec, listReq)
+	sut.CollectorsDeps().HandleWebServiceManual(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on list, got %d", listRec.Code)
 	}
@@ -125,7 +127,7 @@ func TestHandleWebServiceManualCRUD(t *testing.T) {
 	}`))
 	patchReq.URL.Path = "/api/v1/services/web/manual/" + id
 	patchRec := httptest.NewRecorder()
-	sut.handleWebServiceManualActions(patchRec, patchReq)
+	sut.CollectorsDeps().HandleWebServiceManualActions(patchRec, patchReq)
 	if patchRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on patch, got %d body=%s", patchRec.Code, patchRec.Body.String())
 	}
@@ -133,19 +135,19 @@ func TestHandleWebServiceManualCRUD(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/services/web/manual/"+id, nil)
 	deleteReq.URL.Path = "/api/v1/services/web/manual/" + id
 	deleteRec := httptest.NewRecorder()
-	sut.handleWebServiceManualActions(deleteRec, deleteReq)
+	sut.CollectorsDeps().HandleWebServiceManualActions(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 on delete, got %d body=%s", deleteRec.Code, deleteRec.Body.String())
 	}
 }
 
 func TestHandleWebServiceManualActionsRejectsExtraPathSegments(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/services/web/manual/manual-1/extra", nil)
 	req.URL.Path = "/api/v1/services/web/manual/manual-1/extra"
 	rec := httptest.NewRecorder()
-	sut.handleWebServiceManualActions(rec, req)
+	sut.CollectorsDeps().HandleWebServiceManualActions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for manual action path with extra segments, got %d", rec.Code)
@@ -153,20 +155,20 @@ func TestHandleWebServiceManualActionsRejectsExtraPathSegments(t *testing.T) {
 }
 
 func TestHandleWebServiceIconLibraryCRUD(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/icon-library", strings.NewReader(`{
 		"name":"My Custom Icon",
 		"data_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMBAAII3n8AAAAASUVORK5CYII="
 	}`))
 	createRec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(createRec, createReq)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 on create, got %d body=%s", createRec.Code, createRec.Body.String())
 	}
 
 	var createResp struct {
-		Icon webServiceIconLibraryEntry `json:"icon"`
+		Icon collectorspkg.WebServiceIconLibraryEntry `json:"icon"`
 	}
 	if err := json.Unmarshal(createRec.Body.Bytes(), &createResp); err != nil {
 		t.Fatalf("failed to decode create response: %v", err)
@@ -180,12 +182,12 @@ func TestHandleWebServiceIconLibraryCRUD(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/icon-library", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(getRec, getReq)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on get, got %d body=%s", getRec.Code, getRec.Body.String())
 	}
 	var getResp struct {
-		Icons []webServiceIconLibraryEntry `json:"icons"`
+		Icons []collectorspkg.WebServiceIconLibraryEntry `json:"icons"`
 	}
 	if err := json.Unmarshal(getRec.Body.Bytes(), &getResp); err != nil {
 		t.Fatalf("failed to decode get response: %v", err)
@@ -202,13 +204,13 @@ func TestHandleWebServiceIconLibraryCRUD(t *testing.T) {
 		"name":"Renamed Icon"
 	}`))
 	renameRec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(renameRec, renameReq)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(renameRec, renameReq)
 	if renameRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on rename, got %d body=%s", renameRec.Code, renameRec.Body.String())
 	}
 
 	var renameResp struct {
-		Icon webServiceIconLibraryEntry `json:"icon"`
+		Icon collectorspkg.WebServiceIconLibraryEntry `json:"icon"`
 	}
 	if err := json.Unmarshal(renameRec.Body.Bytes(), &renameResp); err != nil {
 		t.Fatalf("failed to decode rename response: %v", err)
@@ -219,19 +221,19 @@ func TestHandleWebServiceIconLibraryCRUD(t *testing.T) {
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/services/web/icon-library?id="+createResp.Icon.ID, nil)
 	deleteRec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(deleteRec, deleteReq)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 on delete, got %d body=%s", deleteRec.Code, deleteRec.Body.String())
 	}
 
 	getAgainReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/icon-library", nil)
 	getAgainRec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(getAgainRec, getAgainReq)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(getAgainRec, getAgainReq)
 	if getAgainRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on second get, got %d body=%s", getAgainRec.Code, getAgainRec.Body.String())
 	}
 	var getAgainResp struct {
-		Icons []webServiceIconLibraryEntry `json:"icons"`
+		Icons []collectorspkg.WebServiceIconLibraryEntry `json:"icons"`
 	}
 	if err := json.Unmarshal(getAgainRec.Body.Bytes(), &getAgainResp); err != nil {
 		t.Fatalf("failed to decode second get response: %v", err)
@@ -242,14 +244,14 @@ func TestHandleWebServiceIconLibraryCRUD(t *testing.T) {
 }
 
 func TestHandleWebServiceIconLibraryRejectsInvalidDataURL(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/services/web/icon-library", strings.NewReader(`{
 		"name":"Bad Icon",
 		"data_url":"https://example.com/icon.png"
 	}`))
 	rec := httptest.NewRecorder()
-	sut.handleWebServiceIconLibrary(rec, req)
+	sut.CollectorsDeps().HandleWebServiceIconLibrary(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid data_url, got %d body=%s", rec.Code, rec.Body.String())
@@ -257,7 +259,7 @@ func TestHandleWebServiceIconLibraryRejectsInvalidDataURL(t *testing.T) {
 }
 
 func TestHandleWebServiceCompat(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	report := agentmgr.WebServiceReportData{
 		HostAssetID: "host-1",
@@ -304,11 +306,11 @@ func TestHandleWebServiceCompat(t *testing.T) {
 		},
 	}
 	raw, _ := json.Marshal(report)
-	sut.webServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
+	sut.WebServiceCoordinator.HandleReport("host-1", agentmgr.Message{Type: agentmgr.MsgWebServiceReport, Data: raw})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/compat", nil)
 	rec := httptest.NewRecorder()
-	sut.handleWebServiceCompat(rec, req)
+	sut.CollectorsDeps().HandleWebServiceCompat(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -331,7 +333,7 @@ func TestHandleWebServiceCompat(t *testing.T) {
 
 	includeHiddenReq := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/compat?include_hidden=true&connector=portainer&min_confidence=0.8", nil)
 	includeHiddenRec := httptest.NewRecorder()
-	sut.handleWebServiceCompat(includeHiddenRec, includeHiddenReq)
+	sut.CollectorsDeps().HandleWebServiceCompat(includeHiddenRec, includeHiddenReq)
 	if includeHiddenRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 include_hidden response, got %d body=%s", includeHiddenRec.Code, includeHiddenRec.Body.String())
 	}
@@ -354,11 +356,11 @@ func TestHandleWebServiceCompat(t *testing.T) {
 }
 
 func TestHandleWebServiceCompatInvalidMinConfidence(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/services/web/compat?min_confidence=abc", nil)
 	rec := httptest.NewRecorder()
 
-	sut.handleWebServiceCompat(rec, req)
+	sut.CollectorsDeps().HandleWebServiceCompat(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)

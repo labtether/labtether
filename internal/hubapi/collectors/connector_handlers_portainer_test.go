@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"context"
@@ -7,34 +7,30 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func allowInsecureTransportForConnectorTests(t *testing.T) {
-	t.Helper()
-	testutil.AllowInsecureTransportForConnectorTests(t)
-}
-
 func TestHandlePortainerConnectorTestInvalidPayload(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader("{"))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "invalid test payload")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "invalid test payload")
 }
 
 func TestHandlePortainerConnectorTestValidationErrors(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
 
 	tests := []struct {
 		name        string
@@ -66,53 +62,53 @@ func TestHandlePortainerConnectorTestValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(tt.payload))
 			rec := httptest.NewRecorder()
-			sut.handlePortainerConnectorTest(rec, req)
+			sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("expected %d, got %d", tt.wantStatus, rec.Code)
 			}
-			assertErrorBodyContains(t, rec.Body.Bytes(), tt.wantMessage)
+			testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), tt.wantMessage)
 		})
 	}
 }
 
 func TestHandlePortainerConnectorTestCredentialResolutionErrors(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	t.Run("credential store unavailable", func(t *testing.T) {
-		sut := &apiServer{}
+		sut := hubdeps.NewEmpty(t)
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(`{
 			"auth_method":"api_key",
 			"credential_id":"cred-1"
 		}`))
 		rec := httptest.NewRecorder()
-		sut.handlePortainerConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("credential not found", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(`{
 			"auth_method":"api_key",
 			"credential_id":"does-not-exist"
 		}`))
 		rec := httptest.NewRecorder()
-		sut.handlePortainerConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "credential_id not found")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "credential_id not found")
 	})
 }
 
 func TestHandlePortainerConnectorTestSuccessWithCredentialFallback(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	var sawAPIKey string
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -127,7 +123,7 @@ func TestHandlePortainerConnectorTestSuccessWithCredentialFallback(t *testing.T)
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	credentialID := seedPortainerCredentialProfile(t, sut, "svc@local!automation", "ptr-secret-value", mock.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
@@ -135,7 +131,7 @@ func TestHandlePortainerConnectorTestSuccessWithCredentialFallback(t *testing.T)
 		"credential_id":"%s"
 	}`, credentialID)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -154,7 +150,7 @@ func TestHandlePortainerConnectorTestSuccessWithCredentialFallback(t *testing.T)
 }
 
 func TestHandlePortainerConnectorTestDefaultsAuthMethodAndHonorsSkipVerify(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	var sawAPIKey string
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -169,7 +165,7 @@ func TestHandlePortainerConnectorTestDefaultsAuthMethodAndHonorsSkipVerify(t *te
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
 		"base_url":"%s",
@@ -178,7 +174,7 @@ func TestHandlePortainerConnectorTestDefaultsAuthMethodAndHonorsSkipVerify(t *te
 		"skip_verify":false
 	}`, mock.URL)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -189,7 +185,7 @@ func TestHandlePortainerConnectorTestDefaultsAuthMethodAndHonorsSkipVerify(t *te
 }
 
 func TestHandlePortainerConnectorTestAPIKeyDoesNotRequireTokenID(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	var sawAPIKey string
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -204,7 +200,7 @@ func TestHandlePortainerConnectorTestAPIKeyDoesNotRequireTokenID(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
 		"auth_method":"api_key",
@@ -212,7 +208,7 @@ func TestHandlePortainerConnectorTestAPIKeyDoesNotRequireTokenID(t *testing.T) {
 		"token_secret":"ptr-secret-no-token-id"
 	}`, mock.URL)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 without token_id, got %d body=%s", rec.Code, rec.Body.String())
@@ -223,7 +219,7 @@ func TestHandlePortainerConnectorTestAPIKeyDoesNotRequireTokenID(t *testing.T) {
 }
 
 func TestHandlePortainerConnectorTestFailsWhenNoEndpointsVisible(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/system/version":
@@ -236,7 +232,7 @@ func TestHandlePortainerConnectorTestFailsWhenNoEndpointsVisible(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
 		"auth_method":"api_key",
@@ -244,21 +240,21 @@ func TestHandlePortainerConnectorTestFailsWhenNoEndpointsVisible(t *testing.T) {
 		"token_secret":"ptr-secret-no-endpoints"
 	}`, mock.URL)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 when no endpoints are visible, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	// A plain reason that names the product, never the generic 5xx text.
-	assertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
 }
 
 func TestHandlePortainerConnectorTestDecryptFailure(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
 
 	const credentialID = "cred-portainer-bad-cipher"
-	_, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+	_, err := sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               credentialID,
 		Name:             "Portainer Bad Cipher",
 		Kind:             credentials.KindPortainerAPIKey,
@@ -277,16 +273,16 @@ func TestHandlePortainerConnectorTestDecryptFailure(t *testing.T) {
 		"credential_id":"%s"
 	}`, credentialID)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "failed to decrypt credential secret")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "failed to decrypt credential secret")
 }
 
 func TestHandlePortainerConnectorTestSuccessWithPasswordAuth(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	var authBody struct {
 		Username string `json:"Username"`
 		Password string `json:"Password"`
@@ -311,7 +307,7 @@ func TestHandlePortainerConnectorTestSuccessWithPasswordAuth(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	credentialID := seedPortainerCredentialProfile(t, sut, "admin", "password-secret", mock.URL)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
@@ -319,7 +315,7 @@ func TestHandlePortainerConnectorTestSuccessWithPasswordAuth(t *testing.T) {
 		"credential_id":"%s"
 	}`, credentialID)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -333,14 +329,14 @@ func TestHandlePortainerConnectorTestSuccessWithPasswordAuth(t *testing.T) {
 }
 
 func TestHandlePortainerConnectorTestUpstreamFailure(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte(`{"error":"downstream unavailable"}`))
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
 		"auth_method":"api_key",
 		"base_url":"%s",
@@ -348,17 +344,17 @@ func TestHandlePortainerConnectorTestUpstreamFailure(t *testing.T) {
 		"token_secret":"ptr-secret"
 	}`, mock.URL)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d", rec.Code)
 	}
 	// A plain reason that names the product, never the generic 5xx text.
-	assertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
 }
 
 func TestHandlePortainerConnectorTestUpstreamFailureRedactsSecret(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	const leakedSecret = "ptr-secret-should-not-leak"
 
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -367,7 +363,7 @@ func TestHandlePortainerConnectorTestUpstreamFailureRedactsSecret(t *testing.T) 
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/test", strings.NewReader(fmt.Sprintf(`{
 		"auth_method":"api_key",
 		"base_url":"%s",
@@ -375,13 +371,13 @@ func TestHandlePortainerConnectorTestUpstreamFailureRedactsSecret(t *testing.T) 
 		"token_secret":"%s"
 	}`, mock.URL, leakedSecret)))
 	rec := httptest.NewRecorder()
-	sut.handlePortainerConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePortainerConnectorTest(rec, req)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	// A plain reason that names the product, never the generic 5xx text.
-	assertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Portainer")
 	if strings.Contains(rec.Body.String(), leakedSecret) {
 		t.Fatalf("expected response to redact leaked secret, got %s", rec.Body.String())
 	}
@@ -435,16 +431,16 @@ func (m *mockPortainerConnector) ExecuteAction(ctx context.Context, actionID str
 	return connectorsdk.ActionResult{Status: "ok", Message: "ok"}, nil
 }
 
-func seedPortainerCredentialProfile(t *testing.T, sut *apiServer, username, secret, baseURL string) string {
+func seedPortainerCredentialProfile(t *testing.T, sut *hubdeps.Hub, username, secret, baseURL string) string {
 	t.Helper()
 
 	const credentialID = "cred-portainer-test"
-	secretCiphertext, err := sut.secretsManager.EncryptString(secret, credentialID)
+	secretCiphertext, err := sut.SecretsManager.EncryptString(secret, credentialID)
 	if err != nil {
 		t.Fatalf("encrypt secret: %v", err)
 	}
 
-	_, err = sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+	_, err = sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               credentialID,
 		Name:             "Portainer Test Credential",
 		Kind:             credentials.KindPortainerAPIKey,
@@ -459,9 +455,4 @@ func seedPortainerCredentialProfile(t *testing.T, sut *apiServer, username, secr
 	}
 
 	return credentialID
-}
-
-func assertErrorBodyContains(t *testing.T, body []byte, want string) {
-	t.Helper()
-	testutil.AssertErrorBodyContains(t, body, want)
 }

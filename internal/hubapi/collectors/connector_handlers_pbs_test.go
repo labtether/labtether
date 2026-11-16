@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"fmt"
@@ -11,39 +11,40 @@ import (
 	"github.com/labtether/labtether/internal/connectors/pbs"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandlePBSConnectorTestInvalidPayloadAndValidation(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader("{"))
 	rec := httptest.NewRecorder()
-	sut.handlePBSConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid payload, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "invalid test payload")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "invalid test payload")
 
 	req = httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"base_url":"https://pbs.local:8007"}`))
 	rec = httptest.NewRecorder()
-	sut.handlePBSConnectorTest(rec, req)
+	sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing token credentials, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "base_url, token_id, and token_secret")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "base_url, token_id, and token_secret")
 }
 
 func TestHandleConnectorActionsPBSTestRateLimit(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	sut := newTestAPIServer(t)
-	sut.connectorRegistry.Register(pbs.New())
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	sut := hubdeps.New(t)
+	sut.ConnectorRegistry.Register(pbs.New())
 
 	for i := 0; i < 12; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"base_url":"https://pbs.local:8007"}`))
 		req.RemoteAddr = "203.0.113.40:4400"
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.CollectorsDeps().HandleConnectorActions(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("request %d: expected 400 before rate limit, got %d", i+1, rec.Code)
 		}
@@ -52,44 +53,44 @@ func TestHandleConnectorActionsPBSTestRateLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"base_url":"https://pbs.local:8007"}`))
 	req.RemoteAddr = "203.0.113.40:4400"
 	rec := httptest.NewRecorder()
-	sut.handleConnectorActions(rec, req)
+	sut.CollectorsDeps().HandleConnectorActions(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 after connector test burst, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "rate limit exceeded")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "rate limit exceeded")
 }
 
 func TestHandlePBSConnectorTestCredentialResolutionErrors(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	t.Run("credential store unavailable", func(t *testing.T) {
-		sut := &apiServer{}
+		sut := hubdeps.NewEmpty(t)
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"credential_id":"cred-1"}`))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("credential not found", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"credential_id":"missing"}`))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "credential_id not found")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "credential_id not found")
 	})
 
 	t.Run("credential decrypt failure", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		const credentialID = "cred-pbs-bad-cipher"
-		_, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+		_, err := sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 			ID:               credentialID,
 			Name:             "bad cipher",
 			Kind:             credentials.KindPBSAPIToken,
@@ -106,16 +107,16 @@ func TestHandlePBSConnectorTestCredentialResolutionErrors(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{"credential_id":"%s"}`, credentialID)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "failed to decrypt credential secret")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "failed to decrypt credential secret")
 	})
 }
 
 func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	t.Run("success with credential fallback", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -131,12 +132,12 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
-		createPBSCredentialProfile(t, sut, "cred-pbs-1", "root@pam!labtether", "secret-1", server.URL)
+		sut := hubdeps.New(t)
+		testutil.CreatePBSCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-pbs-1", "root@pam!labtether", "secret-1", server.URL)
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{"credential_id":"cred-pbs-1","skip_verify":false}`))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -152,20 +153,20 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"bad-secret"
 		}`, server.URL)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
 		// A plain reason that names the product, never the generic 5xx text.
-		assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
 	})
 
 	t.Run("upstream health failure redacts token secret", func(t *testing.T) {
@@ -175,20 +176,20 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"%s"
 		}`, server.URL, leakedSecret)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
 		// A plain reason that names the product, never the generic 5xx text.
-		assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
 		if strings.Contains(rec.Body.String(), leakedSecret) {
 			t.Fatalf("expected response to redact leaked token secret, got %s", rec.Body.String())
 		}
@@ -196,9 +197,9 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 }
 
 func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	t.Run("invalid ca pem", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(`{
 			"base_url":"https://pbs.local:8007",
 			"token_id":"root@pam!labtether",
@@ -206,12 +207,12 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 			"ca_pem":"not-a-certificate"
 		}`))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "invalid PBS CA PEM")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "invalid PBS CA PEM")
 	})
 
 	t.Run("ping without pong", func(t *testing.T) {
@@ -225,20 +226,20 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"token-secret"
 		}`, server.URL)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
 		// A plain reason that names the product, never the generic 5xx text.
-		assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
 	})
 
 	t.Run("version request failure", func(t *testing.T) {
@@ -254,20 +255,20 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"token-secret"
 		}`, server.URL)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
 		// A plain reason that names the product, never the generic 5xx text.
-		assertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
+		testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "Proxmox Backup Server")
 	})
 
 	t.Run("release falls back to version field", func(t *testing.T) {
@@ -285,14 +286,14 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"token-secret"
 		}`, server.URL)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -320,14 +321,14 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		}))
 		defer server.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		req := httptest.NewRequest(http.MethodPost, "/connectors/pbs/test", strings.NewReader(fmt.Sprintf(`{
 			"base_url":"%s",
 			"token_id":"root@pam!labtether",
 			"token_secret":"token-secret"
 		}`, server.URL)))
 		rec := httptest.NewRecorder()
-		sut.handlePBSConnectorTest(rec, req)
+		sut.CollectorsDeps().HandlePBSConnectorTest(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -339,9 +340,4 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected visible_datastores=0, got %s", rec.Body.String())
 		}
 	})
-}
-
-func createPBSCredentialProfile(t *testing.T, sut *apiServer, credentialID, username, secret, baseURL string) {
-	t.Helper()
-	testutil.CreatePBSCredentialProfile(t, sut.credentialStore, sut.secretsManager, credentialID, username, secret, baseURL)
 }

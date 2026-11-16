@@ -1,183 +1,13 @@
-package main
+package collectors_test
 
 import (
-	"fmt"
-	"sort"
-	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/dependencies"
-	"github.com/labtether/labtether/internal/incidents"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
-
-type stubDependencyStore struct {
-	mu    sync.Mutex
-	deps  map[string]dependencies.Dependency
-	next  int
-	links map[string]incidents.IncidentAsset
-}
-
-func newStubDependencyStore() *stubDependencyStore {
-	return &stubDependencyStore{
-		deps:  make(map[string]dependencies.Dependency),
-		links: make(map[string]incidents.IncidentAsset),
-	}
-}
-
-func (s *stubDependencyStore) CreateAssetDependency(req dependencies.CreateDependencyRequest) (dependencies.Dependency, error) {
-	sourceID := strings.TrimSpace(req.SourceAssetID)
-	targetID := strings.TrimSpace(req.TargetAssetID)
-	relType := strings.TrimSpace(req.RelationshipType)
-	if sourceID == targetID {
-		return dependencies.Dependency{}, dependencies.ErrSelfReference
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, dep := range s.deps {
-		if dep.SourceAssetID == sourceID && dep.TargetAssetID == targetID && dep.RelationshipType == relType {
-			return dependencies.Dependency{}, dependencies.ErrDuplicateDependency
-		}
-	}
-
-	s.next++
-	now := time.Now().UTC()
-	dep := dependencies.Dependency{
-		ID:               fmt.Sprintf("dep-%d", s.next),
-		SourceAssetID:    sourceID,
-		TargetAssetID:    targetID,
-		RelationshipType: relType,
-		Direction:        dependencies.NormalizeDirection(req.Direction),
-		Criticality:      dependencies.NormalizeCriticality(req.Criticality),
-		Metadata:         cloneMap(req.Metadata),
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-	if dep.Direction == "" {
-		dep.Direction = dependencies.DirectionDownstream
-	}
-	if dep.Criticality == "" {
-		dep.Criticality = dependencies.CriticalityMedium
-	}
-	s.deps[dep.ID] = dep
-	return dep, nil
-}
-
-func (s *stubDependencyStore) ListAssetDependencies(assetID string, limit int) ([]dependencies.Dependency, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	assetID = strings.TrimSpace(assetID)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	out := make([]dependencies.Dependency, 0, len(s.deps))
-	for _, dep := range s.deps {
-		if dep.SourceAssetID == assetID || dep.TargetAssetID == assetID {
-			copied := dep
-			copied.Metadata = cloneMap(dep.Metadata)
-			out = append(out, copied)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out, nil
-}
-
-func (s *stubDependencyStore) GetAssetDependency(id string) (dependencies.Dependency, bool, error) {
-	id = strings.TrimSpace(id)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	dep, ok := s.deps[id]
-	if !ok {
-		return dependencies.Dependency{}, false, nil
-	}
-	dep.Metadata = cloneMap(dep.Metadata)
-	return dep, true, nil
-}
-
-func (s *stubDependencyStore) DeleteAssetDependency(id string) error {
-	id = strings.TrimSpace(id)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.deps[id]; !ok {
-		return dependencies.ErrDependencyNotFound
-	}
-	delete(s.deps, id)
-	return nil
-}
-
-func (s *stubDependencyStore) BlastRadius(assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
-	return nil, nil
-}
-
-func (s *stubDependencyStore) UpstreamCauses(assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
-	return nil, nil
-}
-
-func (s *stubDependencyStore) LinkIncidentAsset(incidentID string, req incidents.LinkAssetRequest) (incidents.IncidentAsset, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.next++
-	link := incidents.IncidentAsset{
-		ID:         fmt.Sprintf("ia-%d", s.next),
-		IncidentID: strings.TrimSpace(incidentID),
-		AssetID:    strings.TrimSpace(req.AssetID),
-		Role:       incidents.NormalizeAssetRole(req.Role),
-		CreatedAt:  time.Now().UTC(),
-	}
-	s.links[link.ID] = link
-	return link, nil
-}
-
-func (s *stubDependencyStore) ListIncidentAssets(incidentID string, limit int) ([]incidents.IncidentAsset, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	incidentID = strings.TrimSpace(incidentID)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	out := make([]incidents.IncidentAsset, 0, len(s.links))
-	for _, link := range s.links {
-		if link.IncidentID == incidentID {
-			out = append(out, link)
-		}
-	}
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out, nil
-}
-
-func (s *stubDependencyStore) UnlinkIncidentAsset(incidentID, linkID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.links, strings.TrimSpace(linkID))
-	return nil
-}
-
-func cloneMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
-}
 
 func TestBestRunsOnIdentityTargetWithPriorityPrefersTrueNAS(t *testing.T) {
 	source := assets.Asset{
@@ -208,17 +38,17 @@ func TestBestRunsOnIdentityTargetWithPriorityPrefersTrueNAS(t *testing.T) {
 		},
 	}
 
-	identities := map[string]collectorIdentity{
-		source.ID:        collectCollectorIdentity(source),
-		proxmoxTarget.ID: collectCollectorIdentity(proxmoxTarget),
-		trueNASTarget.ID: collectCollectorIdentity(trueNASTarget),
+	identities := map[string]collectorspkg.CollectorIdentity{
+		source.ID:        collectorspkg.CollectCollectorIdentity(source),
+		proxmoxTarget.ID: collectorspkg.CollectCollectorIdentity(proxmoxTarget),
+		trueNASTarget.ID: collectorspkg.CollectCollectorIdentity(trueNASTarget),
 	}
 
-	if targetID, reason, ok := bestRunsOnIdentityTarget(source, []assets.Asset{proxmoxTarget, trueNASTarget}, identities); ok {
+	if targetID, reason, ok := collectorspkg.BestRunsOnIdentityTarget(source, []assets.Asset{proxmoxTarget, trueNASTarget}, identities); ok {
 		t.Fatalf("expected non-priority match to remain ambiguous, got target=%q reason=%q", targetID, reason)
 	}
 
-	targetID, reason, ok := bestRunsOnIdentityTargetWithPriority(source, []assets.Asset{proxmoxTarget, trueNASTarget}, identities, dockerInfraTargetPriority)
+	targetID, reason, ok := collectorspkg.BestRunsOnIdentityTargetWithPriority(source, []assets.Asset{proxmoxTarget, trueNASTarget}, identities, collectorspkg.DockerInfraTargetPriority)
 	if !ok {
 		t.Fatalf("expected priority-based identity match")
 	}
@@ -231,9 +61,9 @@ func TestBestRunsOnIdentityTargetWithPriorityPrefersTrueNAS(t *testing.T) {
 }
 
 func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
 	assetsToUpsert := []assets.HeartbeatRequest{
 		{
@@ -265,7 +95,7 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 		},
 	}
 	for _, req := range assetsToUpsert {
-		if _, err := sut.assetStore.UpsertAssetHeartbeat(req); err != nil {
+		if _, err := sut.AssetStore.UpsertAssetHeartbeat(req); err != nil {
 			t.Fatalf("failed to upsert test asset %q: %v", req.AssetID, err)
 		}
 	}
@@ -283,7 +113,7 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 		t.Fatalf("failed to seed reverse auto dependency: %v", err)
 	}
 
-	if err := sut.autoLinkDockerHostsToInfra(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerHostsToInfra(); err != nil {
 		t.Fatalf("autoLinkDockerHostsToInfra() error = %v", err)
 	}
 
@@ -320,12 +150,12 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 }
 
 func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
 	// Create an agent host (like dockerhost1-northserver reported by agent).
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "dockerhost1-northserver",
 		Type:    "host",
 		Name:    "dockerhost1-northserver",
@@ -335,7 +165,7 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 	}
 
 	// Create a Docker container-host (auto-discovered, agent_id links to the agent).
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "docker-host-dockerhost1-northserver",
 		Type:    "container-host",
 		Name:    "docker-dockerhost1-northserver",
@@ -347,7 +177,7 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 		t.Fatalf("failed to upsert docker host: %v", err)
 	}
 
-	if err := sut.autoLinkDockerHostsToInfra(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerHostsToInfra(); err != nil {
 		t.Fatalf("autoLinkDockerHostsToInfra() error = %v", err)
 	}
 
@@ -377,12 +207,12 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 }
 
 func TestAutoLinkDockerPrefersAgentHostOverIdentityMatch(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
 	// Agent host and Proxmox VM both share the same IP.
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "my-vm",
 		Type:    "host",
 		Name:    "my-vm",
@@ -393,7 +223,7 @@ func TestAutoLinkDockerPrefersAgentHostOverIdentityMatch(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to upsert agent host: %v", err)
 	}
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-vm-200",
 		Type:    "vm",
 		Name:    "proxmox-vm-200",
@@ -404,7 +234,7 @@ func TestAutoLinkDockerPrefersAgentHostOverIdentityMatch(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to upsert proxmox vm: %v", err)
 	}
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "docker-host-my-vm",
 		Type:    "container-host",
 		Name:    "docker-my-vm",
@@ -416,7 +246,7 @@ func TestAutoLinkDockerPrefersAgentHostOverIdentityMatch(t *testing.T) {
 		t.Fatalf("failed to upsert docker host: %v", err)
 	}
 
-	if err := sut.autoLinkDockerHostsToInfra(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerHostsToInfra(); err != nil {
 		t.Fatalf("autoLinkDockerHostsToInfra() error = %v", err)
 	}
 
@@ -439,12 +269,12 @@ func TestAutoLinkDockerPrefersAgentHostOverIdentityMatch(t *testing.T) {
 }
 
 func TestAutoLinkDockerContainersToHosts(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
 	// Create a Docker container-host.
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "docker-host-myserver",
 		Type:    "container-host",
 		Name:    "docker-myserver",
@@ -461,7 +291,7 @@ func TestAutoLinkDockerContainersToHosts(t *testing.T) {
 		{"docker-ct-myserver-aaa", "nginx"},
 		{"docker-ct-myserver-bbb", "postgres"},
 	} {
-		if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 			AssetID: ct.id,
 			Type:    "docker-container",
 			Name:    ct.name,
@@ -475,7 +305,7 @@ func TestAutoLinkDockerContainersToHosts(t *testing.T) {
 	}
 
 	// Create a compose stack under that host.
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "docker-stack-myserver-web",
 		Type:    "compose-stack",
 		Name:    "web",
@@ -487,7 +317,7 @@ func TestAutoLinkDockerContainersToHosts(t *testing.T) {
 		t.Fatalf("failed to upsert stack: %v", err)
 	}
 
-	if err := sut.autoLinkDockerContainersToHosts(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerContainersToHosts(); err != nil {
 		t.Fatalf("autoLinkDockerContainersToHosts() error = %v", err)
 	}
 
@@ -519,11 +349,11 @@ func TestAutoLinkDockerContainersToHosts(t *testing.T) {
 }
 
 func TestAutoLinkDockerContainersSkipsDuplicates(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	deps := newStubDependencyStore()
-	sut.dependencyStore = deps
+	sut.DependencyStore = deps
 
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID:  "docker-host-srv",
 		Type:     "container-host",
 		Name:     "docker-srv",
@@ -532,7 +362,7 @@ func TestAutoLinkDockerContainersSkipsDuplicates(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to upsert docker host: %v", err)
 	}
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID:  "docker-ct-srv-aaa",
 		Type:     "docker-container",
 		Name:     "app",
@@ -543,10 +373,10 @@ func TestAutoLinkDockerContainersSkipsDuplicates(t *testing.T) {
 	}
 
 	// Run twice — second run should not error on duplicate.
-	if err := sut.autoLinkDockerContainersToHosts(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerContainersToHosts(); err != nil {
 		t.Fatalf("first run error = %v", err)
 	}
-	if err := sut.autoLinkDockerContainersToHosts(); err != nil {
+	if err := sut.CollectorsDeps().AutoLinkDockerContainersToHosts(); err != nil {
 		t.Fatalf("second run error = %v", err)
 	}
 

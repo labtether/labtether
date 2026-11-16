@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"time"
 
 	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestRunWebServiceCleanupTicksUntilContextCancelled(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	oldInterval := collectorspkg.WebServiceCleanupInterval
 	oldStep := collectorspkg.WebServiceCleanupStep
@@ -20,7 +21,7 @@ func TestRunWebServiceCleanupTicksUntilContextCancelled(t *testing.T) {
 
 	collectorspkg.WebServiceCleanupInterval = 5 * time.Millisecond
 	cleanupTick := make(chan struct{}, 4)
-	collectorspkg.WebServiceCleanupStep = func(_ *collectorsDeps) {
+	collectorspkg.WebServiceCleanupStep = func(_ *collectorspkg.Deps) {
 		select {
 		case cleanupTick <- struct{}{}:
 		default:
@@ -31,7 +32,7 @@ func TestRunWebServiceCleanupTicksUntilContextCancelled(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sut.runWebServiceCleanup(ctx)
+		sut.CollectorsDeps().RunWebServiceCleanup(ctx)
 	}()
 
 	select {
