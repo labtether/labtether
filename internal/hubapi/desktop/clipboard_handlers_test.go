@@ -1,4 +1,4 @@
-package main
+package desktop_test
 
 import (
 	"bytes"
@@ -10,11 +10,12 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-1", "node-allowed")
+	sut := hubdeps.New(t)
+	replies := testutil.AwaitReply(t, &sut.ClipboardReplies, "req-1", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardDataPayload{
 		RequestID: "req-1",
@@ -25,7 +26,7 @@ func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
 		t.Fatalf("marshal clipboard payload: %v", err)
 	}
 
-	sut.processAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
+	sut.DesktopDeps().ProcessAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
 
 	select {
 	case <-replies:
@@ -35,8 +36,8 @@ func TestProcessAgentClipboardDataIgnoresUnexpectedAgent(t *testing.T) {
 }
 
 func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-1", "node-allowed")
+	sut := hubdeps.New(t)
+	replies := testutil.AwaitReply(t, &sut.ClipboardReplies, "req-1", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardDataPayload{
 		RequestID: "req-1",
@@ -47,7 +48,7 @@ func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
 		t.Fatalf("marshal clipboard payload: %v", err)
 	}
 
-	sut.processAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
+	sut.DesktopDeps().ProcessAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
 
 	select {
 	case msg := <-replies:
@@ -64,8 +65,8 @@ func TestProcessAgentClipboardDataAcceptsExpectedAgent(t *testing.T) {
 }
 
 func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-ack", "node-allowed")
+	sut := hubdeps.New(t)
+	replies := testutil.AwaitReply(t, &sut.ClipboardReplies, "req-ack", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardSetAckData{
 		RequestID: "req-ack",
@@ -74,7 +75,7 @@ func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
 		t.Fatalf("marshal clipboard ack payload: %v", err)
 	}
 
-	sut.processAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
+	sut.DesktopDeps().ProcessAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-other"}, agentmgr.Message{Data: payload})
 
 	select {
 	case <-replies:
@@ -84,8 +85,8 @@ func TestProcessAgentClipboardSetAckIgnoresUnexpectedAgent(t *testing.T) {
 }
 
 func TestProcessAgentClipboardSetAckAcceptsExpectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	replies := testutil.AwaitReply(t, &sut.clipboardReplies, "req-ack", "node-allowed")
+	sut := hubdeps.New(t)
+	replies := testutil.AwaitReply(t, &sut.ClipboardReplies, "req-ack", "node-allowed")
 
 	payload, err := json.Marshal(agentmgr.ClipboardSetAckData{
 		RequestID: "req-ack",
@@ -94,7 +95,7 @@ func TestProcessAgentClipboardSetAckAcceptsExpectedAgent(t *testing.T) {
 		t.Fatalf("marshal clipboard ack payload: %v", err)
 	}
 
-	sut.processAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
+	sut.DesktopDeps().ProcessAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-allowed"}, agentmgr.Message{Data: payload})
 
 	select {
 	case msg := <-replies:
@@ -111,14 +112,14 @@ func TestProcessAgentClipboardSetAckAcceptsExpectedAgent(t *testing.T) {
 }
 
 func TestHandleClipboardGetBridgesAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-1", "linux"))
-	defer sut.agentMgr.Unregister("node-1")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-1", "linux"))
+	defer sut.AgentMgr.Unregister("node-1")
 
 	done := make(chan struct{})
 	go func() {
@@ -155,7 +156,7 @@ func TestHandleClipboardGetBridgesAgentSuccess(t *testing.T) {
 			Format:    "text",
 			Text:      "hello from agent",
 		})
-		sut.processAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
+		sut.DesktopDeps().ProcessAgentClipboardData(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{
 			Type: agentmgr.MsgClipboardData,
 			Data: raw,
 		})
@@ -163,7 +164,7 @@ func TestHandleClipboardGetBridgesAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/nodes/node-1/clipboard/get", bytes.NewBufferString(`{"format":"text"}`))
 	rec := httptest.NewRecorder()
-	sut.handleClipboardRoutes(rec, req)
+	sut.DesktopDeps().HandleClipboardRoutes(rec, req)
 
 	<-done
 
@@ -184,14 +185,14 @@ func TestHandleClipboardGetBridgesAgentSuccess(t *testing.T) {
 }
 
 func TestHandleClipboardSetPropagatesAgentError(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-2", "linux"))
-	defer sut.agentMgr.Unregister("node-2")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-2", "linux"))
+	defer sut.AgentMgr.Unregister("node-2")
 
 	done := make(chan struct{})
 	go func() {
@@ -231,7 +232,7 @@ func TestHandleClipboardSetPropagatesAgentError(t *testing.T) {
 			OK:        false,
 			Error:     "xclip failed",
 		})
-		sut.processAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{
+		sut.DesktopDeps().ProcessAgentClipboardSetAck(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{
 			Type: agentmgr.MsgClipboardSetAck,
 			Data: raw,
 		})
@@ -239,7 +240,7 @@ func TestHandleClipboardSetPropagatesAgentError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/nodes/node-2/clipboard/set", bytes.NewBufferString(`{"format":"text","text":"hello from hub"}`))
 	rec := httptest.NewRecorder()
-	sut.handleClipboardRoutes(rec, req)
+	sut.DesktopDeps().HandleClipboardRoutes(rec, req)
 
 	<-done
 

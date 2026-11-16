@@ -1,10 +1,13 @@
-package main
+package terminal_test
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
 	"net/http/httptest"
@@ -14,24 +17,24 @@ import (
 )
 
 func TestCloseTerminalBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
-	var srv apiServer
-	matching := &terminalBridge{
+	srv := hubdeps.NewEmpty(t)
+	matching := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	nonMatching := &terminalBridge{
+	nonMatching := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-2",
 	}
 	probeCh := make(chan agentmgr.TerminalProbeResponse, 1)
 
-	srv.terminalBridges.Store("sess-node-1", matching)
-	srv.terminalBridges.Store("sess-node-2", nonMatching)
-	srv.terminalBridges.Store("probe:node-1", probeCh)
+	srv.TerminalBridges.Store("sess-node-1", matching)
+	srv.TerminalBridges.Store("sess-node-2", nonMatching)
+	srv.TerminalBridges.Store("probe:node-1", probeCh)
 
-	srv.closeTerminalBridgesForAsset("node-1")
+	srv.TerminalDeps().CloseTerminalBridgesForAsset("node-1")
 
 	select {
 	case <-matching.ClosedCh:
@@ -54,16 +57,16 @@ func TestCloseTerminalBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
 }
 
 func TestFinalizeAgentTerminalSessionSendsCloseAfterStart(t *testing.T) {
-	var srv apiServer
-	bridge := &terminalBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
-	srv.terminalBridges.Store("sess-finalize", bridge)
+	srv.TerminalBridges.Store("sess-finalize", bridge)
 
 	closeCalls := 0
 	closedSessionID := ""
-	srv.finalizeAgentTerminalSession(
+	srv.TerminalDeps().FinalizeAgentTerminalSession(
 		"sess-finalize",
 		bridge,
 		nil,
@@ -80,7 +83,7 @@ func TestFinalizeAgentTerminalSessionSendsCloseAfterStart(t *testing.T) {
 	if closedSessionID != "sess-finalize" {
 		t.Fatalf("unexpected session id for close send: %q", closedSessionID)
 	}
-	if _, ok := srv.terminalBridges.Load("sess-finalize"); ok {
+	if _, ok := srv.TerminalBridges.Load("sess-finalize"); ok {
 		t.Fatal("expected terminal bridge to be removed")
 	}
 	select {
@@ -91,14 +94,14 @@ func TestFinalizeAgentTerminalSessionSendsCloseAfterStart(t *testing.T) {
 }
 
 func TestFinalizeAgentTerminalSessionSkipsCloseBeforeStart(t *testing.T) {
-	var srv apiServer
-	bridge := &terminalBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
 
 	closeCalls := 0
-	srv.finalizeAgentTerminalSession(
+	srv.TerminalDeps().FinalizeAgentTerminalSession(
 		"sess-no-start",
 		bridge,
 		nil,
@@ -114,9 +117,9 @@ func TestFinalizeAgentTerminalSessionSkipsCloseBeforeStart(t *testing.T) {
 }
 
 func TestProcessAgentTerminalHandlersIgnoreNonBridgeEntries(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 	probeCh := make(chan agentmgr.TerminalProbeResponse, 1)
-	srv.terminalBridges.Store("sess-probe", probeCh)
+	srv.TerminalBridges.Store("sess-probe", probeCh)
 
 	startedData, err := json.Marshal(agentmgr.TerminalStartedData{SessionID: "sess-probe"})
 	if err != nil {
@@ -135,13 +138,13 @@ func TestProcessAgentTerminalHandlersIgnoreNonBridgeEntries(t *testing.T) {
 	}
 
 	assertDoesNotPanic(t, func() {
-		srv.processAgentTerminalStarted(nil, agentmgr.Message{Data: startedData})
+		srv.TerminalDeps().ProcessAgentTerminalStarted(nil, agentmgr.Message{Data: startedData})
 	})
 	assertDoesNotPanic(t, func() {
-		srv.processAgentTerminalData(nil, agentmgr.Message{Data: dataPayload})
+		srv.TerminalDeps().ProcessAgentTerminalData(nil, agentmgr.Message{Data: dataPayload})
 	})
 	assertDoesNotPanic(t, func() {
-		srv.processAgentTerminalClosed(nil, agentmgr.Message{Data: closedData})
+		srv.TerminalDeps().ProcessAgentTerminalClosed(nil, agentmgr.Message{Data: closedData})
 	})
 
 	// Ensure the probe channel entry remains valid after all handlers run.
@@ -153,13 +156,13 @@ func TestProcessAgentTerminalHandlersIgnoreNonBridgeEntries(t *testing.T) {
 }
 
 func TestProcessAgentTerminalHandlersIgnoreMismatchedSender(t *testing.T) {
-	var srv apiServer
-	bridge := &terminalBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	srv.terminalBridges.Store("sess-mismatch", bridge)
+	srv.TerminalBridges.Store("sess-mismatch", bridge)
 
 	startedData, err := json.Marshal(agentmgr.TerminalStartedData{SessionID: "sess-mismatch"})
 	if err != nil {
@@ -178,9 +181,9 @@ func TestProcessAgentTerminalHandlersIgnoreMismatchedSender(t *testing.T) {
 	}
 
 	conn := &agentmgr.AgentConn{AssetID: "node-2"}
-	srv.processAgentTerminalStarted(conn, agentmgr.Message{Data: startedData})
-	srv.processAgentTerminalData(conn, agentmgr.Message{Data: dataPayload})
-	srv.processAgentTerminalClosed(conn, agentmgr.Message{Data: closedData})
+	srv.TerminalDeps().ProcessAgentTerminalStarted(conn, agentmgr.Message{Data: startedData})
+	srv.TerminalDeps().ProcessAgentTerminalData(conn, agentmgr.Message{Data: dataPayload})
+	srv.TerminalDeps().ProcessAgentTerminalClosed(conn, agentmgr.Message{Data: closedData})
 
 	select {
 	case <-bridge.OutputCh:
@@ -195,8 +198,8 @@ func TestProcessAgentTerminalHandlersIgnoreMismatchedSender(t *testing.T) {
 }
 
 func TestProcessAgentTerminalStartedRejectsMissingRequiredTmux(t *testing.T) {
-	var srv apiServer
-	bridge := &terminalBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
@@ -204,7 +207,7 @@ func TestProcessAgentTerminalStartedRejectsMissingRequiredTmux(t *testing.T) {
 		Target:          "node-1",
 		RequireTmux:     true,
 	}
-	srv.terminalBridges.Store("sess-persistent", bridge)
+	srv.TerminalBridges.Store("sess-persistent", bridge)
 
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 	conn.SetMeta("terminal.tmux.has", "true")
@@ -216,7 +219,7 @@ func TestProcessAgentTerminalStartedRejectsMissingRequiredTmux(t *testing.T) {
 		t.Fatalf("marshal terminal started payload: %v", err)
 	}
 
-	srv.processAgentTerminalStarted(conn, agentmgr.Message{Data: startedData})
+	srv.TerminalDeps().ProcessAgentTerminalStarted(conn, agentmgr.Message{Data: startedData})
 
 	select {
 	case <-bridge.ClosedCh:
@@ -237,16 +240,16 @@ func TestProcessAgentTerminalStartedRejectsMissingRequiredTmux(t *testing.T) {
 }
 
 func TestHandleAgentTerminalStreamRejectsPersistentSessionWhenTmuxUnavailable(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	agentServerConn, agentClientConn, agentCleanup := newWebSocketPair(t)
+	agentServerConn, agentClientConn, agentCleanup := testutil.NewWebSocketPair(t)
 	defer agentCleanup()
 	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
 	agentConn.SetMeta("terminal.tmux.has", "false")
-	sut.agentMgr.Register(agentConn)
-	defer sut.agentMgr.Unregister("node-1")
-	sut.resetTerminalDepsForTest()
+	sut.AgentMgr.Register(agentConn)
+	defer sut.AgentMgr.Unregister("node-1")
+	sut.ResetTerminalDeps()
 
 	session := terminal.Session{
 		ID:                  "sess-persistent",
@@ -255,7 +258,7 @@ func TestHandleAgentTerminalStreamRejectsPersistentSessionWhenTmuxUnavailable(t 
 	}
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess-persistent/stream", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAgentTerminalStream(rec, req, session)
+	sut.TerminalDeps().HandleAgentTerminalStream(rec, req, session)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 streaming a persistent shell without tmux, got %d: %s", rec.Code, rec.Body.String())
@@ -278,7 +281,7 @@ func TestSanitizeAgentStreamReason(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if got := sanitizeAgentStreamReason(tc.in); got != tc.want {
+			if got := terminalpkg.SanitizeAgentStreamReason(tc.in); got != tc.want {
 				t.Fatalf("sanitizeAgentStreamReason(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
@@ -359,7 +362,7 @@ func decodeTerminalCloseData(t *testing.T, msg agentmgr.Message) agentmgr.Termin
 	return closeData
 }
 
-func waitForTerminalReadyEvent(t *testing.T, conn *websocket.Conn) terminalStreamEvent {
+func waitForTerminalReadyEvent(t *testing.T, conn *websocket.Conn) terminalpkg.TerminalStreamEvent {
 	t.Helper()
 
 	for i := 0; i < 6; i++ {
@@ -371,7 +374,7 @@ func waitForTerminalReadyEvent(t *testing.T, conn *websocket.Conn) terminalStrea
 		if messageType != websocket.TextMessage {
 			continue
 		}
-		var event terminalStreamEvent
+		var event terminalpkg.TerminalStreamEvent
 		if err := json.Unmarshal(payload, &event); err != nil {
 			t.Fatalf("decode browser event payload: %v", err)
 		}
@@ -381,7 +384,7 @@ func waitForTerminalReadyEvent(t *testing.T, conn *websocket.Conn) terminalStrea
 	}
 
 	t.Fatal("timed out waiting for terminal ready event")
-	return terminalStreamEvent{}
+	return terminalpkg.TerminalStreamEvent{}
 }
 
 func waitForTerminalBinaryPayload(t *testing.T, conn *websocket.Conn) []byte {
@@ -415,12 +418,12 @@ func closeBrowserTerminalStream(t *testing.T, conn *websocket.Conn) {
 	_ = conn.Close()
 }
 
-func waitForTerminalBridgeCleanup(t *testing.T, srv *apiServer, sessionID string) {
+func waitForTerminalBridgeCleanup(t *testing.T, srv *hubdeps.Hub, sessionID string) {
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := srv.terminalBridges.Load(sessionID); !ok {
+		if _, ok := srv.TerminalBridges.Load(sessionID); !ok {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

@@ -1,4 +1,4 @@
-package main
+package desktop_test
 
 import (
 	"encoding/json"
@@ -10,15 +10,16 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 )
 
 func TestHandleDesktopDiagnoseRequestRejectsNonPOST(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodGet, "/desktop/diagnose/node-1", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopDiagnoseRequest(rec, req)
+	sut.DesktopDeps().HandleDesktopDiagnoseRequest(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
@@ -26,12 +27,12 @@ func TestHandleDesktopDiagnoseRequestRejectsNonPOST(t *testing.T) {
 }
 
 func TestHandleDesktopDiagnoseRequestRejectsMissingAssetID(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopDiagnoseRequest(rec, req)
+	sut.DesktopDeps().HandleDesktopDiagnoseRequest(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
@@ -39,12 +40,12 @@ func TestHandleDesktopDiagnoseRequestRejectsMissingAssetID(t *testing.T) {
 }
 
 func TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/not-connected", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopDiagnoseRequest(rec, req)
+	sut.DesktopDeps().HandleDesktopDiagnoseRequest(rec, req)
 
 	// A 5xx text never reaches users; an ID that names no device is a 404.
 	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "device not found") {
@@ -53,26 +54,26 @@ func TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent(t *testing.T) {
 }
 
 func TestHandleDesktopDiagnoseRequestEnforcesAPIKeyAssetAllowlist(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/srv2", nil)
 	req = req.WithContext(apiv2.ContextWithAllowedAssets(req.Context(), []string{"srv1"}))
 	rec := httptest.NewRecorder()
 
-	sut.handleDesktopDiagnoseRequest(rec, req)
+	sut.DesktopDeps().HandleDesktopDiagnoseRequest(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for disallowed diagnostic target, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	serverConn, clientConn, cleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "diag-node-1", "linux"))
-	defer sut.agentMgr.Unregister("diag-node-1")
+	sut.AgentMgr.Register(agentmgr.NewAgentConn(serverConn, "diag-node-1", "linux"))
+	defer sut.AgentMgr.Unregister("diag-node-1")
 
 	done := make(chan struct{})
 	go func() {
@@ -105,7 +106,7 @@ func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
 			WebRTCAvailable: true,
 			WebRTCReason:    "all good",
 		})
-		sut.processAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "diag-node-1"}, agentmgr.Message{
+		sut.DesktopDeps().ProcessAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "diag-node-1"}, agentmgr.Message{
 			Type: agentmgr.MsgDesktopDiagnosed,
 			Data: raw,
 		})
@@ -113,7 +114,7 @@ func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/diag-node-1", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopDiagnoseRequest(rec, req)
+	sut.DesktopDeps().HandleDesktopDiagnoseRequest(rec, req)
 
 	<-done
 
@@ -137,7 +138,7 @@ func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
 }
 
 func TestProcessAgentDesktopDiagnosedIgnoresUnknownRequestID(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{
 		RequestID:   "req-unknown",
@@ -145,23 +146,23 @@ func TestProcessAgentDesktopDiagnosedIgnoresUnknownRequestID(t *testing.T) {
 	})
 
 	// Should not panic — waiter doesn't exist, message is silently dropped.
-	sut.processAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "any-node"}, agentmgr.Message{
+	sut.DesktopDeps().ProcessAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "any-node"}, agentmgr.Message{
 		Type: agentmgr.MsgDesktopDiagnosed,
 		Data: raw,
 	})
 }
 
 func TestProcessAgentDesktopDiagnosedDeliversToChan(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	// The reply comes from the device the request was sent to.
-	ch := testutil.AwaitReply(t, &sut.diagnosticReplies, "req-deliver", "any-node")
+	ch := testutil.AwaitReply(t, &sut.DiagnosticReplies, "req-deliver", "any-node")
 
 	raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{
 		RequestID:   "req-deliver",
 		XvfbRunning: true,
 	})
-	sut.processAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "any-node"}, agentmgr.Message{
+	sut.DesktopDeps().ProcessAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "any-node"}, agentmgr.Message{
 		Type: agentmgr.MsgDesktopDiagnosed,
 		Data: raw,
 	})

@@ -1,8 +1,10 @@
-package main
+package desktop_test
 
 import (
 	"fmt"
 	"github.com/labtether/labtether/internal/agentmgr"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,7 +12,7 @@ import (
 )
 
 func TestDesktopBridgeStartRecordingLockedSerializesConcurrentStarts(t *testing.T) {
-	bridge := &desktopBridge{
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -27,10 +29,10 @@ func TestDesktopBridgeStartRecordingLockedSerializesConcurrentStarts(t *testing.
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rec, _, err := bridge.StartRecordingLocked(func() (*activeRecording, error) {
+			rec, _, err := bridge.StartRecordingLocked(func() (*desktoppkg.ActiveRecording, error) {
 				startCalls.Add(1)
 				time.Sleep(10 * time.Millisecond)
-				return &activeRecording{ID: fmt.Sprintf("rec-%02d", i)}, nil
+				return &desktoppkg.ActiveRecording{ID: fmt.Sprintf("rec-%02d", i)}, nil
 			})
 			if err != nil {
 				errs <- err
@@ -71,14 +73,14 @@ func TestDesktopBridgeStartRecordingLockedSerializesConcurrentStarts(t *testing.
 }
 
 func TestDesktopBridgeStopRecordingLockedClearsOnlyOnce(t *testing.T) {
-	bridge := &desktopBridge{
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
-	bridge.SetRecording(&activeRecording{ID: "rec-1"})
+	bridge.SetRecording(&desktoppkg.ActiveRecording{ID: "rec-1"})
 
 	var stopCalls atomic.Int64
-	firstStop := bridge.StopRecordingLocked(func(rec *activeRecording) {
+	firstStop := bridge.StopRecordingLocked(func(rec *desktoppkg.ActiveRecording) {
 		if rec == nil || rec.ID != "rec-1" {
 			t.Fatalf("unexpected recording passed to stop: %+v", rec)
 		}
@@ -88,7 +90,7 @@ func TestDesktopBridgeStopRecordingLockedClearsOnlyOnce(t *testing.T) {
 		t.Fatal("expected first stop to succeed")
 	}
 
-	secondStop := bridge.StopRecordingLocked(func(*activeRecording) {
+	secondStop := bridge.StopRecordingLocked(func(*desktoppkg.ActiveRecording) {
 		stopCalls.Add(1)
 	})
 	if secondStop {
@@ -101,19 +103,19 @@ func TestDesktopBridgeStopRecordingLockedClearsOnlyOnce(t *testing.T) {
 }
 
 func TestFinalizeAgentDesktopSessionSendsCloseAfterStart(t *testing.T) {
-	var srv apiServer
-	bridge := &desktopBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
-	bridge.SetRecording(&activeRecording{ID: "rec-finalize"})
-	srv.desktopBridges.Store("sess-finalize", bridge)
+	bridge.SetRecording(&desktoppkg.ActiveRecording{ID: "rec-finalize"})
+	srv.DesktopBridges.Store("sess-finalize", bridge)
 
 	var (
 		closeCalls int
 		closedSess string
 	)
-	srv.finalizeAgentDesktopSession(
+	srv.DesktopDeps().FinalizeAgentDesktopSession(
 		"sess-finalize",
 		bridge,
 		nil,
@@ -130,7 +132,7 @@ func TestFinalizeAgentDesktopSessionSendsCloseAfterStart(t *testing.T) {
 	if closedSess != "sess-finalize" {
 		t.Fatalf("unexpected closed session id %q", closedSess)
 	}
-	if _, ok := srv.desktopBridges.Load("sess-finalize"); ok {
+	if _, ok := srv.DesktopBridges.Load("sess-finalize"); ok {
 		t.Fatal("expected desktop bridge to be removed")
 	}
 	if bridge.CurrentRecording() != nil {
@@ -144,14 +146,14 @@ func TestFinalizeAgentDesktopSessionSendsCloseAfterStart(t *testing.T) {
 }
 
 func TestFinalizeAgentDesktopSessionSkipsCloseBeforeStart(t *testing.T) {
-	var srv apiServer
-	bridge := &desktopBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
 
 	var closeCalls int
-	srv.finalizeAgentDesktopSession(
+	srv.DesktopDeps().FinalizeAgentDesktopSession(
 		"sess-no-start",
 		bridge,
 		nil,
@@ -167,23 +169,23 @@ func TestFinalizeAgentDesktopSessionSkipsCloseBeforeStart(t *testing.T) {
 }
 
 func TestCloseDesktopBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
-	var srv apiServer
-	matching := &desktopBridge{
+	srv := hubdeps.NewEmpty(t)
+	matching := &desktoppkg.DesktopBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	nonMatching := &desktopBridge{
+	nonMatching := &desktoppkg.DesktopBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-2",
 	}
 
-	srv.desktopBridges.Store("sess-node-1", matching)
-	srv.desktopBridges.Store("sess-node-2", nonMatching)
-	srv.desktopBridges.Store("non-bridge-entry", "ignore-me")
+	srv.DesktopBridges.Store("sess-node-1", matching)
+	srv.DesktopBridges.Store("sess-node-2", nonMatching)
+	srv.DesktopBridges.Store("non-bridge-entry", "ignore-me")
 
-	srv.closeDesktopBridgesForAsset("node-1")
+	srv.DesktopDeps().CloseDesktopBridgesForAsset("node-1")
 
 	select {
 	case <-matching.ClosedCh:

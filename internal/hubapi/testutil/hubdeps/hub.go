@@ -13,16 +13,23 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/pbs"
 	"github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/hubapi/truenas"
+	"github.com/labtether/labtether/internal/jobqueue"
+	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/terminal"
 )
 
 // Hub stands in for cmd/labtether's apiServer in package tests. Tests change
@@ -47,6 +54,39 @@ type Hub struct {
 	truenasOnce sync.Once
 	truenasDeps *truenas.Deps
 
+	// State cmd's apiServer holds for the desktop and terminal Deps. As on
+	// cmd's test server, AgentMgr is nil until a test sets it, and New sets
+	// PolicyState to the default policy (NewEmpty leaves it nil).
+	AgentMgr       *agentmgr.AgentManager
+	PolicyState    *operations.PolicyRuntimeState
+	SessionStreams shared.SessionStreamRegistry
+
+	DesktopBridges    sync.Map
+	WebRTCBridges     sync.Map
+	ClipboardReplies  desktop.ClipboardReplies
+	DisplayReplies    desktop.DisplayReplies
+	DiagnosticReplies desktop.DiagnosticReplies
+
+	TerminalBookmarkStore   persistence.TerminalBookmarkStore
+	TerminalScrollbackStore persistence.TerminalScrollbackStore
+	TerminalInMemStore      *terminal.Store
+	JobQueue                *jobqueue.Queue
+	EphemeralSSHConfigs     *terminalpkg.EphemeralSSHConfigStore
+	TerminalBridges         sync.Map
+	PendingAgentCmds        sync.Map
+
+	// The desktop and terminal Deps are built once and kept, as cmd keeps
+	// apiServer.desktopDeps and terminalDeps; see DesktopDeps and
+	// TerminalDeps.
+	desktopOnce    sync.Once
+	desktopDeps    *desktop.Deps
+	terminalOnce   sync.Once
+	terminalDeps   *terminalpkg.Deps
+	desktopSession struct {
+		mu   sync.RWMutex
+		opts map[string]desktop.DesktopSessionOptions
+	}
+
 	t            *testing.T
 	desktopSPICE struct {
 		mu      sync.RWMutex
@@ -57,7 +97,9 @@ type Hub struct {
 // New returns a Hub with the stores of cmd's newTestAPIServer.
 func New(t *testing.T) *Hub {
 	t.Helper()
-	return newHub(t, testutil.NewStores(t))
+	h := newHub(t, testutil.NewStores(t))
+	h.PolicyState = operations.NewPolicyRuntimeState(policy.DefaultEvaluatorConfig())
+	return h
 }
 
 // NewEmpty returns a Hub with no stores, like a bare &apiServer{} in cmd.

@@ -1,4 +1,4 @@
-package main
+package terminal_test
 
 import (
 	"bufio"
@@ -13,6 +13,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -37,17 +39,17 @@ func TestAgentBrowserPublicationRejectsRetiredConnection(t *testing.T) {
 			if kind == "persistent" {
 				kind = "terminal"
 			}
-			s := newTestAPIServer(t)
-			s.agentMgr = agentmgr.NewManager()
-			oldWS, _, oldCleanup := newWebSocketPair(t)
+			s := hubdeps.New(t)
+			s.AgentMgr = agentmgr.NewManager()
+			oldWS, _, oldCleanup := testutil.NewWebSocketPair(t)
 			defer oldCleanup()
 			oldAgent := agentmgr.NewAgentConn(oldWS, "node", "linux")
 			oldAgent.SetMeta("terminal.tmux.has", "true")
-			s.agentMgr.Register(oldAgent)
-			defer s.agentMgr.Unregister("node")
+			s.AgentMgr.Register(oldAgent)
+			defer s.AgentMgr.Unregister("node")
 			public := terminal.Session{ID: "sess-delayed-upgrade", Target: "node"}
 			if mode == "persistent" {
-				saved, err := s.terminalPersistentStore.CreateOrUpdatePersistentSession(terminal.CreatePersistentSessionRequest{ActorID: "owner", Target: public.Target, Title: "Saved shell"})
+				saved, err := s.TerminalPersistentStore.CreateOrUpdatePersistentSession(terminal.CreatePersistentSessionRequest{ActorID: "owner", Target: public.Target, Title: "Saved shell"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -63,11 +65,11 @@ func TestAgentBrowserPublicationRejectsRetiredConnection(t *testing.T) {
 				}
 				switch kind {
 				case "terminal":
-					s.handleAgentTerminalStream(w, r, public)
+					s.TerminalDeps().HandleAgentTerminalStream(w, r, public)
 				case "desktop":
-					s.handleAgentDesktopStream(w, r, public)
+					s.DesktopDeps().HandleAgentDesktopStream(w, r, public)
 				case "webrtc":
-					s.handleWebRTCStream(w, r, public)
+					s.DesktopDeps().HandleWebRTCStream(w, r, public)
 				}
 			}))
 			defer func() { release(); server.Close() }()
@@ -90,11 +92,11 @@ func TestAgentBrowserPublicationRejectsRetiredConnection(t *testing.T) {
 				t.Fatal("old browser did not pause after capturing its agent")
 			}
 
-			newWS, newPeer, newCleanup := newWebSocketPair(t)
+			newWS, newPeer, newCleanup := testutil.NewWebSocketPair(t)
 			defer newCleanup()
 			currentAgent := agentmgr.NewAgentConn(newWS, "node", "linux")
 			currentAgent.SetMeta("terminal.tmux.has", "true")
-			s.agentMgr.Register(currentAgent)
+			s.AgentMgr.Register(currentAgent)
 			starts := make(chan string, 1)
 			go func() {
 				for {
@@ -136,7 +138,7 @@ func TestAgentBrowserPublicationRejectsRetiredConnection(t *testing.T) {
 				t.Fatalf("fresh browser output=%q", got)
 			}
 			if mode == "persistent" {
-				stored, exists, err := s.terminalPersistentStore.GetPersistentSession(public.PersistentSessionID)
+				stored, exists, err := s.TerminalPersistentStore.GetPersistentSession(public.PersistentSessionID)
 				if err != nil || !exists || stored.Status != "attached" {
 					t.Fatalf("retired request detached fresh persistent owner: %+v err=%v", stored, err)
 				}

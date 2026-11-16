@@ -1,4 +1,4 @@
-package main
+package terminal_test
 
 import (
 	"encoding/base64"
@@ -11,6 +11,10 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -23,17 +27,17 @@ func TestAgentBrowserStreamReplacementUsesDistinctWireSession(t *testing.T) {
 			if kind == "persistent" {
 				kind = "terminal"
 			}
-			s := newTestAPIServer(t)
-			s.agentMgr = agentmgr.NewManager()
-			serverWS, peerWS, cleanup := newWebSocketPair(t)
+			s := hubdeps.New(t)
+			s.AgentMgr = agentmgr.NewManager()
+			serverWS, peerWS, cleanup := testutil.NewWebSocketPair(t)
 			defer cleanup()
 			agent := agentmgr.NewAgentConn(serverWS, "node", "linux")
 			agent.SetMeta("terminal.tmux.has", "false")
-			s.agentMgr.Register(agent)
-			defer s.agentMgr.Unregister("node")
+			s.AgentMgr.Register(agent)
+			defer s.AgentMgr.Unregister("node")
 			public := terminal.Session{ID: "sess-reused", Target: "node"}
 			if mode == "persistent" {
-				persistent, err := s.terminalPersistentStore.CreateOrUpdatePersistentSession(terminal.CreatePersistentSessionRequest{ActorID: "owner", Target: public.Target, Title: "Saved shell"})
+				persistent, err := s.TerminalPersistentStore.CreateOrUpdatePersistentSession(terminal.CreatePersistentSessionRequest{ActorID: "owner", Target: public.Target, Title: "Saved shell"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -73,17 +77,17 @@ func TestAgentBrowserStreamReplacementUsesDistinctWireSession(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/audio" {
 					defer func() { audioFinished <- struct{}{} }()
-					s.handleDesktopAudioStream(w, r, public)
+					s.DesktopDeps().HandleDesktopAudioStream(w, r, public)
 					return
 				}
 				defer func() { finished <- struct{}{} }()
 				switch kind {
 				case "terminal":
-					s.handleAgentTerminalStream(w, r, public)
+					s.TerminalDeps().HandleAgentTerminalStream(w, r, public)
 				case "desktop":
-					s.handleAgentDesktopStream(w, r, public)
+					s.DesktopDeps().HandleAgentDesktopStream(w, r, public)
 				case "webrtc":
-					s.handleWebRTCStream(w, r, public)
+					s.DesktopDeps().HandleWebRTCStream(w, r, public)
 				}
 			}))
 			defer server.Close()
@@ -113,7 +117,7 @@ func TestAgentBrowserStreamReplacementUsesDistinctWireSession(t *testing.T) {
 				t.Fatal("old browser finalizer did not complete")
 			}
 			if mode == "persistent" {
-				stored, ok, err := s.terminalPersistentStore.GetPersistentSession(public.PersistentSessionID)
+				stored, ok, err := s.TerminalPersistentStore.GetPersistentSession(public.PersistentSessionID)
 				if err != nil || !ok || stored.Status != "attached" {
 					t.Fatalf("old browser detached replacement: %+v err=%v", stored, err)
 				}
@@ -138,8 +142,8 @@ func TestAgentBrowserStreamReplacementUsesDistinctWireSession(t *testing.T) {
 					t.Fatalf("audio reused desktop owner %q", audioWire)
 				}
 				raw, _ := json.Marshal(agentmgr.DesktopAudioStateData{SessionID: audioWire})
-				s.processAgentDesktopAudioState(wrongSocket, agentmgr.Message{Data: raw})
-				s.processAgentDesktopAudioState(agent, agentmgr.Message{Data: raw})
+				s.DesktopDeps().ProcessAgentDesktopAudioState(wrongSocket, agentmgr.Message{Data: raw})
+				s.DesktopDeps().ProcessAgentDesktopAudioState(agent, agentmgr.Message{Data: raw})
 				_ = audio.SetReadDeadline(time.Now().Add(time.Second))
 				var state agentmgr.DesktopAudioStateData
 				if err := audio.ReadJSON(&state); err != nil {
@@ -167,11 +171,11 @@ func TestAgentBrowserStreamReplacementUsesDistinctWireSession(t *testing.T) {
 					t.Fatalf("second audio attachment reused owner %q", secondAudioWire)
 				}
 				late, _ := json.Marshal(agentmgr.DesktopAudioStateData{SessionID: audioWire, State: "stopped"})
-				s.processAgentDesktopAudioState(agent, agentmgr.Message{Data: late})
+				s.DesktopDeps().ProcessAgentDesktopAudioState(agent, agentmgr.Message{Data: late})
 				current, _ := json.Marshal(agentmgr.DesktopAudioDataPayload{SessionID: secondAudioWire, Data: base64.StdEncoding.EncodeToString([]byte("current audio"))})
 				wrong, _ := json.Marshal(agentmgr.DesktopAudioDataPayload{SessionID: secondAudioWire, Data: base64.StdEncoding.EncodeToString([]byte("wrong socket"))})
-				s.processAgentDesktopAudioData(wrongSocket, agentmgr.Message{Data: wrong})
-				s.processAgentDesktopAudioData(agent, agentmgr.Message{Data: current})
+				s.DesktopDeps().ProcessAgentDesktopAudioData(wrongSocket, agentmgr.Message{Data: wrong})
+				s.DesktopDeps().ProcessAgentDesktopAudioData(agent, agentmgr.Message{Data: current})
 				_ = secondAudio.SetReadDeadline(time.Now().Add(time.Second))
 				messageType, data, err := secondAudio.ReadMessage()
 				if err != nil || messageType != websocket.BinaryMessage || string(data) != "current audio" {
@@ -207,7 +211,7 @@ func streamGenerationID(t *testing.T, ids <-chan string) string {
 	}
 }
 
-func streamGenerationReply(s *apiServer, conn *agentmgr.AgentConn, kind, event, wireID, value string) {
+func streamGenerationReply(s *hubdeps.Hub, conn *agentmgr.AgentConn, kind, event, wireID, value string) {
 	data := map[string]any{"session_id": wireID, "reason": value, "tmux_attached": true}
 	if event == "data" {
 		data["data"] = base64.StdEncoding.EncodeToString([]byte(value))
@@ -218,23 +222,23 @@ func streamGenerationReply(s *apiServer, conn *agentmgr.AgentConn, kind, event, 
 	msg := agentmgr.Message{Data: raw}
 	switch kind + ":" + event {
 	case "terminal:started":
-		s.processAgentTerminalStarted(conn, msg)
+		s.TerminalDeps().ProcessAgentTerminalStarted(conn, msg)
 	case "terminal:closed":
-		s.processAgentTerminalClosed(conn, msg)
+		s.TerminalDeps().ProcessAgentTerminalClosed(conn, msg)
 	case "terminal:data":
-		s.processAgentTerminalData(conn, msg)
+		s.TerminalDeps().ProcessAgentTerminalData(conn, msg)
 	case "desktop:started":
-		s.processAgentDesktopStarted(conn, msg)
+		s.DesktopDeps().ProcessAgentDesktopStarted(conn, msg)
 	case "desktop:closed":
-		s.processAgentDesktopClosed(conn, msg)
+		s.DesktopDeps().ProcessAgentDesktopClosed(conn, msg)
 	case "desktop:data":
-		s.processAgentDesktopData(conn, msg)
+		s.DesktopDeps().ProcessAgentDesktopData(conn, msg)
 	case "webrtc:started":
-		s.processAgentWebRTCStarted(conn, msg)
+		s.DesktopDeps().ProcessAgentWebRTCStarted(conn, msg)
 	case "webrtc:closed":
-		s.processAgentWebRTCStopped(conn, msg)
+		s.DesktopDeps().ProcessAgentWebRTCStopped(conn, msg)
 	case "webrtc:data":
-		s.processAgentWebRTCAnswer(conn, msg)
+		s.DesktopDeps().ProcessAgentWebRTCAnswer(conn, msg)
 	}
 }
 
@@ -266,14 +270,14 @@ func streamGenerationBrowserPayload(t *testing.T, conn *websocket.Conn, kind, pu
 }
 
 func TestPersistentTmuxDisconnectReportsUnknownOutcomePromptly(t *testing.T) {
-	s := newTestAPIServer(t)
-	s.agentMgr = agentmgr.NewManager()
-	serverWS, peerWS, cleanup := newWebSocketPair(t)
+	s := hubdeps.New(t)
+	s.AgentMgr = agentmgr.NewManager()
+	serverWS, peerWS, cleanup := testutil.NewWebSocketPair(t)
 	defer cleanup()
 	conn := agentmgr.NewAgentConn(serverWS, "node", "linux")
-	s.agentMgr.Register(conn)
+	s.AgentMgr.Register(conn)
 	result := make(chan error, 1)
-	go func() { result <- s.ensureTerminalDeps().KillPersistentTerminalTmuxViaAgent("node", "saved") }()
+	go func() { result <- s.TerminalDeps().KillPersistentTerminalTmuxViaAgent("node", "saved") }()
 	_ = peerWS.SetReadDeadline(time.Now().Add(3 * time.Second))
 	var request agentmgr.Message
 	if err := peerWS.ReadJSON(&request); err != nil {
@@ -282,7 +286,7 @@ func TestPersistentTmuxDisconnectReportsUnknownOutcomePromptly(t *testing.T) {
 	if request.Type != agentmgr.MsgTerminalTmuxKill {
 		t.Fatalf("request type=%q", request.Type)
 	}
-	s.agentMgr.UnregisterIfMatch(conn.AssetID, conn)
+	s.AgentMgr.UnregisterIfMatch(conn.AssetID, conn)
 	select {
 	case err := <-result:
 		if err == nil || !strings.Contains(err.Error(), "outcome unknown") {
@@ -291,7 +295,7 @@ func TestPersistentTmuxDisconnectReportsUnknownOutcomePromptly(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("tmux cleanup waited for its command timeout after disconnect")
 	}
-	if _, pending := s.pendingAgentCmds.Load(request.ID); pending {
+	if _, pending := s.PendingAgentCmds.Load(request.ID); pending {
 		t.Fatal("tmux request remained pending")
 	}
 }
@@ -301,32 +305,32 @@ func TestPersistentTmuxDisconnectReportsUnknownOutcomePromptly(t *testing.T) {
 func TestAgentStreamOutputBackpressureClosesBridge(t *testing.T) {
 	for _, kind := range []string{"terminal", "desktop", "audio"} {
 		t.Run(kind, func(t *testing.T) {
-			s := &apiServer{}
+			s := hubdeps.NewEmpty(t)
 			conn := &agentmgr.AgentConn{AssetID: "node"}
 			output := make(chan []byte, 1)
 			output <- []byte("queued")
 			closed := make(chan struct{})
 			var reason func() string
 			if kind == "terminal" {
-				bridge := &terminalBridge{OutputCh: output, ClosedCh: closed, ExpectedAgentID: conn.AssetID, AgentConn: conn, WireSessionID: "wire"}
-				s.terminalBridges.Store("wire", bridge)
+				bridge := &terminalpkg.TerminalBridge{OutputCh: output, ClosedCh: closed, ExpectedAgentID: conn.AssetID, AgentConn: conn, WireSessionID: "wire"}
+				s.TerminalBridges.Store("wire", bridge)
 				reason = func() string { return bridge.CloseReasonOr("") }
 			} else if kind == "audio" {
 				// A legacy in-process audio bridge has no wire ID of its own.
-				bridge := &desktopBridge{ExpectedAgentID: conn.AssetID, AgentConn: conn, ClosedCh: closed, AudioCh: make(chan desktopAudioOutbound, 1)}
-				bridge.AudioCh <- desktopAudioOutbound{Payload: []byte("queued")}
-				s.desktopBridges.Store("wire", bridge)
+				bridge := &desktoppkg.DesktopBridge{ExpectedAgentID: conn.AssetID, AgentConn: conn, ClosedCh: closed, AudioCh: make(chan desktoppkg.DesktopAudioOutbound, 1)}
+				bridge.AudioCh <- desktoppkg.DesktopAudioOutbound{Payload: []byte("queued")}
+				s.DesktopBridges.Store("wire", bridge)
 				reason = bridge.CloseReason
 			} else {
-				bridge := &desktopBridge{OutputCh: output, ClosedCh: closed, ExpectedAgentID: conn.AssetID, AgentConn: conn, WireSessionID: "wire"}
-				s.desktopBridges.Store("wire", bridge)
+				bridge := &desktoppkg.DesktopBridge{OutputCh: output, ClosedCh: closed, ExpectedAgentID: conn.AssetID, AgentConn: conn, WireSessionID: "wire"}
+				s.DesktopBridges.Store("wire", bridge)
 				reason = bridge.CloseReason
 			}
 			finished := make(chan struct{})
 			go func() {
 				if kind == "audio" {
 					raw, _ := json.Marshal(agentmgr.DesktopAudioDataPayload{SessionID: "wire", Data: base64.StdEncoding.EncodeToString([]byte("overflow"))})
-					s.processAgentDesktopAudioData(conn, agentmgr.Message{Data: raw})
+					s.DesktopDeps().ProcessAgentDesktopAudioData(conn, agentmgr.Message{Data: raw})
 				} else {
 					streamGenerationReply(s, conn, kind, "data", "wire", "overflow")
 				}

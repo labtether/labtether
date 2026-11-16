@@ -1,10 +1,13 @@
-package main
+package terminal_test
 
 import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +17,7 @@ import (
 )
 
 func TestBridgeAgentInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 
 	serverConn, clientConn, cleanup := newTerminalBridgeWebSocketPair(t)
 	defer cleanup()
@@ -29,7 +32,7 @@ func TestBridgeAgentInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
 				panicCh <- r
 			}
 		}()
-		srv.bridgeAgentInput(serverConn, nil, "sess-idle", closedCh, nil)
+		srv.TerminalDeps().BridgeAgentInput(serverConn, nil, "sess-idle", closedCh, nil)
 	}()
 
 	// Keep the bridge idle long enough to cover the previous timeout/panic path.
@@ -56,17 +59,17 @@ func TestBridgeAgentInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
 }
 
 func TestBridgeAgentInputForwardsResizeAndInputToAgent(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 
 	browserServerConn, browserClientConn, browserCleanup := newTerminalBridgeWebSocketPair(t)
 	defer browserCleanup()
 
-	agentServerConn, agentClientConn, agentCleanup := newWebSocketPair(t)
+	agentServerConn, agentClientConn, agentCleanup := testutil.NewWebSocketPair(t)
 	defer agentCleanup()
 
 	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
 	closedCh := make(chan struct{})
-	bridge := &terminalBridge{
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        closedCh,
 		ExpectedAgentID: "node-1",
@@ -77,7 +80,7 @@ func TestBridgeAgentInputForwardsResizeAndInputToAgent(t *testing.T) {
 		err    error
 	}, 1)
 	go func() {
-		reason, err := srv.bridgeAgentInput(browserServerConn, agentConn, "sess-forward", closedCh, bridge)
+		reason, err := srv.TerminalDeps().BridgeAgentInput(browserServerConn, agentConn, "sess-forward", closedCh, bridge)
 		resultCh <- struct {
 			reason string
 			err    error
@@ -151,12 +154,12 @@ func TestBridgeAgentInputForwardsResizeAndInputToAgent(t *testing.T) {
 }
 
 func TestBridgeAgentInputReturnsAgentDisconnectReason(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 
 	serverConn, clientConn, cleanup := newTerminalBridgeWebSocketPair(t)
 	defer cleanup()
 
-	bridge := &terminalBridge{
+	bridge := &terminalpkg.TerminalBridge{
 		OutputCh:        make(chan []byte, 1),
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
@@ -167,7 +170,7 @@ func TestBridgeAgentInputReturnsAgentDisconnectReason(t *testing.T) {
 		err    error
 	}, 1)
 	go func() {
-		reason, err := srv.bridgeAgentInput(serverConn, nil, "sess-disconnect", bridge.ClosedCh, bridge)
+		reason, err := srv.TerminalDeps().BridgeAgentInput(serverConn, nil, "sess-disconnect", bridge.ClosedCh, bridge)
 		resultCh <- struct {
 			reason string
 			err    error
@@ -192,20 +195,20 @@ func TestBridgeAgentInputReturnsAgentDisconnectReason(t *testing.T) {
 }
 
 func TestHandleAgentTerminalStreamAllowsFreshStreamAfterPriorDisconnect(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	agentServerConn, agentClientConn, agentCleanup := newWebSocketPair(t)
+	agentServerConn, agentClientConn, agentCleanup := testutil.NewWebSocketPair(t)
 	defer agentCleanup()
 
 	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
 	agentConn.SetMeta("terminal.tmux.has", "false")
-	sut.agentMgr.Register(agentConn)
-	defer sut.agentMgr.Unregister("node-1")
+	sut.AgentMgr.Register(agentConn)
+	defer sut.AgentMgr.Unregister("node-1")
 
 	session := terminal.Session{ID: "sess-reconnect", Target: "node-1"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleAgentTerminalStream(w, r, session)
+		sut.TerminalDeps().HandleAgentTerminalStream(w, r, session)
 	}))
 	defer server.Close()
 
@@ -226,7 +229,7 @@ func TestHandleAgentTerminalStreamAllowsFreshStreamAfterPriorDisconnect(t *testi
 		if err != nil {
 			t.Fatalf("marshal terminal started payload: %v", err)
 		}
-		sut.processAgentTerminalStarted(agentConn, agentmgr.Message{Data: startedData})
+		sut.TerminalDeps().ProcessAgentTerminalStarted(agentConn, agentmgr.Message{Data: startedData})
 	}
 
 	sendOutput := func(wireID, data string) {
@@ -238,7 +241,7 @@ func TestHandleAgentTerminalStreamAllowsFreshStreamAfterPriorDisconnect(t *testi
 		if err != nil {
 			t.Fatalf("marshal terminal data payload: %v", err)
 		}
-		sut.processAgentTerminalData(agentConn, agentmgr.Message{Data: payload})
+		sut.TerminalDeps().ProcessAgentTerminalData(agentConn, agentmgr.Message{Data: payload})
 	}
 
 	browserConn1 := dialBrowser()
