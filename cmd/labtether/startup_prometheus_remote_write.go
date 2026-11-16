@@ -126,7 +126,7 @@ func startPrometheusRemoteWrite(ctx context.Context, srv *apiServer, pgStore *pe
 		// with the URL or secret-bearing settings map.
 		log.Printf("labtether: prometheus remote write runtime not started: %v", err)
 	}
-	servicehttp.SafeGo(ctx, &srv.backgroundWG, "prometheus-remote-write", func(ctx context.Context) {
+	safeGo(ctx, &srv.backgroundWG, "prometheus-remote-write", func(ctx context.Context) {
 		<-ctx.Done()
 		runtime.Stop()
 	})

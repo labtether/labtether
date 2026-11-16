@@ -1,0 +1,51 @@
+# Runtime loop pin: names startRuntimeLoops passes to safeGo, sorted.
+# Regenerate: LABTETHER_UPDATE_WIRING_PINS=1 go test -count=1 -run 'TestWiringPin' ./cmd/labtether
+
+== normal mode
+count 22
+alert-evaluator
+apikey-touch
+archive-worker
+failover-readiness
+heartbeat
+hub-collector
+incident-correlator
+live-activity-dispatch
+live-activity-retry
+notification-retry
+presence-cleanup
+prometheus-remote-write
+protocol-health
+reliability-materializer
+request-audit
+retention
+schedule-runner
+service-health-linker
+session-cleanup
+synthetic-runner
+web-service-cleanup
+webhook-relay
+
+== demo mode
+count 21
+alert-evaluator
+apikey-touch
+archive-worker
+demo-fleet
+failover-readiness
+heartbeat
+hub-collector
+incident-correlator
+live-activity-dispatch
+live-activity-retry
+notification-retry
+presence-cleanup
+prometheus-remote-write
+protocol-health
+reliability-materializer
+request-audit
+retention
+service-health-linker
+session-cleanup
+synthetic-runner
+web-service-cleanup
