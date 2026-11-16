@@ -2,11 +2,12 @@ package main
 
 import (
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/model"
+	"net/http"
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 )
@@ -88,18 +89,27 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBinding(t *testing.T) {
 	}
 }
 
-func TestPersistCanonicalHeartbeatUsesCommittedSource(t *testing.T) {
-	t.Parallel()
+// TestHeartbeatRouteKeepsCommittedCanonicalProvider sends a heartbeat that
+// claims "proxmox" for an agent device through the real route table and
+// auth. The asset store keeps the device's source "agent", and the
+// canonical record must follow the stored source. The rule itself is tested
+// in internal/hubapi/resources; this catches cmd's heartbeat writer not
+// using it (passing the heartbeat's own source, or writing nothing), which
+// would let an agent pick a Proxmox provider for itself.
+func TestHeartbeatRouteKeepsCommittedCanonicalProvider(t *testing.T) {
 	sut := newTestAPIServer(t)
-	assetID := "canonical-source-authority"
-	now := time.Now().UTC()
-	committed := assets.Asset{
-		ID: assetID, Type: "host", Name: assetID, Source: "agent", Status: "online",
-		Platform: "linux", LastSeenAt: now, UpdatedAt: now, CreatedAt: now,
+	assetID := "agent-claims-proxmox"
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Type: "host", Name: assetID, Source: "agent", Status: "online", Platform: "linux",
+	}); err != nil {
+		t.Fatalf("seed agent device: %v", err)
 	}
-	sut.persistCanonicalHeartbeat(committed, assets.HeartbeatRequest{
-		AssetID: assetID, Source: "proxmox",
-	})
+	admin := createRoleSessionToken(t, sut, "admin-canonical-source", auth.RoleAdmin)
+	call := routeWiringCaller(t, sut.buildHTTPHandlers(nil, nil, nil), admin)
+	call("/assets/heartbeat", http.MethodPost, "/assets/heartbeat",
+		`{"asset_id":"`+assetID+`","type":"host","name":"`+assetID+`","source":"proxmox","status":"online","platform":"linux"}`,
+		http.StatusAccepted, `"source":"agent"`)
+
 	agentProviderID := respkg.CanonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
 	if _, ok, err := sut.canonicalStore.GetProviderInstance(agentProviderID); err != nil || !ok {
 		t.Fatalf("committed agent provider missing ok=%v err=%v", ok, err)

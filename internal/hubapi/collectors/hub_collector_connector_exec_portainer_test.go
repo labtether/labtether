@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/assetid"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
 func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/system/version", func(w http.ResponseWriter, r *http.Request) {
@@ -47,9 +49,9 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	credentialID := seedPortainerCredentialProfile(t, sut, "svc@local!automation", "ptr-secret-value", server.URL)
 	collector := hubcollector.Collector{
@@ -66,9 +68,9 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 		},
 	}
 
-	sut.executePortainerCollector(context.Background(), collector)
+	sut.CollectorsDeps().ExecutePortainerCollector(context.Background(), collector)
 
-	asset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
+	asset, exists, err := sut.AssetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset() error = %v", err)
 	}
@@ -94,7 +96,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 		t.Fatalf("portainer_version = %q, want %q", asset.Metadata["portainer_version"], "2.21.5")
 	}
 
-	containerAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-container-1-abc123def456", collector.ID))
+	containerAsset, exists, err := sut.AssetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-container-1-abc123def456", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(container) error = %v", err)
 	}
@@ -105,7 +107,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 		t.Fatalf("container ports = %q, want %q", containerAsset.Metadata["ports"], "8080->80/tcp")
 	}
 
-	stackAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-stack-5", collector.ID))
+	stackAsset, exists, err := sut.AssetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-stack-5", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(stack) error = %v", err)
 	}
@@ -118,7 +120,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 }
 
 func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/system/version", func(w http.ResponseWriter, r *http.Request) {
@@ -142,9 +144,9 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	credentialID := seedPortainerCredentialProfile(t, sut, "svc@local!automation", "ptr-secret-value", server.URL)
 	collector := hubcollector.Collector{
@@ -161,9 +163,9 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 		},
 	}
 
-	sut.executePortainerCollector(context.Background(), collector)
+	sut.CollectorsDeps().ExecutePortainerCollector(context.Background(), collector)
 
-	localAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
+	localAsset, exists, err := sut.AssetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(endpoint-1) error = %v", err)
 	}
@@ -177,7 +179,7 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 		t.Fatalf("local portainer_endpoint_name = %q, want empty", localAsset.Metadata["portainer_endpoint_name"])
 	}
 
-	edgeAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-2", collector.ID))
+	edgeAsset, exists, err := sut.AssetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-2", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(endpoint-2) error = %v", err)
 	}
@@ -190,7 +192,7 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 }
 
 func TestExecuteFourPortainerCollectorsKeepRepeatedEndpointIDDistinct(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/system/version", func(w http.ResponseWriter, r *http.Request) {
@@ -208,9 +210,9 @@ func TestExecuteFourPortainerCollectorsKeepRepeatedEndpointIDDistinct(t *testing
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 	credentialID := seedPortainerCredentialProfile(t, sut, "svc@local!automation", "ptr-secret-value", server.URL)
 
 	collectorIDs := []string{
@@ -232,12 +234,12 @@ func TestExecuteFourPortainerCollectorsKeepRepeatedEndpointIDDistinct(t *testing
 				"skip_verify":   true,
 			},
 		}
-		sut.executePortainerCollector(context.Background(), collector)
+		sut.CollectorsDeps().ExecutePortainerCollector(context.Background(), collector)
 	}
 
 	for _, collectorID := range collectorIDs {
 		id := assetid.ScopeCollectorAssetID("portainer-endpoint-2", collectorID)
-		asset, ok, err := sut.assetStore.GetAsset(id)
+		asset, ok, err := sut.AssetStore.GetAsset(id)
 		if err != nil || !ok {
 			t.Fatalf("expected scoped endpoint %s: ok=%v err=%v", id, ok, err)
 		}
@@ -245,7 +247,7 @@ func TestExecuteFourPortainerCollectorsKeepRepeatedEndpointIDDistinct(t *testing
 			t.Fatalf("asset %s collector_id = %q", id, asset.Metadata["collector_id"])
 		}
 	}
-	if _, ok, err := sut.assetStore.GetAsset("portainer-endpoint-2"); err != nil || ok {
+	if _, ok, err := sut.AssetStore.GetAsset("portainer-endpoint-2"); err != nil || ok {
 		t.Fatalf("unexpected ambiguous legacy endpoint: ok=%v err=%v", ok, err)
 	}
 }

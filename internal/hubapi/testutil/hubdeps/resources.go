@@ -25,12 +25,13 @@ import (
 // broadcaster, so events are dropped as cmd drops them when it has none.
 //
 // Stand-ins replace cmd's route auth and rate limit (see
-// testutil/standins.go) and the fields cmd fills with its own code: the
-// canonical heartbeat writer, the Hub SSH key pieces and agent command
-// dispatch. The asset sub-handlers that cmd takes from the auth and admin
-// packages have no builder here yet. Each of these fails the test if
-// reached. The desktop display list and the saved terminal session cleanup
-// are the real desktop and terminal Deps.
+// testutil/standins.go) and the fields cmd fills with its own code: the Hub
+// SSH key pieces and agent command dispatch. The asset sub-handlers that cmd
+// takes from the auth and admin packages have no builder here yet. Each of
+// these fails the test if reached. The canonical heartbeat writer is the
+// resources package function cmd's persistCanonicalHeartbeat calls, over
+// the Hub's canonical store. The desktop display list and the saved
+// terminal session cleanup are the real desktop and terminal Deps.
 func (h *Hub) BuildResourcesDeps() *resources.Deps {
 	var db *persistence.PostgresStore
 	enrollmentTransactions, _ := h.EnrollmentStore.(persistence.AgentEnrollmentTransactionStore)
@@ -109,11 +110,15 @@ func (h *Hub) BuildResourcesDeps() *resources.Deps {
 				h.t.Logf("failed to remove saved terminal sessions of removed device %s: %v", assetID, err)
 			}
 		},
-		SendSSHKeyRemoveToAsset:     hubSSHKeyRemovalNotTested(h.t),
-		PersistCanonicalHeartbeatFn: canonicalHeartbeatNotTested(h.t),
-		CollectorConfigString:       collectors.CollectorConfigString,
-		NormalizeAssetKey:           collectors.NormalizeAssetKey,
-		AutoDockerCollectorAssetID:  collectors.AutoDockerCollectorAssetID,
+		SendSSHKeyRemoveToAsset: hubSSHKeyRemovalNotTested(h.t),
+		// cmd's persistCanonicalHeartbeat passes apiServer's canonical store,
+		// read at the call, and the current time to this package function.
+		PersistCanonicalHeartbeatFn: func(assetEntry assets.Asset, req assets.HeartbeatRequest) {
+			resources.PersistCanonicalHeartbeatForAsset(h.CanonicalStore, assetEntry, req, time.Now().UTC())
+		},
+		CollectorConfigString:      collectors.CollectorConfigString,
+		NormalizeAssetKey:          collectors.NormalizeAssetKey,
+		AutoDockerCollectorAssetID: collectors.AutoDockerCollectorAssetID,
 
 		HandleDesktopCredentials:         assetSubHandlerNotWired(h.t, "desktop credentials"),
 		HandleRetrieveDesktopCredentials: assetSubHandlerNotWired(h.t, "desktop credential retrieval"),
@@ -149,16 +154,6 @@ func (h *Hub) BuildResourcesDeps() *resources.Deps {
 // a test's store changes are seen at once.
 func (h *Hub) ResourcesDeps() *resources.Deps {
 	return h.BuildResourcesDeps()
-}
-
-// canonicalHeartbeatNotTested stands in for cmd's persistCanonicalHeartbeat.
-// That is cmd code: it picks the canonical provider from the stored device's
-// source before the heartbeat's own, which a heartbeat must not choose. It
-// fails the test if reached; cmd tests it in canonical_heartbeat_contract_test.go.
-func canonicalHeartbeatNotTested(t *testing.T) func(assets.Asset, assets.HeartbeatRequest) {
-	return func(assets.Asset, assets.HeartbeatRequest) {
-		t.Errorf("a heartbeat reached the canonical heartbeat stand-in; that writer is cmd code, tested in cmd/labtether")
-	}
 }
 
 // hubSSHKeyRemovalNotTested stands in for the closure in cmd's

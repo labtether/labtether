@@ -17,12 +17,11 @@ import (
 
 // --- apiServer methods (thin wrappers around resourcespkg persistence helpers) ---
 
+// persistCanonicalHeartbeat writes the canonical record of a committed
+// heartbeat. The committed asset's source picks the provider, not the
+// heartbeat's (see resourcespkg.PersistCanonicalHeartbeatForAsset).
 func (s *apiServer) persistCanonicalHeartbeat(assetEntry assets.Asset, req assets.HeartbeatRequest) {
-	// The committed asset is authoritative. Heartbeat payloads are untrusted and
-	// must not select a canonical provider/binding after persistence has already
-	// normalized their source (for example, an agent reporting "proxmox").
-	source := resourcespkg.CanonicalProviderName(firstNonEmptyString(assetEntry.Source, req.Source))
-	resourcespkg.PersistCanonicalHeartbeat(s.canonicalStore, assetEntry, source, time.Now().UTC())
+	resourcespkg.PersistCanonicalHeartbeatForAsset(s.canonicalStore, assetEntry, req, time.Now().UTC())
 }
 
 func (s *apiServer) persistCanonicalConnectorSnapshot(

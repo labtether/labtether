@@ -23,6 +23,27 @@ import (
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
+// PersistCanonicalHeartbeatForAsset writes canonical model state for a
+// heartbeat the asset store has committed. The provider comes from the
+// committed asset's source; the heartbeat's own source is used only when
+// the asset has none. A heartbeat payload is untrusted: once a device is
+// agent-owned the asset store keeps its source "agent" whatever a heartbeat
+// claims (for example an agent reporting "proxmox"), and the payload must
+// not pick the canonical provider or template binding either. It is a no-op
+// when store is nil.
+func PersistCanonicalHeartbeatForAsset(
+	store persistence.CanonicalModelStore,
+	assetEntry assets.Asset,
+	req assets.HeartbeatRequest,
+	at time.Time,
+) {
+	source := strings.TrimSpace(assetEntry.Source)
+	if source == "" {
+		source = strings.TrimSpace(req.Source)
+	}
+	PersistCanonicalHeartbeat(store, assetEntry, CanonicalProviderName(source), at)
+}
+
 // PersistCanonicalHeartbeat writes canonical model state for a single
 // heartbeat. It is a no-op when store is nil.
 func PersistCanonicalHeartbeat(

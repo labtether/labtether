@@ -1,7 +1,9 @@
-package main
+package collectors_test
 
 import (
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 	"strings"
@@ -10,8 +12,8 @@ import (
 )
 
 func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		switch method {
 		case "system.info":
 			return map[string]any{"hostname": "VaultNAS"}, nil
@@ -20,15 +22,15 @@ func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
 		case "alert.list":
 			return []map[string]any{}, nil
 		default:
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-summary", "api-key", server.URL)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	testutil.CreateTrueNASCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-truenas-summary", "api-key", server.URL)
 
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-summary",
@@ -45,9 +47,9 @@ func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
 	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
+	sut.CollectorsDeps().ExecuteTrueNASCollector(ctx, collector)
 
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -69,8 +71,8 @@ func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		switch method {
 		case "system.info":
 			return map[string]any{"hostname": "VaultNAS", "version": "25.04.0"}, nil
@@ -79,15 +81,15 @@ func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
 		case "alert.list":
 			return []map[string]any{}, nil
 		default:
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-status-success", "api-key", server.URL)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	testutil.CreateTrueNASCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-truenas-status-success", "api-key", server.URL)
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-status-5",
 		AssetID:       "truenas-cluster-status-5",
@@ -102,13 +104,13 @@ func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
+	sut.CollectorsDeps().ExecuteTrueNASCollector(ctx, collector)
 	updated, _, _ := store.GetHubCollector(collector.ID)
 	if updated.LastStatus != "ok" || updated.LastError != "" {
 		t.Fatalf("unexpected success status: %+v", updated)
 	}
 
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -130,8 +132,8 @@ func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		switch method {
 		case "system.info":
 			return map[string]any{"hostname": "VaultNAS"}, nil
@@ -140,15 +142,15 @@ func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T
 		case "alert.list":
 			return []map[string]any{{"uuid": "alert1", "formatted": "A1", "datetime": "2026-02-23T00:00:00Z"}}, nil
 		default:
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-summary-counts", "api-key", server.URL)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	testutil.CreateTrueNASCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-truenas-summary-counts", "api-key", server.URL)
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-summary-counts",
 		AssetID:       "truenas-cluster-summary-counts",
@@ -163,9 +165,9 @@ func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
+	sut.CollectorsDeps().ExecuteTrueNASCollector(ctx, collector)
 
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -187,8 +189,8 @@ func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T
 }
 
 func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		switch method {
 		case "system.info":
 			return map[string]any{"hostname": "VaultNAS"}, nil
@@ -197,15 +199,15 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
 		case "alert.list":
 			return []map[string]any{}, nil
 		default:
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-summary-zero-alerts", "api-key", server.URL)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	testutil.CreateTrueNASCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-truenas-summary-zero-alerts", "api-key", server.URL)
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-summary-zero-alerts",
 		AssetID:       "truenas-cluster-summary-zero-alerts",
@@ -220,8 +222,8 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	sut.CollectorsDeps().ExecuteTrueNASCollector(ctx, collector)
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
@@ -243,8 +245,8 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
 }
 
 func TestExecuteTrueNASCollectorSummaryLogIncludesNonZeroAlertCount(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
-	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+	testutil.AllowInsecureTransportForConnectorTests(t)
+	server := testutil.NewTrueNASRPCServer(t, func(method string, params []any) (any, *testutil.TrueNASRPCError) {
 		switch method {
 		case "system.info":
 			return map[string]any{"hostname": "VaultNAS"}, nil
@@ -253,15 +255,15 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesNonZeroAlertCount(t *testing.T
 		case "alert.list":
 			return []map[string]any{{"uuid": "a1", "formatted": "Alert 1", "datetime": "2026-02-23T07:00:00Z"}}, nil
 		default:
-			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+			return nil, &testutil.TrueNASRPCError{Code: -32601, Message: "Method not found"}
 		}
 	})
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
-	createTrueNASCredentialProfile(t, sut, "cred-truenas-summary-nonzero-alerts", "api-key", server.URL)
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
+	testutil.CreateTrueNASCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, "cred-truenas-summary-nonzero-alerts", "api-key", server.URL)
 	collector := hubcollector.Collector{
 		ID:            "collector-truenas-summary-nonzero-alerts",
 		AssetID:       "truenas-cluster-summary-nonzero-alerts",
@@ -276,8 +278,8 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesNonZeroAlertCount(t *testing.T
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	sut.executeTrueNASCollector(ctx, collector)
-	events, err := sut.logStore.QueryEvents(logs.QueryRequest{
+	sut.CollectorsDeps().ExecuteTrueNASCollector(ctx, collector)
+	events, err := sut.LogStore.QueryEvents(logs.QueryRequest{
 		Source: "truenas",
 		From:   time.Unix(0, 0).UTC(),
 		To:     time.Now().UTC().Add(365 * 24 * time.Hour),
