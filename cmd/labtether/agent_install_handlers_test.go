@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
@@ -123,7 +124,7 @@ func TestHandleAgentInstallScript(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 
-			srv.handleAgentInstallScript(rec, req)
+			srv.ensureAgentsDeps().HandleAgentInstallScript(rec, req)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status: got %d, want 200 (body: %q)", rec.Code, rec.Body.String())
@@ -219,7 +220,7 @@ func TestHandleAgentInstallScriptBuiltInCAUsesTrustedForwardedHTTPSOrigin(t *tes
 	req.Header.Set("X-Forwarded-Proto", "https")
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentInstallScript(rec, req)
+	srv.ensureAgentsDeps().HandleAgentInstallScript(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (body: %q)", rec.Code, rec.Body.String())
 	}
@@ -251,7 +252,7 @@ func TestHandleAgentInstallScriptMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/install.sh", nil)
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentInstallScript(rec, req)
+	srv.ensureAgentsDeps().HandleAgentInstallScript(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("got %d, want 405", rec.Code)
@@ -278,7 +279,7 @@ func TestHandleAgentBootstrapScript(t *testing.T) {
 	req.Host = "secure.local:8443"
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentBootstrapScript(rec, req)
+	srv.ensureAgentsDeps().HandleAgentBootstrapScript(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (body: %q)", rec.Code, rec.Body.String())
@@ -313,7 +314,7 @@ func TestHandleAgentBootstrapScriptRejectsInvalidFingerprint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=invalid", nil)
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentBootstrapScript(rec, req)
+	srv.ensureAgentsDeps().HandleAgentBootstrapScript(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("got %d, want 400", rec.Code)
@@ -327,7 +328,7 @@ func TestHandleAgentBootstrapScriptMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/bootstrap.sh", nil)
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentBootstrapScript(rec, req)
+	srv.ensureAgentsDeps().HandleAgentBootstrapScript(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("got %d, want 405", rec.Code)
@@ -340,7 +341,7 @@ func TestGenerateInstallScript(t *testing.T) {
 
 	hubURL := "http://192.168.1.100:8080"
 	wsURL := "ws://192.168.1.100:8080/ws/agent"
-	script := generateInstallScript(hubURL, wsURL)
+	script := agentspkg.GenerateInstallScript(hubURL, wsURL)
 
 	checks := []struct {
 		desc    string

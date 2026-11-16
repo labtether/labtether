@@ -10,6 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/groups"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func signedTokenEnrollmentRequest(t *testing.T, rawToken, hostname string, publi
 func signedContinuityEnrollmentRequest(t *testing.T, rawToken, hostname string, publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) enrollment.EnrollRequest {
 	t.Helper()
 	fingerprint := agentidentity.FingerprintFromPublicKey(publicKey)
-	assetID := normalizeHostnameForAssetID(hostname)
+	assetID := agentspkg.NormalizeHostnameForAssetID(hostname)
 	payload := agentidentity.BuildTokenEnrollmentProofPayloadV2(assetID, rawToken, fingerprint)
 	return enrollment.EnrollRequest{
 		EnrollmentToken:    rawToken,
@@ -67,7 +68,7 @@ func TestEnrollFullFlow(t *testing.T) {
 	enrollReq.Host = "localhost:8080"
 	enrollReq.RemoteAddr = "127.0.0.1:12345"
 	enrollRec := httptest.NewRecorder()
-	sut.handleEnroll(enrollRec, enrollReq)
+	sut.ensureAgentsDeps().HandleEnroll(enrollRec, enrollReq)
 
 	if enrollRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", enrollRec.Code, enrollRec.Body.String())
@@ -99,7 +100,7 @@ func TestEnrollFullFlow(t *testing.T) {
 	if atok.AssetID != "test-node-01" {
 		t.Fatalf("expected agent token asset_id=test-node-01, got %q", atok.AssetID)
 	}
-	ttlHours := configuredAgentTokenTTLHours()
+	ttlHours := agentspkg.ConfiguredAgentTokenTTLHours()
 	expectedMinExpiry := time.Now().UTC().Add(time.Duration(ttlHours-1) * time.Hour)
 	expectedMaxExpiry := time.Now().UTC().Add(time.Duration(ttlHours+1) * time.Hour)
 	if atok.ExpiresAt.Before(expectedMinExpiry) || atok.ExpiresAt.After(expectedMaxExpiry) {
@@ -155,7 +156,7 @@ func TestEnrollRejectsUnapprovedGroupAndForcesApprovedPlacement(t *testing.T) {
 	missingGroupRequest.Host = "localhost:8080"
 	missingGroupRequest.RemoteAddr = "127.0.0.1:12345"
 	missingGroupRecorder := httptest.NewRecorder()
-	sut.handleEnroll(missingGroupRecorder, missingGroupRequest)
+	sut.ensureAgentsDeps().HandleEnroll(missingGroupRecorder, missingGroupRequest)
 	if missingGroupRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("unapproved group enrollment: status=%d body=%s", missingGroupRecorder.Code, missingGroupRecorder.Body.String())
 	}
@@ -189,7 +190,7 @@ func TestEnrollRejectsUnapprovedGroupAndForcesApprovedPlacement(t *testing.T) {
 	outsideGroupRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(outsideGroupPayload))
 	outsideGroupRequest.RemoteAddr = "127.0.0.3:12345"
 	outsideGroupRecorder := httptest.NewRecorder()
-	sut.handleEnroll(outsideGroupRecorder, outsideGroupRequest)
+	sut.ensureAgentsDeps().HandleEnroll(outsideGroupRecorder, outsideGroupRequest)
 	if outsideGroupRecorder.Code != http.StatusUnauthorized {
 		t.Fatalf("outside group enrollment: status=%d body=%s", outsideGroupRecorder.Code, outsideGroupRecorder.Body.String())
 	}
@@ -208,7 +209,7 @@ func TestEnrollRejectsUnapprovedGroupAndForcesApprovedPlacement(t *testing.T) {
 	validGroupRequest.Host = "localhost:8080"
 	validGroupRequest.RemoteAddr = "127.0.0.2:12345"
 	validGroupRecorder := httptest.NewRecorder()
-	sut.handleEnroll(validGroupRecorder, validGroupRequest)
+	sut.ensureAgentsDeps().HandleEnroll(validGroupRecorder, validGroupRequest)
 	if validGroupRecorder.Code != http.StatusOK {
 		t.Fatalf("valid group enrollment: status=%d body=%s", validGroupRecorder.Code, validGroupRecorder.Body.String())
 	}
@@ -243,7 +244,7 @@ func TestAgentTokenListAndRevoke(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("enroll: expected 200, got %d", rec.Code)
 	}
@@ -251,7 +252,7 @@ func TestAgentTokenListAndRevoke(t *testing.T) {
 	// List agent tokens
 	listReq := httptest.NewRequest(http.MethodGet, "/settings/agent-tokens", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleAgentTokens(listRec, listReq)
+	sut.ensureAgentsDeps().HandleAgentTokens(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
@@ -277,7 +278,7 @@ func TestAgentTokenListAndRevoke(t *testing.T) {
 	// Revoke agent token
 	revokeReq := httptest.NewRequest(http.MethodDelete, "/settings/agent-tokens/"+agentTokID, nil)
 	revokeRec := httptest.NewRecorder()
-	sut.handleAgentTokenActions(revokeRec, revokeReq)
+	sut.ensureAgentsDeps().HandleAgentTokenActions(revokeRec, revokeReq)
 
 	if revokeRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", revokeRec.Code, revokeRec.Body.String())
@@ -289,7 +290,7 @@ func TestAgentTokenListAndRevoke(t *testing.T) {
 	// Verify revoked
 	listReq2 := httptest.NewRequest(http.MethodGet, "/settings/agent-tokens", nil)
 	listRec2 := httptest.NewRecorder()
-	sut.handleAgentTokens(listRec2, listReq2)
+	sut.ensureAgentsDeps().HandleAgentTokens(listRec2, listReq2)
 
 	var listResp2 struct {
 		Tokens []enrollment.AgentToken `json:"tokens"`
@@ -317,7 +318,7 @@ func TestEnrollAgentTokenHonorsConfiguredTTL(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

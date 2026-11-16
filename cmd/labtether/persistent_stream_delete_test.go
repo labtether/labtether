@@ -59,7 +59,7 @@ func TestPersistentDeleteUsesLatestAttachedStateForTmuxCleanup(t *testing.T) {
 	var kill agentmgr.TerminalTmuxKillData
 	_ = json.Unmarshal(msg.Data, &kill)
 	raw, _ := json.Marshal(agentmgr.CommandResultData{JobID: kill.JobID, SessionID: kill.SessionID, CommandID: kill.CommandID, Status: "succeeded"})
-	s.processAgentCommandResult(agent, agentmgr.Message{Data: raw})
+	s.ensureAgentsDeps().ProcessAgentCommandResult(agent, agentmgr.Message{Data: raw})
 	select {
 	case <-done:
 		if response.Code != http.StatusOK {

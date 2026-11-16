@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/connectors/webservice"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/enrollment"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
@@ -150,7 +151,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 			DispatchSem: make(chan struct{}, 32),
 		},
 		collectorDispatchSem: make(chan struct{}, 4),
-		pendingAgents:        newPendingAgents(),
+		pendingAgents:        agentspkg.NewPendingAgents(),
 		installStateStore:    installstate.New(filepath.Join(t.TempDir(), "install")),
 	}
 	sut.webServiceCoordinator = webservice.NewCoordinator(persistence.NewMemoryWebServiceStore())

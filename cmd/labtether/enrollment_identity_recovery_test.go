@@ -37,7 +37,7 @@ func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
 	firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(firstPayload))
 	firstReq.RemoteAddr = "127.0.0.1:12345"
 	firstRec := httptest.NewRecorder()
-	sut.handleEnroll(firstRec, firstReq)
+	sut.ensureAgentsDeps().HandleEnroll(firstRec, firstReq)
 	if firstRec.Code != http.StatusOK {
 		t.Fatalf("initial enrollment status=%d body=%s", firstRec.Code, firstRec.Body.String())
 	}
@@ -54,7 +54,7 @@ func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
 	retryReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(retryPayload))
 	retryReq.RemoteAddr = "127.0.0.1:12345"
 	retryRec := httptest.NewRecorder()
-	sut.handleEnroll(retryRec, retryReq)
+	sut.ensureAgentsDeps().HandleEnroll(retryRec, retryReq)
 	if retryRec.Code != http.StatusConflict || !strings.Contains(retryRec.Body.String(), "This device was removed from LabTether") {
 		t.Fatalf("retired enrollment status=%d body=%s", retryRec.Code, retryRec.Body.String())
 	}
@@ -70,7 +70,7 @@ func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
 	invalidReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(invalidPayload))
 	invalidReq.RemoteAddr = "127.0.0.1:12345"
 	invalidRec := httptest.NewRecorder()
-	sut.handleEnroll(invalidRec, invalidReq)
+	sut.ensureAgentsDeps().HandleEnroll(invalidRec, invalidReq)
 	if invalidRec.Code != http.StatusUnauthorized {
 		t.Fatalf("invalid token leaked retirement state: status=%d body=%s", invalidRec.Code, invalidRec.Body.String())
 	}
@@ -90,7 +90,7 @@ func TestEnrollRejectsReEnrollmentForExistingHostname(t *testing.T) {
 	req1.Host = "localhost:8080"
 	req1.RemoteAddr = "127.0.0.1:12345"
 	rec1 := httptest.NewRecorder()
-	sut.handleEnroll(rec1, req1)
+	sut.ensureAgentsDeps().HandleEnroll(rec1, req1)
 	if rec1.Code != http.StatusOK {
 		t.Fatalf("first enroll: expected 200, got %d", rec1.Code)
 	}
@@ -109,7 +109,7 @@ func TestEnrollRejectsReEnrollmentForExistingHostname(t *testing.T) {
 	req2.Host = "localhost:8080"
 	req2.RemoteAddr = "127.0.0.1:12345"
 	rec2 := httptest.NewRecorder()
-	sut.handleEnroll(rec2, req2)
+	sut.ensureAgentsDeps().HandleEnroll(rec2, req2)
 	if rec2.Code != http.StatusConflict {
 		t.Fatalf("second enroll: expected 409, got %d", rec2.Code)
 	}
@@ -140,7 +140,7 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	firstHTTP.Host = "localhost:8080"
 	firstHTTP.RemoteAddr = "127.0.0.1:12345"
 	firstRecorder := httptest.NewRecorder()
-	sut.handleEnroll(firstRecorder, firstHTTP)
+	sut.ensureAgentsDeps().HandleEnroll(firstRecorder, firstHTTP)
 	if firstRecorder.Code != http.StatusOK {
 		t.Fatalf("first enrollment: expected 200, got %d: %s", firstRecorder.Code, firstRecorder.Body.String())
 	}
@@ -181,7 +181,7 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	secondHTTP.Host = "localhost:8080"
 	secondHTTP.RemoteAddr = "127.0.0.2:12345"
 	secondRecorder := httptest.NewRecorder()
-	sut.handleEnroll(secondRecorder, secondHTTP)
+	sut.ensureAgentsDeps().HandleEnroll(secondRecorder, secondHTTP)
 	if secondRecorder.Code != http.StatusOK {
 		t.Fatalf("continuity re-enrollment: expected 200, got %d: %s", secondRecorder.Code, secondRecorder.Body.String())
 	}
@@ -248,7 +248,7 @@ func TestEnrollRejectsExistingHostnameWhenDeviceKeyDoesNotMatch(t *testing.T) {
 	firstHTTP.Host = "localhost:8080"
 	firstHTTP.RemoteAddr = "127.0.0.1:12345"
 	firstRecorder := httptest.NewRecorder()
-	sut.handleEnroll(firstRecorder, firstHTTP)
+	sut.ensureAgentsDeps().HandleEnroll(firstRecorder, firstHTTP)
 	if firstRecorder.Code != http.StatusOK {
 		t.Fatalf("first enrollment: expected 200, got %d: %s", firstRecorder.Code, firstRecorder.Body.String())
 	}
@@ -268,7 +268,7 @@ func TestEnrollRejectsExistingHostnameWhenDeviceKeyDoesNotMatch(t *testing.T) {
 	secondHTTP.Host = "localhost:8080"
 	secondHTTP.RemoteAddr = "127.0.0.2:12345"
 	secondRecorder := httptest.NewRecorder()
-	sut.handleEnroll(secondRecorder, secondHTTP)
+	sut.ensureAgentsDeps().HandleEnroll(secondRecorder, secondHTTP)
 	if secondRecorder.Code != http.StatusConflict {
 		t.Fatalf("mismatched identity: expected 409, got %d: %s", secondRecorder.Code, secondRecorder.Body.String())
 	}
@@ -296,7 +296,7 @@ func TestEnrollRejectsRecoveryFromHeartbeatOnlyFingerprint(t *testing.T) {
 	initialRequest.Host = "localhost:8080"
 	initialRequest.RemoteAddr = "127.0.0.1:12345"
 	initialRecorder := httptest.NewRecorder()
-	sut.handleEnroll(initialRecorder, initialRequest)
+	sut.ensureAgentsDeps().HandleEnroll(initialRecorder, initialRequest)
 	if initialRecorder.Code != http.StatusOK {
 		t.Fatalf("initial unsigned enrollment: expected 200, got %d: %s", initialRecorder.Code, initialRecorder.Body.String())
 	}
@@ -338,7 +338,7 @@ func TestEnrollRejectsRecoveryFromHeartbeatOnlyFingerprint(t *testing.T) {
 	recoveryRequest.Host = "localhost:8080"
 	recoveryRequest.RemoteAddr = "127.0.0.2:12345"
 	recoveryRecorder := httptest.NewRecorder()
-	sut.handleEnroll(recoveryRecorder, recoveryRequest)
+	sut.ensureAgentsDeps().HandleEnroll(recoveryRecorder, recoveryRequest)
 	if recoveryRecorder.Code != http.StatusConflict {
 		t.Fatalf("unverified recovery: expected 409, got %d: %s", recoveryRecorder.Code, recoveryRecorder.Body.String())
 	}

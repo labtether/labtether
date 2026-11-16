@@ -43,7 +43,7 @@ func (s *apiServer) handleV2HubAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/agents/presence"
-	apiv2.WrapV1Handler(s.handleAgentPresence)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleAgentPresence)(w, r)
 }
 
 func (s *apiServer) handleV2HubTLS(w http.ResponseWriter, r *http.Request) {

@@ -120,7 +120,7 @@ type apiServer struct {
 	hubIdentityMu                 sync.RWMutex
 	hubIdentity                   *hubSSHIdentity
 	tlsState                      TLSState
-	pendingAgentCmds              sync.Map // map[jobID]pendingAgentCommand
+	pendingAgentCmds              sync.Map // map[jobID]shared.PendingAgentCommand
 	collectorRunState             sync.Map // map[collectorID]*atomic.Bool
 	syntheticCheckRunState        sync.Map // map[checkID]struct{}
 	terminalBridges               sync.Map // map[sessionID]*terminalBridge
@@ -140,7 +140,7 @@ type apiServer struct {
 	usersReplies                  respkg.AgentReplies
 	clipboardReplies              desktoppkg.ClipboardReplies
 	diagnosticReplies             desktoppkg.DiagnosticReplies
-	agentSettingsState            sync.Map // map[assetID]agentSettingsRuntimeState
+	agentSettingsState            sync.Map // map[assetID]agentspkg.AgentSettingsRuntimeState
 	rateLimiter                   RateLimiter
 	streamTicketStore             StreamTicketStore
 	desktopSessionMu              sync.RWMutex
@@ -224,7 +224,7 @@ type apiServer struct {
 	dataDir                       string
 	demoMode                      bool
 	demoRateLimiter               *demoSessionRateLimiter
-	pendingAgents                 *pendingAgents
+	pendingAgents                 *agentspkg.PendingAgents
 	challengeStore                *auth.ChallengeStore
 	totpEncryptionKey             []byte
 	installStateStore             *installstate.Store

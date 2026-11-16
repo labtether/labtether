@@ -30,7 +30,7 @@ func TestEnrollAfterRemovalNeedsANewSingleUseTokenAndSaysSo(t *testing.T) {
 		req.Host = "localhost:8080"
 		req.RemoteAddr = "127.0.0.1:12345"
 		rec := httptest.NewRecorder()
-		sut.handleEnroll(rec, req)
+		sut.ensureAgentsDeps().HandleEnroll(rec, req)
 		return rec
 	}
 	token := func(maxUses int) string {

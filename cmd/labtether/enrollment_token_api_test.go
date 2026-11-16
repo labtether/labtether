@@ -33,7 +33,7 @@ func mustCreateEnrollmentTokenWithRequest(t *testing.T, sut *apiServer, createRe
 	}
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating enrollment token, got %d: %s", rec.Code, rec.Body.String())
@@ -71,7 +71,7 @@ func TestEnrollmentTokenCreateAndList(t *testing.T) {
 	listReq := httptest.NewRequest(http.MethodGet, "/settings/enrollment", nil)
 	listReq.Host = "localhost:8080"
 	listRec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(listRec, listReq)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
@@ -112,7 +112,7 @@ func TestEnrollmentTokenCreationRejectsUnsafeScopesBeforePersisting(t *testing.T
 			req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewBufferString(tt.payload))
 			req = req.WithContext(contextWithPrincipal(req.Context(), "operator-a", "admin"))
 			rec := httptest.NewRecorder()
-			sut.handleEnrollmentTokens(rec, req)
+			sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 			}
@@ -132,7 +132,7 @@ func TestEnrollmentTokenCreationPersistsScopeAndWritesRedactedAudit(t *testing.T
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-a", "admin"))
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -180,7 +180,7 @@ func TestAssetScopedEnrollmentTokenCannotEnrollAnotherHostname(t *testing.T) {
 		req.Host = "localhost:8080"
 		req.RemoteAddr = "127.0.0.1:12345"
 		rec := httptest.NewRecorder()
-		sut.handleEnroll(rec, req)
+		sut.ensureAgentsDeps().HandleEnroll(rec, req)
 		return rec
 	}
 	if rec := enroll("other-node"); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "made for another device or group") {
@@ -201,7 +201,7 @@ func TestEnrollmentTokenDefaultTTL(t *testing.T) {
 	payload := []byte(`{"label":"default-ttl","scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -228,7 +228,7 @@ func TestEnrollmentTokenDefaultMaxUsesIsOne(t *testing.T) {
 	payload := []byte(`{"label":"default-max-uses","ttl_hours":24,"scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -251,7 +251,7 @@ func TestEnrollmentTokenZeroMaxUsesIsClampedToOne(t *testing.T) {
 	payload := []byte(`{"label":"zero-max-uses","ttl_hours":24,"max_uses":0,"scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -277,7 +277,7 @@ func TestEnrollmentTokenMaxUsesRejectsConfiguredCeilingAndNegativeValues(t *test
 		sut := newTestAPIServer(t)
 		req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewBufferString(payload))
 		rec := httptest.NewRecorder()
-		sut.handleEnrollmentTokens(rec, req)
+		sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("payload=%s status=%d body=%s", payload, rec.Code, rec.Body.String())
 		}
@@ -294,7 +294,7 @@ func TestRevokeEnrollmentToken(t *testing.T) {
 	// Revoke it
 	req := httptest.NewRequest(http.MethodDelete, "/settings/enrollment/"+tok.ID, nil)
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokenActions(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokenActions(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -314,7 +314,7 @@ func TestEnrollmentTokenActions_EmptyID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/settings/enrollment/", nil)
 	rec := httptest.NewRecorder()
-	sut.handleEnrollmentTokenActions(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokenActions(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)

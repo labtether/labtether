@@ -100,7 +100,7 @@ func runSessionDeleteLifecycle(t *testing.T, kind, phase string, failDelete bool
 				var kill agentmgr.TerminalTmuxKillData
 				_ = json.Unmarshal(msg.Data, &kill)
 				raw, _ := json.Marshal(agentmgr.CommandResultData{JobID: kill.JobID, SessionID: kill.SessionID, CommandID: kill.CommandID, Status: "succeeded"})
-				s.processAgentCommandResult(agent, agentmgr.Message{Data: raw})
+				s.ensureAgentsDeps().ProcessAgentCommandResult(agent, agentmgr.Message{Data: raw})
 			case agentmgr.MsgDesktopAudioStart:
 				audioStarts <- data.SessionID
 			case agentmgr.MsgDesktopAudioStop:

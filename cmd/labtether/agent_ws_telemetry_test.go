@@ -22,7 +22,7 @@ func TestProcessAgentHeartbeatIgnoresPayloadAssetID(t *testing.T) {
 		t.Fatalf("failed to marshal heartbeat payload: %v", err)
 	}
 
-	sut.processAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
+	sut.ensureAgentsDeps().ProcessAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
 
 	if _, ok, err := sut.assetStore.GetAsset("trusted-node"); err != nil {
 		t.Fatalf("failed to get trusted asset: %v", err)
@@ -55,7 +55,7 @@ func TestProcessAgentHeartbeatStoresWebRTCUnavailabilityReason(t *testing.T) {
 		t.Fatalf("failed to marshal heartbeat payload: %v", err)
 	}
 
-	sut.processAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
+	sut.ensureAgentsDeps().ProcessAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
 
 	if got := conn.Meta("webrtc_unavailable_reason"); got != "unsupported_platform:darwin" {
 		t.Fatalf("expected heartbeat to store webrtc unavailability reason, got %q", got)

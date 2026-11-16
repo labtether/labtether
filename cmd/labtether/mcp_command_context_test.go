@@ -135,7 +135,7 @@ func TestMCPExecCancellationReachesAgentWaiter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s.processAgentCommandResult(agent, agentmgr.Message{Type: agentmgr.MsgCommandResult, ID: next.JobID, Data: data})
+			s.ensureAgentsDeps().ProcessAgentCommandResult(agent, agentmgr.Message{Type: agentmgr.MsgCommandResult, ID: next.JobID, Data: data})
 			await(positive, false, "same-socket-result")
 			assertNoWaiters()
 		})

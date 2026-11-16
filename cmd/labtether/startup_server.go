@@ -149,7 +149,7 @@ func newAPIServer(
 		}(),
 		externalURL:            strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
 		consoleURL:             strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
-		pendingAgents:          newPendingAgents(),
+		pendingAgents:          agentspkg.NewPendingAgents(),
 		challengeStore:         auth.NewChallengeStore(),
 		installStateStore:      installStateStore,
 		fileProtoPool:          fileproto.NewPool(),

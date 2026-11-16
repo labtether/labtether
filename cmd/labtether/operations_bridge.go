@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
@@ -216,7 +217,7 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 		AssetStore: s.assetStore,
 		GroupStore: s.groupStore,
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
-			return s.executeViaAgent(job)
+			return s.ensureAgentsDeps().ExecuteViaAgent(job)
 		},
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
 			return shared.DecodeJSONBody(w, r, dst)
@@ -263,9 +264,11 @@ func (s *apiServer) ensureOperationsDeps() *opspkg.ExecDeps {
 // buildUpdateExecutorDeps constructs the UpdateExecutorDeps from apiServer fields.
 func (s *apiServer) buildUpdateExecutorDeps() *opspkg.UpdateExecutorDeps {
 	return &opspkg.UpdateExecutorDeps{
-		AgentMgr:                               s.agentMgr,
-		AssetStore:                             s.assetStore,
-		ExecuteUpdateViaAgent:                  s.executeUpdateViaAgent,
+		AgentMgr:   s.agentMgr,
+		AssetStore: s.assetStore,
+		ExecuteUpdateViaAgent: func(jobID string, target string, mode string, packages []string, timeout time.Duration, force bool) agentmgr.CommandResultData {
+			return s.ensureAgentsDeps().ExecuteUpdateViaAgent(jobID, target, mode, packages, timeout, force)
+		},
 		PreviewOSPackageUpdatesViaAgent:        s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgent,
 		ExecuteUpdateViaAgentContext:           s.ensureAgentsDeps().ExecuteUpdateViaAgentContext,
 		PreviewOSPackageUpdatesViaAgentContext: s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgentContext,

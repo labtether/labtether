@@ -53,10 +53,10 @@ func TestAgentsRoutesReachHandlersThroughRouteTable(t *testing.T) {
 	rejectConn, _, cleanupReject := createWSPairForPendingEnrollmentTest(t)
 	defer cleanupReject()
 	verifiedAt := time.Now().UTC()
-	sut.pendingAgents.Add(&pendingAgent{AssetID: "pending-wiring-approve", Hostname: "wiring-approve", Platform: "linux",
+	sut.pendingAgents.Add(&agentspkg.PendingAgent{AssetID: "pending-wiring-approve", Hostname: "wiring-approve", Platform: "linux",
 		DeviceFingerprint: "LT-WIRING-APPROVE", DeviceKeyAlg: agentidentity.KeyAlgorithmEd25519,
 		IdentityVerified: true, IdentityVerifiedAt: &verifiedAt, Conn: approveConn})
-	sut.pendingAgents.Add(&pendingAgent{AssetID: "pending-wiring-reject", Hostname: "wiring-reject", Platform: "linux", Conn: rejectConn})
+	sut.pendingAgents.Add(&agentspkg.PendingAgent{AssetID: "pending-wiring-reject", Hostname: "wiring-reject", Platform: "linux", Conn: rejectConn})
 	admin := createRoleSessionToken(t, sut, "admin-agents-wiring", auth.RoleAdmin)
 	call := routeWiringCaller(t, sut.buildHTTPHandlers(nil, nil, nil), admin)
 
@@ -100,7 +100,7 @@ func TestAgentsRoutesReachHandlersThroughRouteTable(t *testing.T) {
 	call("/agents/presence", http.MethodGet, "/agents/presence", "", http.StatusOK, `"asset_id":"node-presence-wiring"`)
 	turnURL := "turn:turn.example.com:3478" // a device setting saved in the runtime store
 	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
-		agentSettingStoreKey("node-1", agentsettings.SettingKeyWebRTCTURNURL): turnURL,
+		agentspkg.AgentSettingStoreKey("node-1", agentsettings.SettingKeyWebRTCTURNURL): turnURL,
 	}); err != nil {
 		t.Fatalf("save device setting: %v", err)
 	}

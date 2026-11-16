@@ -35,7 +35,7 @@ func revokeTestAgentToken(t *testing.T, server *apiServer, tokenID string) map[s
 	req := httptest.NewRequest(http.MethodDelete, "/settings/agent-tokens/"+tokenID, nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "admin-user", auth.RoleAdmin))
 	rec := httptest.NewRecorder()
-	server.handleAgentTokenActions(rec, req)
+	server.ensureAgentsDeps().HandleAgentTokenActions(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("revoke %s: status=%d body=%s", tokenID, rec.Code, rec.Body.String())
 	}

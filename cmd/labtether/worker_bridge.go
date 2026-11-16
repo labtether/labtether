@@ -48,7 +48,7 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 		AgentMgr: s.agentMgr,
 
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
-			return s.executeViaAgent(job)
+			return s.ensureAgentsDeps().ExecuteViaAgent(job)
 		},
 		PrepareTerminalCommand: func(job *terminal.CommandJob) error {
 			if job == nil || job.SSHConfig != nil || opspkg.LoadCommandExecutorConfig().Mode != opspkg.ExecutorModeSSH {

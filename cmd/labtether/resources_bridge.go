@@ -63,7 +63,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 			return shared.DecodeJSONBody(w, r, dst)
 		},
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
-			return s.executeViaAgent(job)
+			return s.ensureAgentsDeps().ExecuteViaAgent(job)
 		},
 
 		EnforceRateLimit:        s.enforceRateLimit,
