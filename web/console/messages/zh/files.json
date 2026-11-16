@@ -17,6 +17,7 @@
     "notAvailable": "不可用",
     "offline": "离线",
     "noAgent": "无代理",
+    "notOffered": "代理不提供文件",
     "noDevices": "没有设备连接了代理",
     "noDeviceMatch": "没有与“{query}”匹配的设备",
     "noConnections": "没有已保存的连接",

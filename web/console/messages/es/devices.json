@@ -926,5 +926,9 @@
     "reject": "Rechazar",
     "approveFailed": "No se pudo aprobar {name}. Inténtalo de nuevo.",
     "rejectFailed": "No se pudo rechazar {name}. Inténtalo de nuevo."
+  },
+  "agentOffers": {
+    "monitoringOnly": "Solo monitorización",
+    "notOffered": "El agente de este dispositivo no lo ofrece"
   }
 }

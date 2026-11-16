@@ -9,6 +9,7 @@ export type UseNodePanelRenderContextArgs = {
   nodeId: NodePanelRendererContext["nodeId"];
   asset: NodePanelRendererContext["asset"];
   metadata: NodePanelRendererContext["metadata"];
+  agentOffers: NodePanelRendererContext["agentOffers"];
   telemetryOverview: NodePanelRendererContext["telemetryOverview"];
   telemetryDetails: NodePanelRendererContext["telemetryDetails"];
   telemetryLoading: NodePanelRendererContext["telemetryLoading"];

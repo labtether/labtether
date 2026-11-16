@@ -8,15 +8,20 @@ import { useHubSSHKeySetting } from "./useHubSSHKeySetting";
 type HubSSHKeyCardProps = {
   nodeId: string;
   isAgentDevice: boolean;
+  /** The device's agent installs the Hub's key (console/agentOffers). */
+  offered?: boolean;
 };
 
 /** Settings › Hub SSH key: whether the hub may sign in to this device over SSH as root, as one switch. */
-export function HubSSHKeyCard({ nodeId, isAgentDevice }: HubSSHKeyCardProps) {
+export function HubSSHKeyCard({ nodeId, isAgentDevice, offered = true }: HubSSHKeyCardProps) {
   const t = useTranslations("devices.hubSshKey");
   const { user } = useAuth();
   const canChange = hasAdminRole(user?.role);
   const { setting, loading, saving, error, lastChange, setEnabled } = useHubSSHKeySetting(nodeId);
   const enabled = setting?.enabled ?? false;
+  // An agent that does not install the key gets no card, unless the key is on from an earlier agent: the Hub still
+  // lets an admin turn it off.
+  if (!offered && !enabled) return null;
 
   let status: string | null = null;
   if (setting?.removal_pending) {

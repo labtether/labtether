@@ -926,5 +926,9 @@
     "reject": "拒绝",
     "approveFailed": "无法批准 {name}，请重试。",
     "rejectFailed": "无法拒绝 {name}，请重试。"
+  },
+  "agentOffers": {
+    "monitoringOnly": "仅监控",
+    "notOffered": "此设备的代理不提供此功能"
   }
 }

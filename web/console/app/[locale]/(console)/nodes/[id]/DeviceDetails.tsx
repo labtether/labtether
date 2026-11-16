@@ -13,6 +13,8 @@ import { copyText } from "../../../../lib/clipboard";
 type Props = {
   asset: Asset;
   nodeHasAgent: boolean;
+  /** The agent is the monitoring edition: "Monitoring only" beside its version. */
+  monitoringOnly?: boolean;
   /** The host this device runs on (a Proxmox guest's node), when the hub knows it. */
   host: Asset | null;
   groups: Group[];
@@ -30,8 +32,9 @@ function Row({ k, children }: { k: string; children: ReactNode }) {
 }
 
 /** The device's facts beside Overview: address, OS, where it runs, group, what it contains, agent, uptime, tags. */
-export function DeviceDetails({ asset, nodeHasAgent, host, groups, guests }: Props) {
+export function DeviceDetails({ asset, nodeHasAgent, monitoringOnly = false, host, groups, guests }: Props) {
   const t = useTranslations("devices.page.details");
+  const tOffers = useTranslations("devices.agentOffers");
   const tState = useTranslations("devices.page.state");
   const locale = useLocale();
   const meta = asset.metadata ?? {};
@@ -82,7 +85,10 @@ export function DeviceDetails({ asset, nodeHasAgent, host, groups, guests }: Pro
           <ContainsSummary assetID={asset.id} />
         )}
         <GroupPathBreadcrumb groupId={asset.group_id} groups={groups} />
-        <Row k={t("agent")}><span className={version ? "num" : undefined}>{agentText}</span></Row>
+        <Row k={t("agent")}>
+          <span className={version ? "num" : undefined}>{agentText}</span>
+          {monitoringOnly ? <span className="dv-grey">{tOffers("monitoringOnly")}</span> : null}
+        </Row>
         {up ? (
           <Row k={t("uptime")}>
             <span>{up.days > 0 ? t("days", { count: up.days }) : t("hoursMinutes", { hours: up.hours, minutes: up.minutes })}</span>

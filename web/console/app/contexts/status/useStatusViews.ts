@@ -17,7 +17,7 @@ type SlowStatusSummary = Pick<
   | "retentionError"
 >;
 
-export type FastStatusSlice = Pick<StatusResponse, "timestamp" | "endpoints" | "assets" | "telemetryOverview"> & {
+export type FastStatusSlice = Pick<StatusResponse, "timestamp" | "endpoints" | "assets" | "telemetryOverview" | "agentAdvertisements"> & {
   summary: FastStatusSummary;
 };
 
@@ -75,6 +75,7 @@ export function useStatusViews(status: StatusResponse | null) {
   const statusEndpoints = status?.endpoints ?? null;
   const statusAssets = status?.assets ?? null;
   const statusTelemetryOverview = status?.telemetryOverview ?? null;
+  const statusAgentAdvertisements = status?.agentAdvertisements;
   const statusConnectors = status?.connectors ?? null;
   const statusGroups = status?.groups ?? null;
   const statusRecentLogs = status?.recentLogs ?? null;
@@ -154,8 +155,9 @@ export function useStatusViews(status: StatusResponse | null) {
       endpoints: statusEndpoints,
       assets: statusAssets,
       telemetryOverview: statusTelemetryOverview,
+      agentAdvertisements: statusAgentAdvertisements,
     };
-  }, [fastSummary, statusAssets, statusEndpoints, statusTelemetryOverview, statusTimestamp]);
+  }, [fastSummary, statusAgentAdvertisements, statusAssets, statusEndpoints, statusTelemetryOverview, statusTimestamp]);
 
   const slowStatus = useMemo<SlowStatusSlice | null>(() => {
     if (

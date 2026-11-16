@@ -12,6 +12,7 @@ export function useNodePanelRenderContext({
   nodeId,
   asset,
   metadata,
+  agentOffers,
   telemetryOverview,
   telemetryDetails,
   telemetryLoading,
@@ -82,6 +83,7 @@ export function useNodePanelRenderContext({
     nodeId,
     asset,
     metadata,
+    agentOffers,
     telemetryOverview,
     telemetryDetails,
     telemetryLoading,
@@ -146,6 +148,7 @@ export function useNodePanelRenderContext({
     proxmoxActionError,
   }), [
     actionRuns,
+    agentOffers,
     actionsLoading,
     activeDetail,
     activePanel,

@@ -46,7 +46,10 @@ export default function NewTabPage({ tabBar, onConnectDevice, onConnectBookmark,
   }, []);
 
   const status = useFastStatus();
-  const devices = useMemo(() => remoteDevices(status?.assets as Asset[] | undefined), [status?.assets]);
+  const devices = useMemo(
+    () => remoteDevices(status?.assets as Asset[] | undefined, status?.agentAdvertisements),
+    [status?.assets, status?.agentAdvertisements],
+  );
   const shownDevices = filterDevices(devices, query);
   const shownBookmarks = filterBookmarks(bookmarks, query);
   const searching = !!query.trim();

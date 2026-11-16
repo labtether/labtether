@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, MoreHorizontal, RefreshCw, Search } from "lucid
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Button } from "../../../../components/ui/Button";
+import { isAgentUnsupported } from "../../../../console/agentOffers";
 import { copyText as copyToClipboard } from "../../../../lib/clipboard";
 
 /** Shared parts of the System tab's list views: filter, refresh, sortable headers, row ⋯ and list states. */
@@ -147,6 +148,7 @@ export function ListState({ loading, hasRows, error, loadError, empty, emptyHint
   loading: boolean; hasRows: boolean; error: string | null; loadError: string; empty: string; emptyHint?: string; onRetry: () => void; children: ReactNode;
 }) {
   const t = useTranslations("devices.system");
+  const tOffers = useTranslations("devices.agentOffers");
   if (loading && !hasRows) {
     return (
       <div className="dv-list dsy-skel" aria-busy="true" aria-label={t("loading")}>
@@ -155,7 +157,8 @@ export function ListState({ loading, hasRows, error, loadError, empty, emptyHint
     );
   }
   if (error && !hasRows) {
-    const detail = plainError(error);
+    // The Hub's 422 for a request the agent does not advertise reads like "agent is not connected" does: one plain line.
+    const detail = isAgentUnsupported(error) ? tOffers("notOffered") : plainError(error);
     return (
       <div className="dv-list">
         <div className="dv-empty" role="alert">

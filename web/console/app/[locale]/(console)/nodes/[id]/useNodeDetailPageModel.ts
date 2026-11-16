@@ -41,6 +41,7 @@ export function useNodeDetailPageModel({
   telemetry,
   groupLabelByID,
   nodeHasAgent,
+  advertisement = null,
 }: UseNodeDetailPageModelArgs): UseNodeDetailPageModelResult {
   const placeholderAsset = useMemo<Asset>(() => ({
     id: nodeId,
@@ -94,6 +95,7 @@ export function useNodeDetailPageModel({
   const metadata = asset?.metadata ?? {};
   const nodePlatform = (asset?.platform ?? metadata.platform ?? "").trim().toLowerCase();
   const {
+    agentOffers,
     isLinuxAgentNode,
     supportsServiceListing,
     supportsPackageListing,
@@ -109,6 +111,7 @@ export function useNodeDetailPageModel({
     metadata,
     nodeHasAgent,
     nodePlatform,
+    advertisement,
   });
 
   const { protocols } = useProtocolConfigs(nodeId);
@@ -161,6 +164,7 @@ export function useNodeDetailPageModel({
   const panelContext = useMemo(() => buildNodePanelContext({
     asset: asset ?? placeholderAsset,
     nodeHasAgent,
+    agentOffers,
     mergedDockerHost,
     infraCategories,
     isProxmoxAsset,
@@ -177,6 +181,7 @@ export function useNodeDetailPageModel({
     webServiceCount: webServicesForNode.filter(s => s.host_asset_id === nodeId).length,
     connectionBadges,
   }), [
+    agentOffers,
     asset,
     infraCategories,
     isInfra,
@@ -240,6 +245,7 @@ export function useNodeDetailPageModel({
     proxmoxTarget,
     isInfra,
     isLinuxAgentNode,
+    agentOffers,
     supportsServiceListing,
     supportsPackageListing,
     supportsScheduleListing,

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "../../../../components/ui/ConfirmDialog";
+import { isAgentUnsupported } from "../../../../console/agentOffers";
 import { useServices } from "../../../../hooks/useServices";
 import type { ServiceInfo } from "../../../../hooks/useServices";
 import { copyText, FilterField, FilterFoot, ListState, plainError, RefreshButton, RowMenu, ShowSwitch, type RowMenuItem } from "./systemViewParts";
@@ -43,9 +44,13 @@ function stateOf(svc: ServiceInfo, pending: Verb | null): { word: string; tone: 
   return { word: active ? `other:${active}` : "", tone: "off" };
 }
 
-/** The device's services (systemd units on Linux): state, enabled at boot, and start, stop and restart from the ⋯. */
-export function ServicesTab({ nodeId }: { nodeId: string }) {
+/**
+ * The device's services (systemd units on Linux): state, enabled at boot, and start, stop and restart from the ⋯.
+ * canAct false (an agent that lists services but does not run actions on them) leaves only Copy name.
+ */
+export function ServicesTab({ nodeId, canAct = true }: { nodeId: string; canAct?: boolean }) {
   const t = useTranslations("devices.system");
+  const tOffers = useTranslations("devices.agentOffers");
   const { services, loading, error, refresh, performAction } = useServices(nodeId);
   const [filter, setFilter] = useState("");
   const [show, setShow] = useState<Show>("all");
@@ -74,7 +79,7 @@ export function ServicesTab({ nodeId }: { nodeId: string }) {
     try {
       await performAction(name, verb);
     } catch (err) {
-      const detail = plainError(err instanceof Error ? err.message : "");
+      const detail = isAgentUnsupported(err) ? tOffers("notOffered") : plainError(err instanceof Error ? err.message : "");
       setActionError(`${t(`units.failed.${verb}`, { name })}${detail ? `: ${detail}` : ""}`);
     } finally {
       setBusy(null);
@@ -99,6 +104,7 @@ export function ServicesTab({ nodeId }: { nodeId: string }) {
     const isFailed = active === "failed";
     const disabled = busy !== null;
     const items: RowMenuItem[] = [];
+    if (!canAct) return [{ label: t("units.copyName"), onSelect: () => copyText(svc.name) }];
     if (active === "inactive" || isFailed) items.push({ label: t("units.start"), disabled, onSelect: () => void run(svc.name, "start") });
     if (isActive || isFailed) items.push({ label: t("units.restart"), disabled, onSelect: () => void run(svc.name, "restart") });
     if (isActive) {

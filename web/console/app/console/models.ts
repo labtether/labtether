@@ -1,3 +1,5 @@
+import type { AgentAdvertisements } from "./agentOffers";
+
 export type Theme = "oled" | "dark" | "light";
 export type Density = "minimal" | "diagnostic";
 
@@ -397,6 +399,8 @@ export type LiveStatusResponse = {
   endpoints: EndpointStatus[];
   assets: Asset[];
   telemetryOverview: TelemetryOverviewAsset[];
+  /** Agents that list what they offer, by device ID; left out when there are none. */
+  agentAdvertisements?: AgentAdvertisements;
 };
 
 export type StatusResponse = {
@@ -433,6 +437,7 @@ export type StatusResponse = {
   recentCommands: Command[];
   recentAudit: AuditEvent[];
   canonical?: CanonicalStatusPayload;
+  agentAdvertisements?: AgentAdvertisements;
 };
 
 export type TelemetryOverviewAsset = {

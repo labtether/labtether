@@ -8,6 +8,7 @@ import type { VNCViewerHandle } from "../../../../components/VNCViewer";
 import { macSignInName } from "../../../../components/remote-toolbar/signInTarget";
 import type { WebRTCViewerHandle } from "../../../../components/WebRTCViewer";
 import { useDesktopSession } from "../../../../contexts/DesktopSessionContext";
+import { useAgentAdvertisement } from "../../../../hooks/useAgentAdvertisement";
 import { useDisplayList } from "../../../../hooks/useDisplayList";
 import { useFullscreen } from "../../../../hooks/useFullscreen";
 import { useLatency } from "../../../../hooks/useLatency";
@@ -32,6 +33,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
   const webrtcRef = useRef<WebRTCViewerHandle>(null);
   const displayList = useDisplayList(nodeId, !!session.connectedAgentIds.size);
   const { registerSession, clearSession } = useDesktopSession();
+  const advertisement = useAgentAdvertisement(nodeId);
 
   const targetAsset = session.assets.find((entry) => entry.id === nodeId);
   const nodeName = targetAsset?.name ?? nodeId;
@@ -51,6 +53,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     connectedAgentIds: session.connectedAgentIds,
     connectionState: session.connectionState,
     rdpGateway: displayList.rdpGateway,
+    advertisement,
   });
 
   const {
