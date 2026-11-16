@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/connectors/pbs"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
 func TestHandlePBSConnectorTestInvalidPayloadAndValidation(t *testing.T) {
@@ -342,26 +343,5 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 
 func createPBSCredentialProfile(t *testing.T, sut *apiServer, credentialID, username, secret, baseURL string) {
 	t.Helper()
-	allowInsecureTransportForConnectorTests(t)
-
-	ciphertext, err := sut.secretsManager.EncryptString(secret, credentialID)
-	if err != nil {
-		t.Fatalf("encrypt pbs secret: %v", err)
-	}
-	_, err = sut.credentialStore.CreateCredentialProfile(credentials.Profile{
-		ID:               credentialID,
-		Name:             "pbs " + credentialID,
-		Kind:             credentials.KindPBSAPIToken,
-		Username:         username,
-		Status:           "active",
-		SecretCiphertext: ciphertext,
-		Metadata: map[string]string{
-			"base_url": baseURL,
-		},
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("create pbs credential profile: %v", err)
-	}
+	testutil.CreatePBSCredentialProfile(t, sut.credentialStore, sut.secretsManager, credentialID, username, secret, baseURL)
 }

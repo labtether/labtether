@@ -59,6 +59,14 @@ func (s *StubHubCollectorStore) UpdateHubCollectorStatus(string, string, string,
 	return nil
 }
 
+// FindEnabledHubCollectorsByType is the bounded lookup PostgreSQL has (and
+// cmd's stubHubCollectorStore). Without it a runtime load with no
+// collector_id fails with "bounded hub collector lookup unavailable" instead
+// of reaching the check under test.
+func (s *StubHubCollectorStore) FindEnabledHubCollectorsByType(kind string) ([]hubcollector.Collector, error) {
+	return enabledCollectorsOfType(s.Collectors, kind), nil
+}
+
 // AllowInsecureTransportForConnectorTests lets connector clients reach
 // plain-HTTP loopback test servers for the rest of the test.
 func AllowInsecureTransportForConnectorTests(t *testing.T) {

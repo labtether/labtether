@@ -463,13 +463,5 @@ func seedPortainerCredentialProfile(t *testing.T, sut *apiServer, username, secr
 
 func assertErrorBodyContains(t *testing.T, body []byte, want string) {
 	t.Helper()
-
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		t.Fatalf("decode error payload: %v", err)
-	}
-	raw, _ := payload["error"].(string)
-	if !strings.Contains(raw, want) {
-		t.Fatalf("expected error containing %q, got %q", want, raw)
-	}
+	testutil.AssertErrorBodyContains(t, body, want)
 }

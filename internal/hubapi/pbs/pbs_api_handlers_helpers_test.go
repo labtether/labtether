@@ -1,8 +1,11 @@
-package main
+package pbs_test
 
 import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/pbs"
+	pbspkg "github.com/labtether/labtether/internal/hubapi/pbs"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -11,23 +14,23 @@ import (
 )
 
 func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/pbs/assets//details", nil)
 	rec := httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for empty asset id, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/assets/missing/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing pbs asset, got %d", rec.Code)
 	}
 
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-runtime-missing",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -41,11 +44,11 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 	}
 	req = httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-runtime-missing/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when runtime missing, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -59,10 +62,10 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut = newTestAPIServer(t)
+	sut = hubdeps.New(t)
 	createPBSCredentialProfile(t, sut, "cred-pbs-asset-error", "root@pam!asset", "secret-asset", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-pbs-asset-error",
 				AssetID:       "pbs-server-asset-error",
@@ -77,7 +80,7 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 			},
 		},
 	}
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-backup",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -93,12 +96,12 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when detail load fails, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
-	failedAsset, exists, err := sut.assetStore.GetAsset("pbs-datastore-backup")
+	testutil.AssertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+	failedAsset, exists, err := sut.AssetStore.GetAsset("pbs-datastore-backup")
 	if err != nil || !exists {
 		t.Fatalf("load pbs asset after failed refresh: exists=%v err=%v", exists, err)
 	}
@@ -106,7 +109,7 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 		t.Fatalf("expected failed details refresh not to improve offline status, got %q", failedAsset.Status)
 	}
 
-	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	if _, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-online-backup",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -122,11 +125,11 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-online-backup/details", nil)
 	rec = httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when online asset detail refresh fails, got %d", rec.Code)
 	}
-	failedOnlineAsset, exists, err := sut.assetStore.GetAsset("pbs-datastore-online-backup")
+	failedOnlineAsset, exists, err := sut.AssetStore.GetAsset("pbs-datastore-online-backup")
 	if err != nil || !exists {
 		t.Fatalf("load online pbs asset after failed refresh: exists=%v err=%v", exists, err)
 	}
@@ -139,19 +142,19 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 }
 
 func TestPBSAPIHelperFunctions(t *testing.T) {
-	if node, upid, ok := parsePBSTaskPath("/pbs/tasks/node-a/UPID-1/status", "status"); !ok || node != "node-a" || upid != "UPID-1" {
+	if node, upid, ok := pbspkg.ParsePBSTaskPath("/pbs/tasks/node-a/UPID-1/status", "status"); !ok || node != "node-a" || upid != "UPID-1" {
 		t.Fatalf("parsePBSTaskPath success mismatch: ok=%v node=%q upid=%q", ok, node, upid)
 	}
-	if _, _, ok := parsePBSTaskPath("/tasks/node-a/UPID-1/status", "status"); ok {
+	if _, _, ok := pbspkg.ParsePBSTaskPath("/tasks/node-a/UPID-1/status", "status"); ok {
 		t.Fatalf("expected parse failure for invalid prefix")
 	}
-	if _, _, ok := parsePBSTaskPath("/pbs/tasks/", "status"); ok {
+	if _, _, ok := pbspkg.ParsePBSTaskPath("/pbs/tasks/", "status"); ok {
 		t.Fatalf("expected parse failure for empty task path")
 	}
-	if _, _, ok := parsePBSTaskPath("/pbs/tasks/node-a/UPID-1/log", "status"); ok {
+	if _, _, ok := pbspkg.ParsePBSTaskPath("/pbs/tasks/node-a/UPID-1/log", "status"); ok {
 		t.Fatalf("expected parse failure for action mismatch")
 	}
-	if _, _, ok := parsePBSTaskPath("/pbs/tasks/node-a", "status"); ok {
+	if _, _, ok := pbspkg.ParsePBSTaskPath("/pbs/tasks/node-a", "status"); ok {
 		t.Fatalf("expected parse failure for short task path")
 	}
 
@@ -162,7 +165,7 @@ func TestPBSAPIHelperFunctions(t *testing.T) {
 		{UPID: "UPID:node:123:backup:extra:", WorkerID: "", StartTime: 20},
 	}
 
-	filtered := filterAndSortPBSTasks(tasks, "backup", 2)
+	filtered := pbspkg.FilterAndSortPBSTasks(tasks, "backup", 2)
 	if len(filtered) != 2 {
 		t.Fatalf("expected limited filtered tasks=2, got %d", len(filtered))
 	}
@@ -170,7 +173,7 @@ func TestPBSAPIHelperFunctions(t *testing.T) {
 		t.Fatalf("unexpected filtered/sorted order: %+v", filtered)
 	}
 
-	all := filterAndSortPBSTasks(tasks, "", 0)
+	all := pbspkg.FilterAndSortPBSTasks(tasks, "", 0)
 	if len(all) != len(tasks) {
 		t.Fatalf("expected no-filter tasks=%d, got %d", len(tasks), len(all))
 	}
@@ -178,43 +181,29 @@ func TestPBSAPIHelperFunctions(t *testing.T) {
 		t.Fatalf("expected descending sort by start time")
 	}
 
-	if got := dedupeNonEmptyWarnings(nil); got != nil {
+	if got := pbspkg.DedupeNonEmptyWarnings(nil); got != nil {
 		t.Fatalf("expected nil output for nil warnings, got %v", got)
 	}
-	if got := dedupeNonEmptyWarnings([]string{" ", "\t"}); got != nil {
+	if got := pbspkg.DedupeNonEmptyWarnings([]string{" ", "\t"}); got != nil {
 		t.Fatalf("expected nil output for empty warnings, got %v", got)
 	}
-	warnings := dedupeNonEmptyWarnings([]string{" warning A ", "warning a", "warning B"})
+	warnings := pbspkg.DedupeNonEmptyWarnings([]string{" warning A ", "warning a", "warning B"})
 	if len(warnings) != 2 || warnings[0] != "warning A" || warnings[1] != "warning B" {
 		t.Fatalf("unexpected dedupe output: %v", warnings)
 	}
 }
 
-func configurePBSTaskRuntime(t *testing.T, sut *apiServer, collectorID, credentialID, tokenID, baseURL string) {
+// createPBSCredentialProfile keeps the cmd helper's signature; the profile
+// is written by testutil. (configurePBSTaskRuntime, which was here, stays in
+// cmd: only cmd's pbs_task_routes_test.go uses it.)
+func createPBSCredentialProfile(t *testing.T, sut *hubdeps.Hub, credentialID, username, secret, baseURL string) {
 	t.Helper()
-
-	createPBSCredentialProfile(t, sut, credentialID, tokenID, "secret-"+collectorID, baseURL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
-			{
-				ID:            collectorID,
-				AssetID:       "pbs-server-" + collectorID,
-				CollectorType: hubcollector.CollectorTypePBS,
-				Enabled:       true,
-				Config: map[string]any{
-					"base_url":      baseURL,
-					"credential_id": credentialID,
-					"token_id":      tokenID,
-					"skip_verify":   true,
-				},
-			},
-		},
-	}
+	testutil.CreatePBSCredentialProfile(t, sut.CredentialStore, sut.SecretsManager, credentialID, username, secret, baseURL)
 }
 
 func mustNewPBSClient(t *testing.T, baseURL string) *pbs.Client {
 	t.Helper()
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	client, err := pbs.NewClient(pbs.Config{
 		BaseURL:     baseURL,

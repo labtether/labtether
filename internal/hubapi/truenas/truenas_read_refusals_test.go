@@ -1,4 +1,4 @@
-package main
+package truenas_test
 
 import (
 	"encoding/json"
@@ -8,14 +8,15 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
-func setUpTrueNASForReadTests(t *testing.T, handler func(method string, params []any) (any, *trueNASRPCError)) *apiServer {
+func setUpTrueNASForReadTests(t *testing.T, handler func(method string, params []any) (any, *trueNASRPCError)) *hubdeps.Hub {
 	t.Helper()
 	server := newTrueNASRPCServer(t, handler)
 	t.Cleanup(server.Close)
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createTrueNASCredentialProfile(t, sut, "cred-truenas-1", "api-key-1", server.URL)
 	configureTrueNASCollectors(t, sut, hubcollector.Collector{
 		ID: "collector-truenas-1", AssetID: "truenas-cluster-1", CollectorType: hubcollector.CollectorTypeTrueNAS, Enabled: true,
@@ -41,7 +42,7 @@ func TestTrueNASDiskHealthRefusedForTheLoginSaysSo(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	sut.handleTrueNASAssets(rec, httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-nas01/smart", nil))
+	sut.TrueNASDeps().HandleTrueNASAssets(rec, httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-nas01/smart", nil))
 	var body struct {
 		Error string `json:"error"`
 	}
@@ -63,7 +64,7 @@ func TestTrueNASSMARTDetailsWithoutTestHistory(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	sut.handleTrueNASAssets(rec, httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-nas01/disks/sda/smart-details", nil))
+	sut.TrueNASDeps().HandleTrueNASAssets(rec, httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-nas01/disks/sda/smart-details", nil))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "This TrueNAS keeps no SMART test history.") {
 		t.Fatalf("got %d %s, want 200 with no history in words", rec.Code, rec.Body.String())
 	}

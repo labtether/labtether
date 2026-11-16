@@ -1,15 +1,16 @@
-package main
+package truenas_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
 func TestResolveTrueNASSessionTargetUsesCollectorMetadata(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createTrueNASCredentialProfile(t, sut, "cred-truenas-1", "api-key-1", "https://truenas-a.local")
 	createTrueNASCredentialProfile(t, sut, "cred-truenas-2", "api-key-2", "https://truenas-b.local")
 	configureTrueNASCollectors(t, sut,
@@ -29,7 +30,7 @@ func TestResolveTrueNASSessionTargetUsesCollectorMetadata(t *testing.T) {
 		},
 	)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "truenas-vm-101",
 		Type:    "vm",
 		Name:    "tn-vm-101",
@@ -44,7 +45,7 @@ func TestResolveTrueNASSessionTargetUsesCollectorMetadata(t *testing.T) {
 		t.Fatalf("failed to seed vm asset: %v", err)
 	}
 
-	target, ok, err := sut.resolveTrueNASSessionTarget("truenas-vm-101")
+	target, ok, err := sut.TrueNASDeps().ResolveTrueNASSessionTarget("truenas-vm-101")
 	if err != nil {
 		t.Fatalf("resolveTrueNASSessionTarget returned error: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestResolveTrueNASSessionTargetUsesCollectorMetadata(t *testing.T) {
 }
 
 func TestLoadTrueNASRuntimeCacheHit(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createTrueNASCredentialProfile(t, sut, "cred-truenas-cache", "api-key-cache", "https://truenas-cache.local")
 	configureTrueNASCollectors(t, sut, hubcollector.Collector{
 		ID:            "collector-truenas-cache",
@@ -77,11 +78,11 @@ func TestLoadTrueNASRuntimeCacheHit(t *testing.T) {
 		},
 	})
 
-	first, err := sut.loadTrueNASRuntime("collector-truenas-cache")
+	first, err := sut.TrueNASDeps().LoadTrueNASRuntime("collector-truenas-cache")
 	if err != nil {
 		t.Fatalf("first loadTrueNASRuntime failed: %v", err)
 	}
-	second, err := sut.loadTrueNASRuntime("collector-truenas-cache")
+	second, err := sut.TrueNASDeps().LoadTrueNASRuntime("collector-truenas-cache")
 	if err != nil {
 		t.Fatalf("second loadTrueNASRuntime failed: %v", err)
 	}

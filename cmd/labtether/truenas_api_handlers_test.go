@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -14,124 +13,22 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/labtether/labtether/internal/assets"
-	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 )
 
-type trueNASRPCRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      uint64          `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-}
+// The TrueNAS RPC fake and fixtures live in testutil, shared with the
+// internal/hubapi/truenas tests.
+type trueNASRPCError = testutil.TrueNASRPCError
 
-type trueNASRPCError struct {
-	Code    int
-	Message string
-	Data    map[string]any
-}
-
-// isExpectedTrueNASRPCTestDisconnect recognizes transport shutdown from the
-// collector's best-effort subscription worker during test teardown. Primary
-// RPC failures still fail their caller assertions, while malformed protocol
-// traffic and non-transport errors remain visible here.
 func isExpectedTrueNASRPCTestDisconnect(err error) bool {
-	return errors.Is(err, io.EOF) ||
-		errors.Is(err, io.ErrUnexpectedEOF) ||
-		errors.Is(err, net.ErrClosed) ||
-		errors.Is(err, websocket.ErrCloseSent) ||
-		websocket.IsCloseError(
-			err,
-			websocket.CloseNormalClosure,
-			websocket.CloseGoingAway,
-			websocket.CloseAbnormalClosure,
-		)
+	return testutil.IsExpectedTrueNASRPCTestDisconnect(err)
 }
 
 func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any) (any, *trueNASRPCError)) *httptest.Server {
 	t.Helper()
-	allowInsecureTransportForConnectorTests(t)
-
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			if !isExpectedTrueNASRPCTestDisconnect(err) {
-				t.Errorf("upgrade failed: %v", err)
-			}
-			return
-		}
-		defer conn.Close()
-
-		var authReq trueNASRPCRequest
-		if err := conn.ReadJSON(&authReq); err != nil {
-			if !isExpectedTrueNASRPCTestDisconnect(err) {
-				t.Errorf("read auth request: %v", err)
-			}
-			return
-		}
-		if authReq.Method != "auth.login_with_api_key" {
-			t.Errorf("expected auth.login_with_api_key, got %s", authReq.Method)
-			return
-		}
-		if err := conn.WriteJSON(map[string]any{
-			"jsonrpc": "2.0",
-			"id":      authReq.ID,
-			"result":  true,
-		}); err != nil {
-			if !isExpectedTrueNASRPCTestDisconnect(err) {
-				t.Errorf("write auth response: %v", err)
-			}
-			return
-		}
-
-		var req trueNASRPCRequest
-		if err := conn.ReadJSON(&req); err != nil {
-			if !isExpectedTrueNASRPCTestDisconnect(err) {
-				t.Errorf("read rpc request: %v", err)
-			}
-			return
-		}
-		params := make([]any, 0, 4)
-		if len(req.Params) > 0 {
-			if err := json.Unmarshal(req.Params, &params); err != nil {
-				t.Errorf("decode request params: %v", err)
-				return
-			}
-		}
-
-		result, rpcErr := handler(req.Method, params)
-		if rpcErr != nil {
-			if err := conn.WriteJSON(map[string]any{
-				"jsonrpc": "2.0",
-				"id":      req.ID,
-				"error": map[string]any{
-					"code":    rpcErr.Code,
-					"message": rpcErr.Message,
-					"data":    rpcErr.Data,
-				},
-			}); err != nil {
-				if !isExpectedTrueNASRPCTestDisconnect(err) {
-					t.Errorf("write rpc error response: %v", err)
-				}
-			}
-			return
-		}
-
-		if err := conn.WriteJSON(map[string]any{
-			"jsonrpc": "2.0",
-			"id":      req.ID,
-			"result":  result,
-		}); err != nil {
-			if !isExpectedTrueNASRPCTestDisconnect(err) {
-				t.Errorf("write rpc result response: %v", err)
-			}
-		}
-	}))
-
-	return server
+	return testutil.NewTrueNASRPCServer(t, handler)
 }
 
 func TestIsExpectedTrueNASRPCTestDisconnect(t *testing.T) {
@@ -158,25 +55,7 @@ func TestIsExpectedTrueNASRPCTestDisconnect(t *testing.T) {
 
 func createTrueNASCredentialProfile(t *testing.T, sut *apiServer, credentialID, secret, baseURL string) {
 	t.Helper()
-	allowInsecureTransportForConnectorTests(t)
-
-	secretCiphertext, err := sut.secretsManager.EncryptString(secret, credentialID)
-	if err != nil {
-		t.Fatalf("failed to encrypt truenas credential: %v", err)
-	}
-	_, err = sut.credentialStore.CreateCredentialProfile(credentials.Profile{
-		ID:               credentialID,
-		Name:             "truenas " + credentialID,
-		Kind:             credentials.KindTrueNASAPIKey,
-		Status:           "active",
-		SecretCiphertext: secretCiphertext,
-		Metadata:         map[string]string{"base_url": baseURL},
-		CreatedAt:        time.Now().UTC(),
-		UpdatedAt:        time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("failed to store truenas credential profile: %v", err)
-	}
+	testutil.CreateTrueNASCredentialProfile(t, sut.credentialStore, sut.secretsManager, credentialID, secret, baseURL)
 }
 
 func configureTrueNASCollectors(t *testing.T, sut *apiServer, collectors ...hubcollector.Collector) {
@@ -186,20 +65,7 @@ func configureTrueNASCollectors(t *testing.T, sut *apiServer, collectors ...hubc
 
 func seedTrueNASAsset(t *testing.T, sut *apiServer, assetID, collectorID string) {
 	t.Helper()
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: assetID,
-		Type:    "nas",
-		Name:    "vaultnas",
-		Source:  "truenas",
-		Status:  "online",
-		Metadata: map[string]string{
-			"hostname":     "vaultnas",
-			"collector_id": collectorID,
-		},
-	})
-	if err != nil {
-		t.Fatalf("failed to seed truenas asset: %v", err)
-	}
+	testutil.SeedTrueNASAsset(t, sut.assetStore, assetID, collectorID)
 }
 
 func TestHandleTrueNASAssetsGuards(t *testing.T) {

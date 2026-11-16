@@ -1,8 +1,11 @@
-package main
+package pbs_test
 
 import (
 	"encoding/json"
 	"github.com/labtether/labtether/internal/assets"
+	pbspkg "github.com/labtether/labtether/internal/hubapi/pbs"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -29,10 +32,10 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createPBSCredentialProfile(t, sut, "cred-pbs-snaps-1", "root@pam!labtether", "secret-snaps-1", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-pbs-snaps-1",
 				AssetID:       "pbs-server-snaps",
@@ -47,7 +50,7 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 			},
 		},
 	}
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-backup",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -66,12 +69,12 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 	t.Run("all snapshots no filter", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/snapshots", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSAssets(rec, req)
+		sut.PBSDeps().HandlePBSAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 from pbs asset snapshots, got %d body=%s", rec.Code, rec.Body.String())
 		}
 
-		var response pbsSnapshotsResponse
+		var response pbspkg.PBSSnapshotsResponse
 		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 			t.Fatalf("failed to decode snapshots response: %v", err)
 		}
@@ -110,12 +113,12 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 	t.Run("filter by type=vm", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/snapshots?type=vm", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSAssets(rec, req)
+		sut.PBSDeps().HandlePBSAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
 
-		var response pbsSnapshotsResponse
+		var response pbspkg.PBSSnapshotsResponse
 		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 			t.Fatalf("failed to decode snapshots response: %v", err)
 		}
@@ -132,12 +135,12 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 	t.Run("filter by type=vm and id=100", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/snapshots?type=vm&id=100", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSAssets(rec, req)
+		sut.PBSDeps().HandlePBSAssets(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
 
-		var response pbsSnapshotsResponse
+		var response pbspkg.PBSSnapshotsResponse
 		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 			t.Fatalf("failed to decode snapshots response: %v", err)
 		}
@@ -150,7 +153,7 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 	})
 
 	t.Run("server-kind asset missing store returns 400", func(t *testing.T) {
-		_, seedErr := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		_, seedErr := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 			AssetID: "pbs-server-nostore",
 			Type:    "storage-controller",
 			Name:    "pbs-server",
@@ -166,7 +169,7 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 		}
 		req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-server-nostore/snapshots", nil)
 		rec := httptest.NewRecorder()
-		sut.handlePBSAssets(rec, req)
+		sut.PBSDeps().HandlePBSAssets(rec, req)
 		// `labtether pbs snapshots <server>` names the server device; with one
 		// datastore that is the datastore it means (it answered 400 before).
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"store":"backup"`) {
@@ -194,10 +197,10 @@ func TestHandlePBSAssetVerification(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createPBSCredentialProfile(t, sut, "cred-pbs-verify-1", "root@pam!labtether", "secret-verify-1", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-pbs-verify-1",
 				AssetID:       "pbs-server-verify",
@@ -212,7 +215,7 @@ func TestHandlePBSAssetVerification(t *testing.T) {
 			},
 		},
 	}
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-backup",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -230,12 +233,12 @@ func TestHandlePBSAssetVerification(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/verification", nil)
 	rec := httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from pbs asset verification, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	var response pbsVerificationResponse
+	var response pbspkg.PBSVerificationResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode verification response: %v", err)
 	}
@@ -279,10 +282,10 @@ func TestHandlePBSAssetGroups(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createPBSCredentialProfile(t, sut, "cred-pbs-groups-1", "root@pam!labtether", "secret-groups-1", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-pbs-groups-1",
 				AssetID:       "pbs-server-groups",
@@ -298,7 +301,7 @@ func TestHandlePBSAssetGroups(t *testing.T) {
 		},
 	}
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "pbs-datastore-backup",
 		Type:    "storage-pool",
 		Name:    "backup",
@@ -316,12 +319,12 @@ func TestHandlePBSAssetGroups(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-backup/groups", nil)
 	rec := httptest.NewRecorder()
-	sut.handlePBSAssets(rec, req)
+	sut.PBSDeps().HandlePBSAssets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 from pbs asset groups, got %d body=%s", rec.Code, rec.Body.String())
 	}
 
-	var response pbsGroupsResponse
+	var response pbspkg.PBSGroupsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode groups response: %v", err)
 	}
