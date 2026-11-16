@@ -12,7 +12,7 @@ import (
 
 // handleV2AssetNetwork handles GET /api/v2/assets/{id}/network
 func (s *apiServer) handleV2AssetNetwork(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "network:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "network:read") {
 		apiv2.WriteScopeForbidden(w, "network:read")
 		return
 	}
@@ -22,7 +22,7 @@ func (s *apiServer) handleV2AssetNetwork(w http.ResponseWriter, r *http.Request,
 
 // handleV2AssetDisks handles GET /api/v2/assets/{id}/disks
 func (s *apiServer) handleV2AssetDisks(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "disks:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "disks:read") {
 		apiv2.WriteScopeForbidden(w, "disks:read")
 		return
 	}
@@ -61,7 +61,7 @@ func (s *apiServer) handleV2AssetPackages(w http.ResponseWriter, r *http.Request
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown packages sub-path")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -70,7 +70,7 @@ func (s *apiServer) handleV2AssetPackages(w http.ResponseWriter, r *http.Request
 
 // handleV2AssetCron handles GET /api/v2/assets/{id}/cron
 func (s *apiServer) handleV2AssetCron(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "cron:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "cron:read") {
 		apiv2.WriteScopeForbidden(w, "cron:read")
 		return
 	}
@@ -80,7 +80,7 @@ func (s *apiServer) handleV2AssetCron(w http.ResponseWriter, r *http.Request, as
 
 // handleV2AssetUsers handles GET /api/v2/assets/{id}/users
 func (s *apiServer) handleV2AssetUsers(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "users:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "users:read") {
 		apiv2.WriteScopeForbidden(w, "users:read")
 		return
 	}
@@ -90,7 +90,7 @@ func (s *apiServer) handleV2AssetUsers(w http.ResponseWriter, r *http.Request, a
 
 // handleV2AssetLogs handles GET /api/v2/assets/{id}/logs
 func (s *apiServer) handleV2AssetLogs(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "logs:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "logs:read") {
 		apiv2.WriteScopeForbidden(w, "logs:read")
 		return
 	}
@@ -100,7 +100,7 @@ func (s *apiServer) handleV2AssetLogs(w http.ResponseWriter, r *http.Request, as
 
 // handleV2AssetMetrics handles GET /api/v2/assets/{id}/metrics
 func (s *apiServer) handleV2AssetMetrics(w http.ResponseWriter, r *http.Request, assetID string) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "metrics:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "metrics:read") {
 		apiv2.WriteScopeForbidden(w, "metrics:read")
 		return
 	}
@@ -115,7 +115,7 @@ func (s *apiServer) handleV2AssetMetricsLatest(w http.ResponseWriter, r *http.Re
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "metrics:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "metrics:read") {
 		apiv2.WriteScopeForbidden(w, "metrics:read")
 		return
 	}
@@ -160,7 +160,7 @@ func (s *apiServer) handleV2AssetWake(w http.ResponseWriter, r *http.Request, as
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:power") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:power") {
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}
@@ -173,7 +173,7 @@ func (s *apiServer) handleV2AssetReboot(w http.ResponseWriter, r *http.Request, 
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:power") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:power") {
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}
@@ -186,7 +186,7 @@ func (s *apiServer) handleV2AssetShutdown(w http.ResponseWriter, r *http.Request
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:power") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:power") {
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}

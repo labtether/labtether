@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/updates"
 )
@@ -39,7 +40,7 @@ func TestHTTPHelperMapCommandLevel(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
-			if got := mapCommandLevel(tc.input); got != tc.want {
+			if got := shared.MapCommandLevel(tc.input); got != tc.want {
 				t.Fatalf("mapCommandLevel(%q): expected %q, got %q", tc.input, tc.want, got)
 			}
 		})
@@ -69,7 +70,7 @@ func TestHTTPHelperParseLimit(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test"+tc.query, nil)
-			if got := parseLimit(req, tc.fallback); got != tc.want {
+			if got := shared.ParseLimit(req, tc.fallback); got != tc.want {
 				t.Fatalf("parseLimit(%q, %d): expected %d, got %d", tc.query, tc.fallback, tc.want, got)
 			}
 		})
@@ -96,7 +97,7 @@ func TestHTTPHelperParseOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test"+tc.query, nil)
-			if got := parseOffset(req); got != tc.want {
+			if got := shared.ParseOffset(req); got != tc.want {
 				t.Fatalf("parseOffset(%q): expected %d, got %d", tc.query, tc.want, got)
 			}
 		})
@@ -122,14 +123,14 @@ func TestHTTPHelperGroupIDQueryParam(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test"+tc.query, nil)
-			if got := groupIDQueryParam(req); got != tc.want {
+			if got := shared.GroupIDQueryParam(req); got != tc.want {
 				t.Fatalf("groupIDQueryParam(%q): expected %q, got %q", tc.query, tc.want, got)
 			}
 		})
 	}
 
 	t.Run("nil request returns empty", func(t *testing.T) {
-		if got := groupIDQueryParam(nil); got != "" {
+		if got := shared.GroupIDQueryParam(nil); got != "" {
 			t.Fatalf("expected empty string for nil request, got %q", got)
 		}
 	})
@@ -143,7 +144,7 @@ func TestHTTPHelperParseTimestampParam(t *testing.T) {
 	fallback := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	t.Run("empty string returns fallback", func(t *testing.T) {
-		if got := parseTimestampParam("", fallback); !got.Equal(fallback) {
+		if got := shared.ParseTimestampParam("", fallback); !got.Equal(fallback) {
 			t.Fatalf("expected fallback %v, got %v", fallback, got)
 		}
 	})
@@ -151,19 +152,19 @@ func TestHTTPHelperParseTimestampParam(t *testing.T) {
 	t.Run("valid RFC3339 parsed and returned as UTC", func(t *testing.T) {
 		raw := "2025-06-15T10:30:00Z"
 		want := time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC)
-		if got := parseTimestampParam(raw, fallback); !got.Equal(want) {
+		if got := shared.ParseTimestampParam(raw, fallback); !got.Equal(want) {
 			t.Fatalf("expected %v, got %v", want, got)
 		}
 	})
 
 	t.Run("invalid string returns fallback", func(t *testing.T) {
-		if got := parseTimestampParam("not-a-date", fallback); !got.Equal(fallback) {
+		if got := shared.ParseTimestampParam("not-a-date", fallback); !got.Equal(fallback) {
 			t.Fatalf("expected fallback %v, got %v", fallback, got)
 		}
 	})
 
 	t.Run("whitespace-only returns fallback", func(t *testing.T) {
-		if got := parseTimestampParam("   ", fallback); !got.Equal(fallback) {
+		if got := shared.ParseTimestampParam("   ", fallback); !got.Equal(fallback) {
 			t.Fatalf("expected fallback %v, got %v", fallback, got)
 		}
 	})
@@ -171,7 +172,7 @@ func TestHTTPHelperParseTimestampParam(t *testing.T) {
 	t.Run("non-UTC offset converted to UTC", func(t *testing.T) {
 		raw := "2025-06-15T12:00:00+02:00"
 		want := time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)
-		got := parseTimestampParam(raw, fallback)
+		got := shared.ParseTimestampParam(raw, fallback)
 		if !got.Equal(want) {
 			t.Fatalf("expected UTC %v, got %v", want, got)
 		}
@@ -206,7 +207,7 @@ func TestHTTPHelperParseDurationParam(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := parseDurationParam(tc.raw, fallback, min, max); got != tc.want {
+			if got := shared.ParseDurationParam(tc.raw, fallback, min, max); got != tc.want {
 				t.Fatalf("parseDurationParam(%q): expected %v, got %v", tc.raw, tc.want, got)
 			}
 		})
@@ -236,7 +237,7 @@ func TestHTTPHelperDefaultStepForWindow(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := defaultStepForWindow(tc.window); got != tc.want {
+			if got := shared.DefaultStepForWindow(tc.window); got != tc.want {
 				t.Fatalf("defaultStepForWindow(%v): expected %v, got %v", tc.window, tc.want, got)
 			}
 		})
@@ -251,7 +252,7 @@ func TestHTTPHelperRequestClientKey(t *testing.T) {
 	t.Run("extracts host from RemoteAddr", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = "192.168.1.10:54321"
-		if got := requestClientKey(req); got != "192.168.1.10" {
+		if got := shared.RequestClientKey(req); got != "192.168.1.10" {
 			t.Fatalf("expected 192.168.1.10, got %q", got)
 		}
 	})
@@ -259,7 +260,7 @@ func TestHTTPHelperRequestClientKey(t *testing.T) {
 	t.Run("empty RemoteAddr returns unknown", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = ""
-		if got := requestClientKey(req); got != "unknown" {
+		if got := shared.RequestClientKey(req); got != "unknown" {
 			t.Fatalf("expected unknown, got %q", got)
 		}
 	})
@@ -267,7 +268,7 @@ func TestHTTPHelperRequestClientKey(t *testing.T) {
 	t.Run("RemoteAddr without port returned as-is", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = "10.0.0.1"
-		if got := requestClientKey(req); got != "10.0.0.1" {
+		if got := shared.RequestClientKey(req); got != "10.0.0.1" {
 			t.Fatalf("expected 10.0.0.1, got %q", got)
 		}
 	})
@@ -279,37 +280,37 @@ func TestHTTPHelperRequestClientKey(t *testing.T) {
 
 func TestHTTPHelperValidateMaxLen(t *testing.T) {
 	t.Run("value within limit", func(t *testing.T) {
-		if err := validateMaxLen("field", "hello", 10); err != nil {
+		if err := shared.ValidateMaxLen("field", "hello", 10); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("value at exact limit", func(t *testing.T) {
-		if err := validateMaxLen("field", "hello", 5); err != nil {
+		if err := shared.ValidateMaxLen("field", "hello", 5); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("value exceeds limit", func(t *testing.T) {
-		if err := validateMaxLen("field", "toolongvalue", 5); err == nil {
+		if err := shared.ValidateMaxLen("field", "toolongvalue", 5); err == nil {
 			t.Fatal("expected error for value exceeding maxLen")
 		}
 	})
 
 	t.Run("zero maxLen skips validation", func(t *testing.T) {
-		if err := validateMaxLen("field", "anything", 0); err != nil {
+		if err := shared.ValidateMaxLen("field", "anything", 0); err != nil {
 			t.Fatalf("unexpected error with maxLen=0: %v", err)
 		}
 	})
 
 	t.Run("negative maxLen skips validation", func(t *testing.T) {
-		if err := validateMaxLen("field", "anything", -1); err != nil {
+		if err := shared.ValidateMaxLen("field", "anything", -1); err != nil {
 			t.Fatalf("unexpected error with maxLen=-1: %v", err)
 		}
 	})
 
 	t.Run("empty value within any positive limit", func(t *testing.T) {
-		if err := validateMaxLen("field", "", 1); err != nil {
+		if err := shared.ValidateMaxLen("field", "", 1); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -327,28 +328,28 @@ func TestHTTPHelperActionRunMatchesGroup(t *testing.T) {
 
 	t.Run("empty groupID always matches", func(t *testing.T) {
 		run := actions.Run{Target: "asset-1"}
-		if !actionRunMatchesGroup(run, "", assetGroup) {
+		if !shared.ActionRunMatchesGroup(run, "", assetGroup) {
 			t.Fatal("expected true for empty groupID")
 		}
 	})
 
 	t.Run("target in matching group", func(t *testing.T) {
 		run := actions.Run{Target: "asset-1"}
-		if !actionRunMatchesGroup(run, "group-A", assetGroup) {
+		if !shared.ActionRunMatchesGroup(run, "group-A", assetGroup) {
 			t.Fatal("expected true for matching group")
 		}
 	})
 
 	t.Run("target in different group", func(t *testing.T) {
 		run := actions.Run{Target: "asset-1"}
-		if actionRunMatchesGroup(run, "group-B", assetGroup) {
+		if shared.ActionRunMatchesGroup(run, "group-B", assetGroup) {
 			t.Fatal("expected false for non-matching group")
 		}
 	})
 
 	t.Run("target not in any group", func(t *testing.T) {
 		run := actions.Run{Target: "asset-unknown"}
-		if actionRunMatchesGroup(run, "group-A", assetGroup) {
+		if shared.ActionRunMatchesGroup(run, "group-A", assetGroup) {
 			t.Fatal("expected false for unknown asset")
 		}
 	})
@@ -372,14 +373,14 @@ func TestHTTPHelperFilterLogEventsByGroup(t *testing.T) {
 	}
 
 	t.Run("empty groupID returns all events", func(t *testing.T) {
-		got := filterLogEventsByGroup(events, "", assetGroup)
+		got := shared.FilterLogEventsByGroup(events, "", assetGroup)
 		if len(got) != len(events) {
 			t.Fatalf("expected %d events, got %d", len(events), len(got))
 		}
 	})
 
 	t.Run("filters to group-A members", func(t *testing.T) {
-		got := filterLogEventsByGroup(events, "group-A", assetGroup)
+		got := shared.FilterLogEventsByGroup(events, "group-A", assetGroup)
 		// e1 matches via assetGroup; e3 matches via fields["group_id"]
 		if len(got) != 2 {
 			t.Fatalf("expected 2 events for group-A, got %d", len(got))
@@ -394,14 +395,14 @@ func TestHTTPHelperFilterLogEventsByGroup(t *testing.T) {
 	})
 
 	t.Run("filters to group-B members", func(t *testing.T) {
-		got := filterLogEventsByGroup(events, "group-B", assetGroup)
+		got := shared.FilterLogEventsByGroup(events, "group-B", assetGroup)
 		if len(got) != 1 || got[0].ID != "e2" {
 			t.Fatalf("expected only e2 for group-B, got %+v", got)
 		}
 	})
 
 	t.Run("unknown group returns empty", func(t *testing.T) {
-		got := filterLogEventsByGroup(events, "group-Z", assetGroup)
+		got := shared.FilterLogEventsByGroup(events, "group-Z", assetGroup)
 		if len(got) != 0 {
 			t.Fatalf("expected 0 events for unknown group, got %d", len(got))
 		}
@@ -420,14 +421,14 @@ func TestHTTPHelperGroupAssetIDsForGroup(t *testing.T) {
 	}
 
 	t.Run("empty groupID returns nil", func(t *testing.T) {
-		got := groupAssetIDsForGroup("", assetGroup)
+		got := shared.GroupAssetIDsForGroup("", assetGroup)
 		if got != nil {
 			t.Fatalf("expected nil for empty groupID, got %v", got)
 		}
 	})
 
 	t.Run("returns assets for matching group", func(t *testing.T) {
-		got := groupAssetIDsForGroup("group-A", assetGroup)
+		got := shared.GroupAssetIDsForGroup("group-A", assetGroup)
 		if len(got) != 2 {
 			t.Fatalf("expected 2 assets for group-A, got %d", len(got))
 		}
@@ -441,7 +442,7 @@ func TestHTTPHelperGroupAssetIDsForGroup(t *testing.T) {
 	})
 
 	t.Run("unknown group returns empty slice", func(t *testing.T) {
-		got := groupAssetIDsForGroup("group-Z", assetGroup)
+		got := shared.GroupAssetIDsForGroup("group-Z", assetGroup)
 		if len(got) != 0 {
 			t.Fatalf("expected empty slice for unknown group, got %v", got)
 		}
@@ -460,28 +461,28 @@ func TestHTTPHelperUpdatePlanTouchesGroup(t *testing.T) {
 
 	t.Run("empty groupID always touches", func(t *testing.T) {
 		plan := updates.Plan{Targets: []string{"asset-1"}}
-		if !updatePlanTouchesGroup(plan, "", assetGroup) {
+		if !shared.UpdatePlanTouchesGroup(plan, "", assetGroup) {
 			t.Fatal("expected true for empty groupID")
 		}
 	})
 
 	t.Run("plan target in matching group", func(t *testing.T) {
 		plan := updates.Plan{Targets: []string{"asset-1", "asset-2"}}
-		if !updatePlanTouchesGroup(plan, "group-A", assetGroup) {
+		if !shared.UpdatePlanTouchesGroup(plan, "group-A", assetGroup) {
 			t.Fatal("expected true when at least one target in group")
 		}
 	})
 
 	t.Run("plan targets not in group", func(t *testing.T) {
 		plan := updates.Plan{Targets: []string{"asset-2"}}
-		if updatePlanTouchesGroup(plan, "group-A", assetGroup) {
+		if shared.UpdatePlanTouchesGroup(plan, "group-A", assetGroup) {
 			t.Fatal("expected false when no targets in group-A")
 		}
 	})
 
 	t.Run("plan with no targets returns false for non-empty group", func(t *testing.T) {
 		plan := updates.Plan{Targets: []string{}}
-		if updatePlanTouchesGroup(plan, "group-A", assetGroup) {
+		if shared.UpdatePlanTouchesGroup(plan, "group-A", assetGroup) {
 			t.Fatal("expected false for plan with no targets")
 		}
 	})

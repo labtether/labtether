@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 type maintenanceOnlyGroupMaintenanceStore struct {
@@ -206,7 +208,7 @@ func TestActionExecuteUsesAuthenticatedActor(t *testing.T) {
 
 	payload := []byte(`{"type":"command","actor_id":"spoofed","target":"lab-host-01","command":"uptime"}`)
 	req := httptest.NewRequest(http.MethodPost, "/actions/execute", bytes.NewReader(payload))
-	req = req.WithContext(contextWithUserID(req.Context(), "usr-action-01"))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "usr-action-01"))
 	rec := httptest.NewRecorder()
 	sut.handleActionExecute(rec, req)
 

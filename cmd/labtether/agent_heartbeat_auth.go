@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -54,8 +55,8 @@ func (s *apiServer) withAgentHeartbeatAuth(next http.HandlerFunc) http.HandlerFu
 		}
 
 		ctx := contextWithPrincipal(r.Context(), "agent:"+assetID, auth.RoleOperator)
-		ctx = contextWithScopes(ctx, []string{"assets:write"})
-		ctx = contextWithAllowedAssets(ctx, []string{assetID})
+		ctx = apiv2.ContextWithScopes(ctx, []string{"assets:write"})
+		ctx = apiv2.ContextWithAllowedAssets(ctx, []string{assetID})
 		ctx = shared.ContextWithAgentTokenID(ctx, agentToken.ID)
 		next(w, r.WithContext(ctx))
 	}

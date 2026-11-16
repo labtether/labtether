@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	dockerpkg "github.com/labtether/labtether/internal/hubapi/dockerpkg"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -30,7 +31,7 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 		WrapAuth: s.withAuth,
 
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
-			return decodeJSONBody(w, r, dst)
+			return shared.DecodeJSONBody(w, r, dst)
 		},
 		SanitizeUpstreamError: func(msg string) string {
 			return sanitizeUpstreamError(msg)
@@ -42,10 +43,10 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 			return isControlMessage(payload)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
-			return startBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)
+			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)
 		},
 		TouchBrowserWSReadDeadline: func(wsConn *websocket.Conn) error {
-			return touchBrowserWebSocketReadDeadline(wsConn)
+			return shared.TouchBrowserWebSocketReadDeadline(wsConn)
 		},
 		Broadcast: func(eventType string, data json.RawMessage) {
 			if s.broadcaster != nil {

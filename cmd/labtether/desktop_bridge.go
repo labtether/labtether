@@ -9,7 +9,9 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -51,13 +53,13 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return s.issueStreamTicket(ctx, sessionID)
 		},
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
-			return decodeJSONBody(w, r, dst)
+			return shared.DecodeJSONBody(w, r, dst)
 		},
 		ValidateMaxLen: func(field, value string, maxLen int) error {
-			return validateMaxLen(field, value, maxLen)
+			return shared.ValidateMaxLen(field, value, maxLen)
 		},
 		PrincipalActorID: func(ctx context.Context) string {
-			return principalActorID(ctx)
+			return apiv2.PrincipalActorID(ctx)
 		},
 		CanAccessOwnedSession: func(r *http.Request, sessionActorID string) bool {
 			return canAccessOwnedSession(r, sessionActorID)
@@ -69,28 +71,28 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return sanitizeUpstreamError(msg)
 		},
 		EnvOrDefaultBool: func(key string, fallback bool) bool {
-			return envOrDefaultBool(key, fallback)
+			return shared.EnvOrDefaultBool(key, fallback)
 		},
 		BrowserStreamTraceID: func(r *http.Request) string {
-			return browserStreamTraceID(r)
+			return shared.BrowserStreamTraceID(r)
 		},
 		StreamTraceLogValue: func(traceID string) string {
-			return streamTraceLogValue(traceID)
+			return shared.StreamTraceLogValue(traceID)
 		},
 		SanitizeAgentStreamReason: func(raw string) string {
 			return sanitizeAgentStreamReason(raw)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
-			return startBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)
+			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)
 		},
 		TouchBrowserWSReadDeadline: func(wsConn *websocket.Conn) error {
-			return touchBrowserWebSocketReadDeadline(wsConn)
+			return shared.TouchBrowserWebSocketReadDeadline(wsConn)
 		},
 		UserIDFromContext: func(ctx context.Context) string {
-			return userIDFromContext(ctx)
+			return apiv2.UserIDFromContext(ctx)
 		},
 		UserRoleFromContext: func(ctx context.Context) string {
-			return userRoleFromContext(ctx)
+			return apiv2.UserRoleFromContext(ctx)
 		},
 		CheckSameOrigin: func(r *http.Request) bool {
 			return checkSameOrigin(r)

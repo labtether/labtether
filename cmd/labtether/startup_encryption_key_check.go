@@ -11,6 +11,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/secrets"
 )
 
@@ -60,7 +61,7 @@ func checkEncryptionKeyMatchesData(ctx context.Context, store encryptionKeyCheck
 				return nil
 			}
 		}
-		if !envOrDefaultBool(encryptionKeyReplaceEnv, false) {
+		if !shared.EnvOrDefaultBool(encryptionKeyReplaceEnv, false) {
 			// Startup failures never log their cause, so state the remedy here.
 			// Key IDs are a short SHA-256 of the key, never the key itself.
 			log.Printf("labtether: refusing to start: this database was written with the encryption key with ID %s, "+

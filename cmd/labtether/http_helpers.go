@@ -4,63 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/hubapi/shared"
-	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/updates"
 )
 
 const maxRateLimitWindows = 4096
-
-// Thin aliases delegating to internal/hubapi/shared so that callers
-// inside cmd/labtether/ keep compiling without a mass rename.
-
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
-	return shared.DecodeJSONBody(w, r, dst)
-}
-
-func mapCommandLevel(status string) string { return shared.MapCommandLevel(status) }
-
-func parseLimit(r *http.Request, fallback int) int { return shared.ParseLimit(r, fallback) }
-
-func parseOffset(r *http.Request) int { return shared.ParseOffset(r) }
-
-func groupIDQueryParam(r *http.Request) string { return shared.GroupIDQueryParam(r) }
-
-func parseTimestampParam(raw string, fallback time.Time) time.Time {
-	return shared.ParseTimestampParam(raw, fallback)
-}
-
-func parseDurationParam(raw string, fallback, min, max time.Duration) time.Duration {
-	return shared.ParseDurationParam(raw, fallback, min, max)
-}
-
-func defaultStepForWindow(window time.Duration) time.Duration {
-	return shared.DefaultStepForWindow(window)
-}
-
-func requestClientKey(r *http.Request) string { return shared.RequestClientKey(r) }
-
-func validateMaxLen(field, value string, maxLen int) error {
-	return shared.ValidateMaxLen(field, value, maxLen)
-}
-
-func actionRunMatchesGroup(run actions.Run, groupID string, assetGroup map[string]string) bool {
-	return shared.ActionRunMatchesGroup(run, groupID, assetGroup)
-}
-
-func filterLogEventsByGroup(events []logs.Event, groupID string, assetGroup map[string]string) []logs.Event {
-	return shared.FilterLogEventsByGroup(events, groupID, assetGroup)
-}
-
-func groupAssetIDsForGroup(groupID string, assetGroup map[string]string) []string {
-	return shared.GroupAssetIDsForGroup(groupID, assetGroup)
-}
-
-func updatePlanTouchesGroup(plan updates.Plan, groupID string, assetGroup map[string]string) bool {
-	return shared.UpdatePlanTouchesGroup(plan, groupID, assetGroup)
-}
 
 // apiServer methods that reference server state stay here.
 
@@ -68,7 +17,7 @@ func (s *apiServer) enforceRateLimit(w http.ResponseWriter, r *http.Request, buc
 	if limit <= 0 || window <= 0 {
 		return true
 	}
-	return s.enforceRateLimitKey(w, bucket+":"+requestClientKey(r), limit, window)
+	return s.enforceRateLimitKey(w, bucket+":"+shared.RequestClientKey(r), limit, window)
 }
 
 // enforceClientRateLimit is enforceRateLimit keyed by the real client address.
@@ -182,7 +131,7 @@ func (s *apiServer) updateRunTouchesGroup(planID, groupID string, assetGroup map
 		planGroupCache[planID] = false
 		return false, nil
 	}
-	touches := updatePlanTouchesGroup(plan, groupID, assetGroup)
+	touches := shared.UpdatePlanTouchesGroup(plan, groupID, assetGroup)
 	planGroupCache[planID] = touches
 	return touches, nil
 }

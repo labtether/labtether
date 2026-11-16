@@ -7,9 +7,11 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/notifications"
@@ -78,7 +80,7 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		},
 
 		EnforceRateLimit:           s.enforceRateLimit,
-		PrincipalActorID:           principalActorID,
+		PrincipalActorID:           apiv2.PrincipalActorID,
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		Broadcast: func(eventType string, data map[string]any) {
@@ -92,13 +94,13 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		AgentMgr: s.agentMgr,
 
 		InferCapabilityIDsFromAssetMetadata: func(entry assets.Asset) []string {
-			return inferCapabilityIDsFromAssetMetadata(entry)
+			return respkg.InferCapabilityIDsFromAssetMetadata(entry)
 		},
 		CapabilityIDsFromSet: func(set model.CapabilitySet) []string {
-			return capabilityIDsFromSet(set)
+			return respkg.CapabilityIDsFromSet(set)
 		},
 		MergeCapabilityIDs: func(values ...[]string) []string {
-			return mergeCapabilityIDs(values...)
+			return respkg.MergeCapabilityIDs(values...)
 		},
 
 		ResolveSyntheticServiceAsset:   s.resolveSyntheticServiceAsset,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/groupmaintenance"
@@ -110,8 +111,8 @@ func installPowerResponder(t *testing.T, sut *apiServer, status agentmgr.PowerRe
 func powerRequest(method, path string, scopes, allowed []string) *http.Request {
 	req := httptest.NewRequest(method, path, nil)
 	ctx := contextWithPrincipal(req.Context(), "operator-1", "operator")
-	ctx = contextWithScopes(ctx, scopes)
-	ctx = contextWithAllowedAssets(ctx, allowed)
+	ctx = apiv2.ContextWithScopes(ctx, scopes)
+	ctx = apiv2.ContextWithAllowedAssets(ctx, allowed)
 	return req.WithContext(ctx)
 }
 

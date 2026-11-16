@@ -34,7 +34,7 @@ func (s *apiServer) handleV2Topology(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:read") {
 		apiv2.WriteScopeForbidden(w, "topology:read")
 		return
 	}
@@ -254,7 +254,7 @@ func (s *apiServer) handleV2TopologyReset(w http.ResponseWriter, r *http.Request
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}

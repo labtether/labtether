@@ -39,7 +39,7 @@ func portainerQueueAction(t *testing.T, f *portainerOwnerFixture, actionID, targ
 	}
 	r := httptest.NewRequest("POST", "/actions/execute", strings.NewReader(string(body)))
 	ctx := contextWithPrincipal(r.Context(), "owner", "owner")
-	ctx = contextWithScopes(ctx, []string{"actions:exec"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"actions:exec"})
 	if allowed != nil {
 		ctx = apiv2.ContextWithAllowedAssets(ctx, allowed)
 	}

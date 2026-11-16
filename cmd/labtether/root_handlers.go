@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -33,7 +34,7 @@ func (s *apiServer) handleHubRoot(w http.ResponseWriter, r *http.Request) {
 // HTTP even when the Hub API uses TLS; set LABTETHER_CONSOLE_URL when a TLS
 // front end serves the console instead.
 func consoleURLFromRequest(r *http.Request) string {
-	override := strings.TrimSpace(envOrDefault("LABTETHER_CONSOLE_URL", ""))
+	override := strings.TrimSpace(shared.EnvOrDefault("LABTETHER_CONSOLE_URL", ""))
 	if override != "" {
 		return override
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 )
 
 func TestPersistCanonicalHeartbeatWritesCheckpointAndBinding(t *testing.T) {
@@ -32,7 +34,7 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBinding(t *testing.T) {
 		t.Fatalf("process heartbeat: %v", err)
 	}
 
-	providerInstanceID := canonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
+	providerInstanceID := respkg.CanonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
 	if _, ok, err := sut.canonicalStore.GetProviderInstance(providerInstanceID); err != nil {
 		t.Fatalf("get provider instance: %v", err)
 	} else if !ok {
@@ -98,11 +100,11 @@ func TestPersistCanonicalHeartbeatUsesCommittedSource(t *testing.T) {
 	sut.persistCanonicalHeartbeat(committed, assets.HeartbeatRequest{
 		AssetID: assetID, Source: "proxmox",
 	})
-	agentProviderID := canonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
+	agentProviderID := respkg.CanonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
 	if _, ok, err := sut.canonicalStore.GetProviderInstance(agentProviderID); err != nil || !ok {
 		t.Fatalf("committed agent provider missing ok=%v err=%v", ok, err)
 	}
-	forgedProviderID := canonicalProviderInstanceID(model.ProviderKindConnector, "proxmox", assetID)
+	forgedProviderID := respkg.CanonicalProviderInstanceID(model.ProviderKindConnector, "proxmox", assetID)
 	if _, ok, err := sut.canonicalStore.GetProviderInstance(forgedProviderID); err != nil || ok {
 		t.Fatalf("payload-selected provider exists=%v err=%v", ok, err)
 	}
@@ -148,7 +150,7 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBindingByPlatform(t *testin
 				t.Fatalf("process heartbeat: %v", err)
 			}
 
-			providerInstanceID := canonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
+			providerInstanceID := respkg.CanonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
 			snapshot := collectCanonicalHeartbeatSnapshot(t, sut, providerInstanceID, assetID)
 			assertCanonicalHeartbeatSnapshotFixture(t, tc.platform, snapshot)
 		})

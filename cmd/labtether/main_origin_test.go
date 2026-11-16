@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 )
 
@@ -269,12 +270,12 @@ func TestWithAuthNativeStreamOriginAcceptsValidOneTimeTicket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue stream ticket: %v", err)
 	}
-	wantActor := userIDFromContext(ctx)
+	wantActor := apiv2.UserIDFromContext(ctx)
 
 	called := false
 	handler := sut.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if got := userIDFromContext(r.Context()); got != wantActor {
+		if got := apiv2.UserIDFromContext(r.Context()); got != wantActor {
 			t.Fatalf("principal = %q, want %q", got, wantActor)
 		}
 		w.WriteHeader(http.StatusNoContent)

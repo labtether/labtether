@@ -12,7 +12,7 @@ import (
 
 func requireScope(required string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if required != "" && !apiv2.ScopeCheck(scopesFromContext(r.Context()), required) {
+		if required != "" && !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), required) {
 			apiv2.WriteScopeForbidden(w, required)
 			return
 		}
@@ -26,7 +26,7 @@ func requireReadWriteScopes(readScope, writeScope string, next http.HandlerFunc)
 		if apiv2.IsMutatingMethod(r.Method) {
 			required = writeScope
 		}
-		if required != "" && !apiv2.ScopeCheck(scopesFromContext(r.Context()), required) {
+		if required != "" && !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), required) {
 			apiv2.WriteScopeForbidden(w, required)
 			return
 		}
@@ -40,7 +40,7 @@ func requireScopeByMethod(methodScopes map[string]string, fallbackScope string, 
 		if required == "" {
 			required = fallbackScope
 		}
-		if required != "" && !apiv2.ScopeCheck(scopesFromContext(r.Context()), required) {
+		if required != "" && !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), required) {
 			apiv2.WriteScopeForbidden(w, required)
 			return
 		}
@@ -51,7 +51,7 @@ func requireScopeByMethod(methodScopes map[string]string, fallbackScope string, 
 func requireAssetFromPath(prefix string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		assetID := routeAssetID(prefix, r.URL.Path)
-		if assetID != "" && !apiv2.AssetCheck(allowedAssetsFromContext(r.Context()), assetID) {
+		if assetID != "" && !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), assetID) {
 			apiv2.WriteAssetForbidden(w, assetID)
 			return
 		}
@@ -83,7 +83,7 @@ func guardV1AssetRoute(prefix, readScope, writeScope string, next http.HandlerFu
 // reserves changes for admin and owner principals.
 func requireAdminForMutation(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if apiv2.IsMutatingMethod(r.Method) && !auth.HasAdminPrivileges(userRoleFromContext(r.Context())) {
+		if apiv2.IsMutatingMethod(r.Method) && !auth.HasAdminPrivileges(apiv2.UserRoleFromContext(r.Context())) {
 			servicehttp.WriteError(w, http.StatusForbidden, "forbidden")
 			return
 		}

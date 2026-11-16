@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/runtimesettings"
 	"github.com/labtether/labtether/internal/telemetry/promexport"
 )
@@ -365,7 +366,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/mcp": s.withReadCapabilityAuth(s.handleMCP()),
 	}
 
-	if envOrDefaultBool("DEV_MODE", false) {
+	if shared.EnvOrDefaultBool("DEV_MODE", false) {
 		log.Printf("labtether: DEV_MODE enabled — pprof endpoints registered at /debug/pprof/")
 		handlers["/debug/pprof/"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Index))
 		handlers["/debug/pprof/cmdline"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Cmdline))

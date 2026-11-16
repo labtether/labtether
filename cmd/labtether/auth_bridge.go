@@ -7,8 +7,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -36,8 +38,8 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
 		ClientIP:                   trustedRequestClientIP,
 		RequestIsSecure:            browserRequestIsSecure,
-		UserIDFromContext:          principalActorID,
-		UserRoleFromContext:        userRoleFromContext,
+		UserIDFromContext:          apiv2.PrincipalActorID,
+		UserRoleFromContext:        apiv2.UserRoleFromContext,
 		RevokeStreams:              s.revokeStreamPrincipals,
 
 		WrapAuth:        s.withAuth,
@@ -168,7 +170,7 @@ func (s *apiServer) validateOIDCRedirectURI(r *http.Request, raw string) (string
 	// address of the console (LABTETHER_CONSOLE_URL, often plain http on a LAN).
 	// Request headers never add to this part of the list.
 	for _, configured := range []string{s.externalURL, s.consoleURL} {
-		if base, ok := sanitizeExternalBaseURL(strings.TrimSpace(configured)); ok {
+		if base, ok := shared.SanitizeExternalBaseURL(strings.TrimSpace(configured)); ok {
 			if configuredOrigin, parseOK := parseNetworkOrigin(base); parseOK {
 				allowedOrigins = append(allowedOrigins, configuredOrigin)
 			}

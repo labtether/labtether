@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestUpdatePlanCreateAndExecuteQueueUnavailable(t *testing.T) {
@@ -189,7 +191,7 @@ func TestUpdateExecuteUsesAuthenticatedActor(t *testing.T) {
 	}
 
 	execReq := httptest.NewRequest(http.MethodPost, "/updates/plans/"+createResponse.Plan.ID+"/execute", bytes.NewReader([]byte(`{"actor_id":"spoofed-update-user"}`)))
-	execReq = execReq.WithContext(contextWithUserID(execReq.Context(), "usr-update-01"))
+	execReq = execReq.WithContext(apiv2.ContextWithUserID(execReq.Context(), "usr-update-01"))
 	execRec := httptest.NewRecorder()
 	sut.handleUpdatePlanActions(execRec, execReq)
 	if execRec.Code != http.StatusServiceUnavailable {

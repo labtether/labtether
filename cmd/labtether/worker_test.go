@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/runtimesettings"
@@ -228,7 +229,7 @@ func TestRefreshWorkerRuntimeSettingsDirectWiresQueueMaxDeliveries(t *testing.T)
 
 	applied := make(chan struct{}, 1)
 	go refreshWorkerRuntimeSettingsDirect(ctx, store, state, func(s *workerRuntimeState) {
-		queue.SetMaxAttempts(uint64ToIntClamp(s.MaxDeliveries()))
+		queue.SetMaxAttempts(shared.Uint64ToIntClamp(s.MaxDeliveries()))
 		select {
 		case applied <- struct{}{}:
 		default:

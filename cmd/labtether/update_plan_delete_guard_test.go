@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/updates"
 )
@@ -26,7 +27,7 @@ func TestV2UpdatePlanDeleteReturnsDeterministicConflictForActiveRun(t *testing.T
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/updates/plans/"+plan.ID, nil)
-	req = req.WithContext(contextWithScopes(req.Context(), []string{"updates:write"}))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"updates:write"}))
 	rec := httptest.NewRecorder()
 	sut.handleV2UpdatePlanActions(rec, req)
 
@@ -74,7 +75,7 @@ func TestV2UpdatePlanDeleteCascadesTerminalRunAndReturnsExactEvidence(t *testing
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/updates/plans/"+plan.ID, nil)
-	req = req.WithContext(contextWithScopes(req.Context(), []string{"updates:write"}))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"updates:write"}))
 	rec := httptest.NewRecorder()
 	sut.handleV2UpdatePlanActions(rec, req)
 

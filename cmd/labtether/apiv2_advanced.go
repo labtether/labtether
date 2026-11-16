@@ -16,7 +16,7 @@ func (s *apiServer) handleV2Credentials(w http.ResponseWriter, r *http.Request) 
 	if r.Method == http.MethodPost {
 		scope = "credentials:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -32,7 +32,7 @@ func (s *apiServer) handleV2CredentialActions(w http.ResponseWriter, r *http.Req
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "credentials:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -47,7 +47,7 @@ func (s *apiServer) handleV2TerminalSessions(w http.ResponseWriter, r *http.Requ
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		scope = "terminal:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -56,7 +56,7 @@ func (s *apiServer) handleV2TerminalSessions(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "terminal:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "terminal:read") {
 		apiv2.WriteScopeForbidden(w, "terminal:read")
 		return
 	}
@@ -65,7 +65,7 @@ func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "terminal:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "terminal:write") {
 		apiv2.WriteScopeForbidden(w, "terminal:write")
 		return
 	}
@@ -78,7 +78,7 @@ func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Requ
 	if r.Method == http.MethodPost {
 		scope = "terminal:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -91,7 +91,7 @@ func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *htt
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "terminal:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -102,7 +102,7 @@ func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *htt
 // --- Agent Lifecycle ---
 
 func (s *apiServer) handleV2Agents(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "agents:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "agents:read") {
 		apiv2.WriteScopeForbidden(w, "agents:read")
 		return
 	}
@@ -115,7 +115,7 @@ func (s *apiServer) handleV2AgentActions(w http.ResponseWriter, r *http.Request)
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "agents:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -124,7 +124,7 @@ func (s *apiServer) handleV2AgentActions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleV2AgentsPending(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "agents:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "agents:read") {
 		apiv2.WriteScopeForbidden(w, "agents:read")
 		return
 	}
@@ -132,7 +132,7 @@ func (s *apiServer) handleV2AgentsPending(w http.ResponseWriter, r *http.Request
 }
 
 func (s *apiServer) handleV2AgentsPendingApprove(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "agents:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "agents:write") {
 		apiv2.WriteScopeForbidden(w, "agents:write")
 		return
 	}
@@ -140,7 +140,7 @@ func (s *apiServer) handleV2AgentsPendingApprove(w http.ResponseWriter, r *http.
 }
 
 func (s *apiServer) handleV2AgentsPendingReject(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "agents:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "agents:write") {
 		apiv2.WriteScopeForbidden(w, "agents:write")
 		return
 	}
@@ -168,7 +168,7 @@ func (s *apiServer) handleV2WebServices(w http.ResponseWriter, r *http.Request) 
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -177,7 +177,7 @@ func (s *apiServer) handleV2WebServices(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *apiServer) handleV2WebServiceSync(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "web-services:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "web-services:write") {
 		apiv2.WriteScopeForbidden(w, "web-services:write")
 		return
 	}
@@ -190,7 +190,7 @@ func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Req
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "PATCH, PUT, or DELETE required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "web-services:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "web-services:write") {
 		apiv2.WriteScopeForbidden(w, "web-services:write")
 		return
 	}
@@ -205,7 +205,7 @@ func (s *apiServer) handleV2Collectors(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		scope = "collectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -218,7 +218,7 @@ func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Requ
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "collectors:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -233,7 +233,7 @@ func (s *apiServer) handleV2NotificationChannels(w http.ResponseWriter, r *http.
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "notifications:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -242,7 +242,7 @@ func (s *apiServer) handleV2NotificationChannels(w http.ResponseWriter, r *http.
 }
 
 func (s *apiServer) handleV2NotificationHistory(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "notifications:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "notifications:read") {
 		apiv2.WriteScopeForbidden(w, "notifications:read")
 		return
 	}
@@ -257,7 +257,7 @@ func (s *apiServer) handleV2SyntheticChecks(w http.ResponseWriter, r *http.Reque
 	if r.Method == http.MethodPost {
 		scope = "assets:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -270,7 +270,7 @@ func (s *apiServer) handleV2SyntheticCheckActions(w http.ResponseWriter, r *http
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "assets:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -288,7 +288,7 @@ func (s *apiServer) handleV2DeadLetters(w http.ResponseWriter, r *http.Request) 
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		scope = "dead-letters:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -299,7 +299,7 @@ func (s *apiServer) handleV2DeadLetters(w http.ResponseWriter, r *http.Request) 
 // --- Audit ---
 
 func (s *apiServer) handleV2AuditEvents(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "audit:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "audit:read") {
 		apiv2.WriteScopeForbidden(w, "audit:read")
 		return
 	}
@@ -314,7 +314,7 @@ func (s *apiServer) handleV2LogViews(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		scope = "logs:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -327,7 +327,7 @@ func (s *apiServer) handleV2LogViewActions(w http.ResponseWriter, r *http.Reques
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "logs:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -348,7 +348,7 @@ func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Re
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "settings:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -366,14 +366,14 @@ func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Re
 func (s *apiServer) handleV2FileTransfers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:read") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:read") {
 			apiv2.WriteScopeForbidden(w, "files:read")
 			return
 		}
 		r.URL.Path = "/api/v1/file-transfers"
 		apiv2.WrapV1Handler(s.handleFileTransfers)(w, r)
 	case http.MethodPost:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:write") {
 			apiv2.WriteScopeForbidden(w, "files:write")
 			return
 		}
@@ -398,12 +398,12 @@ func (s *apiServer) handleV2FileTransferActions(w http.ResponseWriter, r *http.R
 
 	switch r.Method {
 	case http.MethodGet:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:read") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:read") {
 			apiv2.WriteScopeForbidden(w, "files:read")
 			return
 		}
 	case http.MethodDelete:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:write") {
 			apiv2.WriteScopeForbidden(w, "files:write")
 			return
 		}
@@ -433,7 +433,7 @@ func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Reques
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "settings:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "settings:write") {
 		apiv2.WriteScopeForbidden(w, "settings:write")
 		return
 	}

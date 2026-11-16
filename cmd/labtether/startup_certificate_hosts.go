@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // builtInCertificateSANHosts returns the externally advertised HTTPS hostname
@@ -15,7 +17,7 @@ import (
 // users and agents. Invalid and non-HTTPS external URLs are never trusted as
 // certificate inputs.
 func builtInCertificateSANHosts(rawExternalURL string) []string {
-	sanitized, ok := sanitizeExternalBaseURL(strings.TrimSpace(rawExternalURL))
+	sanitized, ok := shared.SanitizeExternalBaseURL(strings.TrimSpace(rawExternalURL))
 	if !ok {
 		return nil
 	}

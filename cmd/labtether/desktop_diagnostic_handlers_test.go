@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
@@ -54,7 +55,7 @@ func TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent(t *testing.T) {
 func TestHandleDesktopDiagnoseRequestEnforcesAPIKeyAssetAllowlist(t *testing.T) {
 	sut := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/srv2", nil)
-	req = req.WithContext(contextWithAllowedAssets(req.Context(), []string{"srv1"}))
+	req = req.WithContext(apiv2.ContextWithAllowedAssets(req.Context(), []string{"srv1"}))
 	rec := httptest.NewRecorder()
 
 	sut.handleDesktopDiagnoseRequest(rec, req)

@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // Tests cover the local aliases defined in helpers_maps.go.
@@ -12,14 +14,14 @@ import (
 
 func TestHelperMapMaxRuntimeCacheEntries(t *testing.T) {
 	// Sanity-check that the constant is positive and within a sensible range.
-	if maxRuntimeCacheEntries <= 0 {
-		t.Fatalf("maxRuntimeCacheEntries must be positive, got %d", maxRuntimeCacheEntries)
+	if shared.MaxRuntimeCacheEntries <= 0 {
+		t.Fatalf("maxRuntimeCacheEntries must be positive, got %d", shared.MaxRuntimeCacheEntries)
 	}
 	// The implementation documents a "generous" cap. Ensure it is at least 50
 	// to provide meaningful headroom for multi-collector deployments.
 	const minExpected = 50
-	if maxRuntimeCacheEntries < minExpected {
-		t.Fatalf("maxRuntimeCacheEntries=%d is unexpectedly small (want >= %d)", maxRuntimeCacheEntries, minExpected)
+	if shared.MaxRuntimeCacheEntries < minExpected {
+		t.Fatalf("maxRuntimeCacheEntries=%d is unexpectedly small (want >= %d)", shared.MaxRuntimeCacheEntries, minExpected)
 	}
 }
 
@@ -29,7 +31,7 @@ func TestHelperMapMaxRuntimeCacheEntries(t *testing.T) {
 
 func TestHelperMapCloneAnyMap(t *testing.T) {
 	t.Run("nil input returns empty map", func(t *testing.T) {
-		got := cloneAnyMap(nil)
+		got := shared.CloneAnyMap(nil)
 		if got == nil {
 			t.Fatal("expected non-nil map for nil input")
 		}
@@ -39,7 +41,7 @@ func TestHelperMapCloneAnyMap(t *testing.T) {
 	})
 
 	t.Run("empty input returns empty map", func(t *testing.T) {
-		got := cloneAnyMap(map[string]any{})
+		got := shared.CloneAnyMap(map[string]any{})
 		if len(got) != 0 {
 			t.Fatalf("expected empty map, got %v", got)
 		}
@@ -51,7 +53,7 @@ func TestHelperMapCloneAnyMap(t *testing.T) {
 			"beta":  "value",
 			"gamma": true,
 		}
-		got := cloneAnyMap(input)
+		got := shared.CloneAnyMap(input)
 		if len(got) != len(input) {
 			t.Fatalf("expected %d entries, got %d", len(input), len(got))
 		}
@@ -64,7 +66,7 @@ func TestHelperMapCloneAnyMap(t *testing.T) {
 
 	t.Run("result is a distinct map (mutations do not affect original)", func(t *testing.T) {
 		input := map[string]any{"key": "original"}
-		got := cloneAnyMap(input)
+		got := shared.CloneAnyMap(input)
 		got["key"] = "mutated"
 		if input["key"] != "original" {
 			t.Fatal("cloneAnyMap returned the same map reference; original was mutated")
@@ -75,7 +77,7 @@ func TestHelperMapCloneAnyMap(t *testing.T) {
 		input := map[string]any{
 			"  spaced  ": "value",
 		}
-		got := cloneAnyMap(input)
+		got := shared.CloneAnyMap(input)
 		if _, ok := got["spaced"]; !ok {
 			t.Fatalf("expected key 'spaced' after trimming, got keys: %v", got)
 		}
@@ -86,7 +88,7 @@ func TestHelperMapCloneAnyMap(t *testing.T) {
 
 	t.Run("nil values preserved", func(t *testing.T) {
 		input := map[string]any{"nullkey": nil}
-		got := cloneAnyMap(input)
+		got := shared.CloneAnyMap(input)
 		v, exists := got["nullkey"]
 		if !exists {
 			t.Fatal("expected 'nullkey' to be present in cloned map")

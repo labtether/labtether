@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
 )
 
 func TestStatusAggregateIncludesCanonicalPayload(t *testing.T) {
@@ -76,7 +78,7 @@ func TestStatusAggregateIncludesCanonicalPayload(t *testing.T) {
 	assertCanonicalStatusAggregateSnapshotFixture(t, "default", snapshot)
 }
 
-func collectCanonicalStatusAggregateSnapshot(payload statusCanonicalPayload) canonicalStatusAggregateSnapshot {
+func collectCanonicalStatusAggregateSnapshot(payload statusaggpkg.CanonicalPayload) canonicalStatusAggregateSnapshot {
 	out := canonicalStatusAggregateSnapshot{
 		Registry: canonicalStatusRegistryFixture{
 			CapabilityIDs: make([]string, 0, len(payload.Registry.Capabilities)),

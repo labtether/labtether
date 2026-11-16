@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
 )
 
 type canonicalStoreWithWatermarkCounter struct {
@@ -376,9 +378,9 @@ func TestStatusEndpointProbeCacheReusesRecentResults(t *testing.T) {
 
 	probeHits := 0
 	previousProbe := statusProbeEndpointFunc
-	statusProbeEndpointFunc = func(ctx context.Context, target statusEndpointTarget) statusEndpointResult {
+	statusProbeEndpointFunc = func(ctx context.Context, target statusaggpkg.EndpointTarget) statusaggpkg.EndpointResult {
 		probeHits++
-		return statusEndpointResult{
+		return statusaggpkg.EndpointResult{
 			Name:      target.Name,
 			URL:       target.URL,
 			OK:        true,
@@ -390,7 +392,7 @@ func TestStatusEndpointProbeCacheReusesRecentResults(t *testing.T) {
 		statusProbeEndpointFunc = previousProbe
 	})
 
-	targets := []statusEndpointTarget{
+	targets := []statusaggpkg.EndpointTarget{
 		{Name: "LabTether", URL: "https://example.local/healthz"},
 	}
 

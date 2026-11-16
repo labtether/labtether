@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 )
 
@@ -31,8 +32,8 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		ctx := contextWithPrincipal(req.Context(), actorID, role)
 		if keyID, isKey := strings.CutPrefix(actorID, "apikey:"); isKey {
-			ctx = contextWithAPIKeyID(ctx, keyID)
-			ctx = contextWithScopes(ctx, []string{"audit:read"})
+			ctx = apiv2.ContextWithAPIKeyID(ctx, keyID)
+			ctx = apiv2.ContextWithScopes(ctx, []string{"audit:read"})
 		}
 		rec := httptest.NewRecorder()
 		handler(rec, req.WithContext(ctx))

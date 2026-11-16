@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -91,7 +92,7 @@ func workerPerformanceSnapshot(reader workerQueryStatsReader, queryLimit int) ma
 		"pg_stat_statements_enabled": false,
 		"query_limit":                queryLimit,
 		"top_queries":                []persistence.QueryStat{},
-		"source_queries_top":         sourceQueryDiagnosticsSnapshot(10),
+		"source_queries_top":         shared.SourceQueryDiagnosticsSnapshot(10),
 	}
 	if reader == nil {
 		return snapshot

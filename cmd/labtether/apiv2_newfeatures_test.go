@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 // --- Unified Search ---
@@ -83,7 +85,7 @@ func TestHandleV2BulkServiceAction_ScopeDenied(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	// Set a limited scope that does NOT include bulk:*
 	ctx := contextWithPrincipal(req.Context(), "user1", "user")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2BulkServiceAction(rec, req)
@@ -130,7 +132,7 @@ func TestHandleV2PrometheusTest_ScopeDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/settings/prometheus/test", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"settings:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"settings:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2PrometheusTest(rec, req)
@@ -181,7 +183,7 @@ func TestHandleV2HubTLSRenew_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/hub/tls/renew", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"hub:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"hub:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2HubTLSRenew(rec, req)
@@ -242,7 +244,7 @@ func TestHandleV2HubTLSDeleteRequiresAdminScope(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodDelete, "/api/v2/hub/tls", nil)
 	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
-	ctx = contextWithScopes(ctx, []string{"hub:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"hub:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 

@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // agentSSHSourceAddress returns the agent address the Hub may later use for
@@ -13,7 +15,7 @@ import (
 // used. A gateway of one of the Hub's own networks, such as Docker's bridge
 // gateway for proxied connections, is not the agent.
 func agentSSHSourceAddress(r *http.Request) string {
-	address := requestClientKey(r)
+	address := shared.RequestClientKey(r)
 	if isTrustedForwardedHostSource(r) {
 		forwarded := trustedRequestClientIP(r)
 		if forwarded == address {

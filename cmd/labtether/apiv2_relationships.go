@@ -9,7 +9,7 @@ import (
 // --- Discovery ---
 
 func (s *apiServer) handleV2DiscoveryRun(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "discovery:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "discovery:write") {
 		apiv2.WriteScopeForbidden(w, "discovery:write")
 		return
 	}
@@ -18,7 +18,7 @@ func (s *apiServer) handleV2DiscoveryRun(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleV2DiscoveryProposals(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "discovery:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "discovery:read") {
 		apiv2.WriteScopeForbidden(w, "discovery:read")
 		return
 	}
@@ -31,7 +31,7 @@ func (s *apiServer) handleV2DiscoveryProposalActions(w http.ResponseWriter, r *h
 	if r.Method == http.MethodPost {
 		scope = "discovery:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -46,7 +46,7 @@ func (s *apiServer) handleV2Dependencies(w http.ResponseWriter, r *http.Request)
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -59,7 +59,7 @@ func (s *apiServer) handleV2DependencyActions(w http.ResponseWriter, r *http.Req
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -72,7 +72,7 @@ func (s *apiServer) handleV2Edges(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -85,7 +85,7 @@ func (s *apiServer) handleV2EdgeActions(w http.ResponseWriter, r *http.Request) 
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -98,7 +98,7 @@ func (s *apiServer) handleV2Composites(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -111,7 +111,7 @@ func (s *apiServer) handleV2CompositeActions(w http.ResponseWriter, r *http.Requ
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "topology:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -126,7 +126,7 @@ func (s *apiServer) handleV2FailoverPairs(w http.ResponseWriter, r *http.Request
 	if r.Method == http.MethodPost {
 		scope = "failover:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -139,7 +139,7 @@ func (s *apiServer) handleV2FailoverPairActions(w http.ResponseWriter, r *http.R
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "failover:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

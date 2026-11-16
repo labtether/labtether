@@ -6,6 +6,8 @@ import (
 	"github.com/labtether/labtether/internal/topology"
 	"net/http"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // ---------------------------------------------------------------------------
@@ -17,13 +19,13 @@ func (s *apiServer) handleV2TopologyZones(w http.ResponseWriter, r *http.Request
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
 
 	var req topology.Zone
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -87,12 +89,12 @@ func (s *apiServer) handleV2TopologyZoneActions(w http.ResponseWriter, r *http.R
 
 	switch r.Method {
 	case http.MethodPut:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 			apiv2.WriteScopeForbidden(w, "topology:write")
 			return
 		}
 		var req topology.Zone
-		if err := decodeJSONBody(w, r, &req); err != nil {
+		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 			apiv2.WriteJSONBodyError(w, err)
 			return
 		}
@@ -108,7 +110,7 @@ func (s *apiServer) handleV2TopologyZoneActions(w http.ResponseWriter, r *http.R
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 
 	case http.MethodDelete:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 			apiv2.WriteScopeForbidden(w, "topology:write")
 			return
 		}
@@ -133,7 +135,7 @@ func (s *apiServer) handleV2TopologyZoneMembers(w http.ResponseWriter, r *http.R
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "PUT required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
@@ -149,7 +151,7 @@ func (s *apiServer) handleV2TopologyZoneMembers(w http.ResponseWriter, r *http.R
 	var req struct {
 		Members []topology.ZoneMember `json:"members"`
 	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -189,7 +191,7 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "PUT required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "topology:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "topology:write") {
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
@@ -200,7 +202,7 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 	var req struct {
 		Updates []topology.ZoneReorder `json:"updates"`
 	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}

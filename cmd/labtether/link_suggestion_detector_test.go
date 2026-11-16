@@ -8,6 +8,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/edges"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // ---------------------------------------------------------------------------
@@ -353,7 +354,7 @@ func TestDetectLinkSuggestionsNilEdgeStoreNoPanic(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// normalizeMACAddress tests (unchanged — helper kept in link_suggestion_detector.go)
+// shared.NormalizeMACAddress tests
 // ---------------------------------------------------------------------------
 
 func TestNormalizeMACAddress(t *testing.T) {
@@ -370,7 +371,7 @@ func TestNormalizeMACAddress(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got := normalizeMACAddress(tc.input)
+		got := shared.NormalizeMACAddress(tc.input)
 		if got != tc.want {
 			t.Errorf("normalizeMACAddress(%q) = %q, want %q", tc.input, got, tc.want)
 		}

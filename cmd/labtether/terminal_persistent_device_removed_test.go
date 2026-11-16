@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -24,7 +25,7 @@ func attachedSavedSessionOnDevice(t *testing.T, sut *apiServer) terminal.Persist
 	}
 
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"nas01","title":"Ops Shell"}`)))
-	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
 	sut.handlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
@@ -38,7 +39,7 @@ func attachedSavedSessionOnDevice(t *testing.T, sut *apiServer) terminal.Persist
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
-	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
@@ -49,7 +50,7 @@ func attachedSavedSessionOnDevice(t *testing.T, sut *apiServer) terminal.Persist
 
 func deleteSavedSession(sut *apiServer, id string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+id, nil)
-	req = req.WithContext(contextWithUserID(req.Context(), "actor-a"))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "actor-a"))
 	rec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(rec, req)
 	return rec

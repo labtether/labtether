@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -88,7 +89,7 @@ func TestAuthorizeRecordingSessionAccessEnforcesAPIKeyAssetAllowlist(t *testing.
 
 	req := httptest.NewRequest(http.MethodPost, "/recordings/"+session.ID, nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:key-a", "admin")
-	ctx = contextWithAllowedAssets(ctx, []string{"srv1"})
+	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"srv1"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	if sut.authorizeRecordingSessionAccess(rec, req, session.ID) {

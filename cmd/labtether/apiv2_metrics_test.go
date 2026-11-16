@@ -4,13 +4,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestHandleV2MetricsOverview_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/metrics/overview", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2MetricsOverview(rec, req)

@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 type notificationStoreStub struct {
@@ -47,7 +49,7 @@ func (s *notificationStoreStub) CreateNotificationChannel(req notifications.Crea
 		ID:        id,
 		Name:      req.Name,
 		Type:      req.Type,
-		Config:    cloneAnyMap(req.Config),
+		Config:    shared.CloneAnyMap(req.Config),
 		Enabled:   enabled,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -87,7 +89,7 @@ func (s *notificationStoreStub) UpdateNotificationChannel(id string, req notific
 		ch.Name = *req.Name
 	}
 	if req.Config != nil {
-		ch.Config = cloneAnyMap(*req.Config)
+		ch.Config = shared.CloneAnyMap(*req.Config)
 	}
 	if req.Enabled != nil {
 		ch.Enabled = *req.Enabled
@@ -114,7 +116,7 @@ func (s *notificationStoreStub) CreateAlertRoute(req notifications.CreateRouteRe
 	route := notifications.Route{
 		ID:                    id,
 		Name:                  req.Name,
-		Matchers:              cloneAnyMap(req.Matchers),
+		Matchers:              shared.CloneAnyMap(req.Matchers),
 		ChannelIDs:            append([]string(nil), req.ChannelIDs...),
 		SeverityFilter:        req.SeverityFilter,
 		GroupFilter:           req.GroupFilter,
@@ -152,7 +154,7 @@ func (s *notificationStoreStub) UpdateAlertRoute(id string, req notifications.Up
 		route.Name = *req.Name
 	}
 	if req.Matchers != nil {
-		route.Matchers = cloneAnyMap(*req.Matchers)
+		route.Matchers = shared.CloneAnyMap(*req.Matchers)
 	}
 	if req.ChannelIDs != nil {
 		route.ChannelIDs = append([]string(nil), (*req.ChannelIDs)...)
@@ -198,7 +200,7 @@ func (s *notificationStoreStub) CreateNotificationRecord(req notifications.Creat
 		ChannelID:       req.ChannelID,
 		AlertInstanceID: req.AlertInstanceID,
 		RouteID:         req.RouteID,
-		Payload:         cloneAnyMap(req.Payload),
+		Payload:         shared.CloneAnyMap(req.Payload),
 		Status:          req.Status,
 		Error:           req.Error,
 		MaxRetries:      notifications.DefaultMaxRetries,
@@ -223,7 +225,7 @@ func (s *notificationStoreStub) ListNotificationHistory(_ int, channelID string)
 			ChannelID:       rec.ChannelID,
 			AlertInstanceID: rec.AlertInstanceID,
 			RouteID:         rec.RouteID,
-			Payload:         cloneAnyMap(rec.Payload),
+			Payload:         shared.CloneAnyMap(rec.Payload),
 			Status:          rec.Status,
 			SentAt:          rec.SentAt,
 			Error:           rec.Error,
@@ -256,7 +258,7 @@ func (s *notificationStoreStub) ListPendingRetries(_ context.Context, now time.T
 			ChannelID:       rec.ChannelID,
 			AlertInstanceID: rec.AlertInstanceID,
 			RouteID:         rec.RouteID,
-			Payload:         cloneAnyMap(rec.Payload),
+			Payload:         shared.CloneAnyMap(rec.Payload),
 			Status:          rec.Status,
 			SentAt:          rec.SentAt,
 			Error:           rec.Error,
@@ -289,7 +291,7 @@ func (s *notificationStoreStub) UpdateRetryState(_ context.Context, id string, r
 		s.records[idx].Status = status
 		s.records[idx].Error = errorMessage
 		if payload != nil {
-			s.records[idx].Payload = cloneAnyMap(payload)
+			s.records[idx].Payload = shared.CloneAnyMap(payload)
 		}
 		if status == notifications.RecordStatusSent {
 			sentAt := time.Now().UTC()

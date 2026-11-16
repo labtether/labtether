@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/retention"
@@ -23,8 +24,8 @@ const maxConfiguredJobWorkers = 64
 func initializeWorkerSubsystem(ctx context.Context, srv *apiServer, pgStore *persistence.PostgresStore) workerBootstrap {
 	counters := &workerCounters{}
 
-	maxDeliveries := envOrDefaultUint64("QUEUE_MAX_DELIVERIES", 5)
-	retentionInterval := envOrDefaultDuration("RETENTION_APPLY_INTERVAL", 5*time.Minute)
+	maxDeliveries := shared.EnvOrDefaultUint64("QUEUE_MAX_DELIVERIES", 5)
+	retentionInterval := shared.EnvOrDefaultDuration("RETENTION_APPLY_INTERVAL", 5*time.Minute)
 	workerState := newWorkerRuntimeState(maxDeliveries, retentionInterval)
 
 	retentionTracker := &retentionState{
@@ -32,15 +33,15 @@ func initializeWorkerSubsystem(ctx context.Context, srv *apiServer, pgStore *per
 	}
 
 	// Postgres job queue (replaces NATS for job dispatch).
-	pollInterval := envOrDefaultDuration("JOB_POLL_INTERVAL", 500*time.Millisecond)
-	jq := jobqueue.New(pgStore.Pool(), pollInterval, uint64ToIntClamp(maxDeliveries))
+	pollInterval := shared.EnvOrDefaultDuration("JOB_POLL_INTERVAL", 500*time.Millisecond)
+	jq := jobqueue.New(pgStore.Pool(), pollInterval, shared.Uint64ToIntClamp(maxDeliveries))
 	jq.SetDeadLetterFinalizer(pgStore.FinalizeDeadJobInTransaction)
 	srv.jobQueue = jq
 	go refreshWorkerRuntimeSettingsDirect(ctx, pgStore, workerState, func(state *workerRuntimeState) {
 		if state == nil || jq == nil {
 			return
 		}
-		jq.SetMaxAttempts(uint64ToIntClamp(state.MaxDeliveries()))
+		jq.SetMaxAttempts(shared.Uint64ToIntClamp(state.MaxDeliveries()))
 	})
 
 	workerCount := configuredJobWorkerCount()

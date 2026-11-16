@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -15,7 +16,7 @@ func wrapHTTPHandlers(srv *apiServer, handlers map[string]http.HandlerFunc) map[
 	// and skips WebSocket upgrade paths and known binary-framed stream routes
 	// so that compression is only applied to regular JSON API responses.
 	for path, h := range handlers {
-		handlers[path] = gzipMiddleware(h).ServeHTTP
+		handlers[path] = shared.GzipMiddleware(h).ServeHTTP
 	}
 
 	// Wrap every handler with audit logging middleware. This runs after CORS

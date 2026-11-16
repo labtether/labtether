@@ -14,13 +14,13 @@ func (s *apiServer) handleV2HubStatus(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "hub:read") {
 		apiv2.WriteScopeForbidden(w, "hub:read")
 		return
 	}
 	agentCount := 0
 	if s.agentMgr != nil {
-		if len(allowedAssetsFromContext(r.Context())) == 0 {
+		if len(apiv2.AllowedAssetsFromContext(r.Context())) == 0 {
 			agentCount = s.agentMgr.Count()
 		} else {
 			for _, assetID := range s.agentMgr.ConnectedAssets() {
@@ -38,7 +38,7 @@ func (s *apiServer) handleV2HubStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handleV2HubAgents(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "hub:read") {
 		apiv2.WriteScopeForbidden(w, "hub:read")
 		return
 	}
@@ -57,7 +57,7 @@ func (s *apiServer) handleV2HubTLS(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "hub:admin"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -73,7 +73,7 @@ func (s *apiServer) handleV2HubTailscale(w http.ResponseWriter, r *http.Request)
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "hub:admin"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -102,7 +102,7 @@ func (s *apiServer) handleV2HubTLSRenew(w http.ResponseWriter, r *http.Request) 
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:admin") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "hub:admin") {
 		apiv2.WriteScopeForbidden(w, "hub:admin")
 		return
 	}
@@ -119,7 +119,7 @@ func (s *apiServer) handleV2HubTLSRenew(w http.ResponseWriter, r *http.Request) 
 		}
 		s.appendAuditEventBestEffort(audit.Event{
 			Type:      "hub.tls.renewed",
-			ActorID:   principalActorID(r.Context()),
+			ActorID:   apiv2.PrincipalActorID(r.Context()),
 			Details:   map[string]any{"tls_source": tlsSourceBuiltIn},
 			Timestamp: time.Now().UTC(),
 		}, "v2 hub tls renew (built-in)")
@@ -137,7 +137,7 @@ func (s *apiServer) handleV2HubTLSRenew(w http.ResponseWriter, r *http.Request) 
 		}
 		s.appendAuditEventBestEffort(audit.Event{
 			Type:      "hub.tls.renewed",
-			ActorID:   principalActorID(r.Context()),
+			ActorID:   apiv2.PrincipalActorID(r.Context()),
 			Details:   map[string]any{"tls_source": tlsSourceTailscale},
 			Timestamp: time.Now().UTC(),
 		}, "v2 hub tls renew (tailscale)")

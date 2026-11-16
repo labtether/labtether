@@ -35,8 +35,8 @@ func (s *apiServer) buildTruenasDeps() *truenaspkg.Deps {
 		AppendConnectorLogEvent:       s.appendConnectorLogEvent,
 		AppendConnectorLogEventWithID: s.appendConnectorLogEventWithID,
 
-		StartBrowserWebSocketKeepalive:    startBrowserWebSocketKeepalive,
-		TouchBrowserWebSocketReadDeadline: touchBrowserWebSocketReadDeadline,
+		StartBrowserWebSocketKeepalive:    shared.StartBrowserWebSocketKeepalive,
+		TouchBrowserWebSocketReadDeadline: shared.TouchBrowserWebSocketReadDeadline,
 	}
 }
 

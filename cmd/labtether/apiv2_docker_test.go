@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectors/docker"
 )
 
@@ -14,7 +15,7 @@ func TestHandleV2DockerHosts_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/docker/hosts", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2DockerHosts(rec, req)
@@ -27,7 +28,7 @@ func TestHandleV2DockerHosts_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/docker/hosts", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"docker:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"docker:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2DockerHosts(rec, req)
@@ -65,7 +66,7 @@ func TestHandleV2DockerContainersAcceptListedDockerIDs(t *testing.T) {
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/docker/containers/"+tc.id, nil)
 		ctx := contextWithPrincipal(req.Context(), "apikey:k1", "owner")
-		req = req.WithContext(contextWithScopes(ctx, []string{"docker:read"}))
+		req = req.WithContext(apiv2.ContextWithScopes(ctx, []string{"docker:read"}))
 		rec := httptest.NewRecorder()
 		s.handleV2DockerContainerActions(rec, req)
 		if rec.Code != tc.want {
@@ -81,7 +82,7 @@ func TestHandleV2DockerContainers_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("POST", "/api/v2/docker/containers/abc/start", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"docker:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"docker:read"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2DockerContainerActions(rec, req)

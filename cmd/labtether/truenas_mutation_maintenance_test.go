@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/assetstatus"
@@ -128,7 +129,7 @@ func (f *trueNASMutationFixture) request(method, path, body string, v2 bool) *ht
 		prefix = "/api/v2/truenas/assets/"
 	}
 	req := httptest.NewRequest(method, prefix+f.host+"/"+path, strings.NewReader(body))
-	req = req.WithContext(contextWithScopes(contextWithPrincipal(req.Context(), "test-admin", auth.RoleAdmin), []string{"connectors:read", "connectors:write"}))
+	req = req.WithContext(apiv2.ContextWithScopes(contextWithPrincipal(req.Context(), "test-admin", auth.RoleAdmin), []string{"connectors:read", "connectors:write"}))
 	rec := httptest.NewRecorder()
 	if v2 {
 		f.s.handleV2TrueNASAssets(rec, req)

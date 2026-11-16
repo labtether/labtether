@@ -12,7 +12,7 @@ func (s *apiServer) handleV2Groups(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		scope = "groups:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -25,7 +25,7 @@ func (s *apiServer) handleV2GroupActions(w http.ResponseWriter, r *http.Request)
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "groups:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

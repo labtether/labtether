@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 )
 
@@ -17,7 +18,7 @@ func TestHandleV2AssetFiles_ScopeDenied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/files?path=/", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"}) // no files:read
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"}) // no files:read
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -33,7 +34,7 @@ func TestHandleV2AssetProcesses_ScopeDenied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/processes", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"}) // no processes:read
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"}) // no processes:read
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -49,7 +50,7 @@ func TestHandleV2AssetServices_ScopeDenied(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/services", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"}) // no services:read
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"}) // no services:read
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -98,7 +99,7 @@ func TestHandleV2AssetServiceActionAdaptsPathToLegacyPayload(t *testing.T) {
 
 	// A conflicting legacy-shaped body must not override the V2 path contract.
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/services/labtether-qa-fixture/restart", strings.NewReader(`{"service":"ssh"}`))
-	ctx := contextWithScopes(req.Context(), []string{"services:write"})
+	ctx := apiv2.ContextWithScopes(req.Context(), []string{"services:write"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2AssetServiceActions(rec, req, "srv1", "labtether-qa-fixture/restart")
@@ -125,7 +126,7 @@ func TestHandleV2AssetProcesses_ScopeAllowed(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/v2/assets/srv1/processes", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"processes:read"})
+	ctx = apiv2.ContextWithScopes(ctx, []string{"processes:read"})
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

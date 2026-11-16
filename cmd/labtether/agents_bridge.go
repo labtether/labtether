@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/enrollment"
@@ -49,12 +50,12 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		AgentMgr: s.agentMgr,
 		EnrollmentTokenMaxUses: enrollment.BoundedLimit(
-			envOrDefaultInt("LABTETHER_ENROLLMENT_TOKEN_MAX_USES", enrollment.DefaultTokenMaxUsesCeiling),
+			shared.EnvOrDefaultInt("LABTETHER_ENROLLMENT_TOKEN_MAX_USES", enrollment.DefaultTokenMaxUsesCeiling),
 			enrollment.DefaultTokenMaxUsesCeiling,
 			enrollment.HardTokenMaxUsesCeiling,
 		),
 		MaxEnrolledAgents: enrollment.BoundedLimit(
-			envOrDefaultInt("LABTETHER_MAX_ENROLLED_AGENTS", enrollment.DefaultMaxEnrolledAgents),
+			shared.EnvOrDefaultInt("LABTETHER_MAX_ENROLLED_AGENTS", enrollment.DefaultMaxEnrolledAgents),
 			enrollment.DefaultMaxEnrolledAgents,
 			enrollment.HardMaxEnrolledAgents,
 		),
@@ -81,7 +82,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		EnforceRateLimit:           s.enforceClientRateLimit,
 		WrapAuth:                   s.withAuth,
 		WrapAdmin:                  s.withAdminAuth,
-		PrincipalActorID:           principalActorID,
+		PrincipalActorID:           apiv2.PrincipalActorID,
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {

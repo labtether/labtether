@@ -25,7 +25,7 @@ func (s *apiServer) mcpListDockerHosts() func(context.Context) ([]map[string]any
 	return func(ctx context.Context) ([]map[string]any, error) {
 		hosts := s.dockerCoordinator.ListHosts()
 		out := make([]map[string]any, 0, len(hosts))
-		allowedAssets := allowedAssetsFromContext(ctx)
+		allowedAssets := apiv2.AllowedAssetsFromContext(ctx)
 		for _, h := range hosts {
 			if !apikeys.AssetAllowed(allowedAssets, h.AgentID) {
 				continue
@@ -59,7 +59,7 @@ func (s *apiServer) mcpListDockerContainers() func(context.Context, string) ([]m
 		if !ok {
 			return nil, fmt.Errorf("docker host not found: %s", hostID)
 		}
-		if !apikeys.AssetAllowed(allowedAssetsFromContext(ctx), host.AgentID) {
+		if !apikeys.AssetAllowed(apiv2.AllowedAssetsFromContext(ctx), host.AgentID) {
 			return nil, fmt.Errorf("access denied to asset: %s", host.AgentID)
 		}
 		out := make([]map[string]any, 0, len(host.Containers))
@@ -92,7 +92,7 @@ func (s *apiServer) mcpRestartDockerContainer() func(context.Context, string) er
 		if err != nil {
 			return err
 		}
-		if !apikeys.AssetAllowed(allowedAssetsFromContext(ctx), resolved.host.AgentID) {
+		if !apikeys.AssetAllowed(apiv2.AllowedAssetsFromContext(ctx), resolved.host.AgentID) {
 			return fmt.Errorf("access denied to asset: %s", resolved.host.AgentID)
 		}
 		guardrails, err := s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails(resolved.host.AgentID, time.Now().UTC())

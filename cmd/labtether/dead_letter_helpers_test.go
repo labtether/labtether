@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 )
 
@@ -51,7 +52,7 @@ func TestDeadLetterClassifyDeadLetterError(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classifyDeadLetterError(tc.input); got != tc.want {
+			if got := shared.ClassifyDeadLetterError(tc.input); got != tc.want {
 				t.Fatalf("classifyDeadLetterError(%q): expected %q, got %q", tc.input, tc.want, got)
 			}
 		})
@@ -81,7 +82,7 @@ func TestDeadLetterChooseDeadLetterBucket(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := chooseDeadLetterBucket(tc.window); got != tc.want {
+			if got := shared.ChooseDeadLetterBucket(tc.window); got != tc.want {
 				t.Fatalf("chooseDeadLetterBucket(%v): expected %v, got %v", tc.window, tc.want, got)
 			}
 		})
@@ -94,21 +95,21 @@ func TestDeadLetterChooseDeadLetterBucket(t *testing.T) {
 
 func TestDeadLetterRates(t *testing.T) {
 	t.Run("zero window returns 0,0", func(t *testing.T) {
-		rph, rpd := deadLetterRates(100, 0)
+		rph, rpd := shared.DeadLetterRates(100, 0)
 		if rph != 0 || rpd != 0 {
 			t.Fatalf("expected (0, 0), got (%v, %v)", rph, rpd)
 		}
 	})
 
 	t.Run("negative window returns 0,0", func(t *testing.T) {
-		rph, rpd := deadLetterRates(100, -5)
+		rph, rpd := shared.DeadLetterRates(100, -5)
 		if rph != 0 || rpd != 0 {
 			t.Fatalf("expected (0, 0), got (%v, %v)", rph, rpd)
 		}
 	})
 
 	t.Run("24 hour window with 48 events", func(t *testing.T) {
-		rph, rpd := deadLetterRates(48, 24)
+		rph, rpd := shared.DeadLetterRates(48, 24)
 		if rph != 2 {
 			t.Fatalf("expected rate_per_hour=2, got %v", rph)
 		}
@@ -118,7 +119,7 @@ func TestDeadLetterRates(t *testing.T) {
 	})
 
 	t.Run("1 hour window with 10 events", func(t *testing.T) {
-		rph, rpd := deadLetterRates(10, 1)
+		rph, rpd := shared.DeadLetterRates(10, 1)
 		if rph != 10 {
 			t.Fatalf("expected rate_per_hour=10, got %v", rph)
 		}
@@ -129,7 +130,7 @@ func TestDeadLetterRates(t *testing.T) {
 	})
 
 	t.Run("zero total always returns 0 rates", func(t *testing.T) {
-		rph, rpd := deadLetterRates(0, 24)
+		rph, rpd := shared.DeadLetterRates(0, 24)
 		if rph != 0 || rpd != 0 {
 			t.Fatalf("expected (0, 0), got (%v, %v)", rph, rpd)
 		}
@@ -142,14 +143,14 @@ func TestDeadLetterRates(t *testing.T) {
 
 func TestDeadLetterTopDeadLetterEntries(t *testing.T) {
 	t.Run("empty map returns empty slice", func(t *testing.T) {
-		got := topDeadLetterEntries(map[string]int{}, 5)
+		got := shared.TopDeadLetterEntries(map[string]int{}, 5)
 		if len(got) != 0 {
 			t.Fatalf("expected empty slice, got %v", got)
 		}
 	})
 
 	t.Run("nil map returns empty slice", func(t *testing.T) {
-		got := topDeadLetterEntries(nil, 5)
+		got := shared.TopDeadLetterEntries(nil, 5)
 		if len(got) != 0 {
 			t.Fatalf("expected empty slice for nil map, got %v", got)
 		}
@@ -157,7 +158,7 @@ func TestDeadLetterTopDeadLetterEntries(t *testing.T) {
 
 	t.Run("results sorted by count descending", func(t *testing.T) {
 		counts := map[string]int{"a": 3, "b": 10, "c": 1}
-		got := topDeadLetterEntries(counts, 10)
+		got := shared.TopDeadLetterEntries(counts, 10)
 		if len(got) != 3 {
 			t.Fatalf("expected 3 entries, got %d", len(got))
 		}
@@ -174,7 +175,7 @@ func TestDeadLetterTopDeadLetterEntries(t *testing.T) {
 
 	t.Run("limit applied", func(t *testing.T) {
 		counts := map[string]int{"a": 5, "b": 10, "c": 1, "d": 8, "e": 3}
-		got := topDeadLetterEntries(counts, 3)
+		got := shared.TopDeadLetterEntries(counts, 3)
 		if len(got) != 3 {
 			t.Fatalf("expected 3 entries after limit, got %d", len(got))
 		}
@@ -186,7 +187,7 @@ func TestDeadLetterTopDeadLetterEntries(t *testing.T) {
 
 	t.Run("ties broken alphabetically by key", func(t *testing.T) {
 		counts := map[string]int{"z": 5, "a": 5, "m": 5}
-		got := topDeadLetterEntries(counts, 10)
+		got := shared.TopDeadLetterEntries(counts, 10)
 		if len(got) != 3 {
 			t.Fatalf("expected 3 entries, got %d", len(got))
 		}
@@ -198,7 +199,7 @@ func TestDeadLetterTopDeadLetterEntries(t *testing.T) {
 
 	t.Run("zero limit returns all entries", func(t *testing.T) {
 		counts := map[string]int{"x": 1, "y": 2}
-		got := topDeadLetterEntries(counts, 0)
+		got := shared.TopDeadLetterEntries(counts, 0)
 		if len(got) != 2 {
 			t.Fatalf("expected 2 entries for limit=0, got %d", len(got))
 		}
@@ -227,7 +228,7 @@ func TestDeadLetterMapLogEventToDeadLetter(t *testing.T) {
 			},
 		}
 
-		got := mapLogEventToDeadLetter(event)
+		got := shared.MapLogEventToDeadLetter(event)
 
 		if got.ID != "evt-123" {
 			t.Errorf("expected ID evt-123, got %q", got.ID)
@@ -258,7 +259,7 @@ func TestDeadLetterMapLogEventToDeadLetter(t *testing.T) {
 			Timestamp: ts,
 			Fields:    map[string]string{},
 		}
-		got := mapLogEventToDeadLetter(event)
+		got := shared.MapLogEventToDeadLetter(event)
 		if got.ID != "event-fallback" {
 			t.Fatalf("expected fallback ID event-fallback, got %q", got.ID)
 		}
@@ -271,7 +272,7 @@ func TestDeadLetterMapLogEventToDeadLetter(t *testing.T) {
 			Timestamp: ts,
 			Fields:    map[string]string{},
 		}
-		got := mapLogEventToDeadLetter(event)
+		got := shared.MapLogEventToDeadLetter(event)
 		if got.Error != "event level message" {
 			t.Fatalf("expected error from Message, got %q", got.Error)
 		}
@@ -283,7 +284,7 @@ func TestDeadLetterMapLogEventToDeadLetter(t *testing.T) {
 			Timestamp: ts,
 			Fields:    nil,
 		}
-		got := mapLogEventToDeadLetter(event)
+		got := shared.MapLogEventToDeadLetter(event)
 		if got.Deliveries != 0 {
 			t.Fatalf("expected 0 deliveries for nil fields, got %d", got.Deliveries)
 		}
@@ -297,7 +298,7 @@ func TestDeadLetterMapLogEventToDeadLetter(t *testing.T) {
 			Timestamp: localTS,
 			Fields:    map[string]string{},
 		}
-		got := mapLogEventToDeadLetter(event)
+		got := shared.MapLogEventToDeadLetter(event)
 		if got.CreatedAt.Location() != time.UTC {
 			t.Fatalf("expected UTC location, got %v", got.CreatedAt.Location())
 		}
@@ -321,7 +322,7 @@ func TestDeadLetterMapProjectedDeadLetterEvent(t *testing.T) {
 		CreatedAt:  ts,
 	}
 
-	got := mapProjectedDeadLetterEvent(event)
+	got := shared.MapProjectedDeadLetterEvent(event)
 
 	if got.ID != "dl-001" {
 		t.Errorf("expected trimmed ID dl-001, got %q", got.ID)
@@ -351,7 +352,7 @@ func TestDeadLetterMapProjectedDeadLetterEvent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDeadLetterAnalyticsWithTotal(t *testing.T) {
-	base := deadLetterAnalyticsResponse{
+	base := shared.DeadLetterAnalyticsResponse{
 		Window:      "24h0m0s",
 		Bucket:      "1h0m0s",
 		Total:       10,
@@ -361,7 +362,7 @@ func TestDeadLetterAnalyticsWithTotal(t *testing.T) {
 
 	t.Run("updates total and recomputes rates", func(t *testing.T) {
 		window := 24 * time.Hour
-		got := deadLetterAnalyticsWithTotal(base, 48, window)
+		got := shared.DeadLetterAnalyticsWithTotal(base, 48, window)
 		if got.Total != 48 {
 			t.Errorf("expected total 48, got %d", got.Total)
 		}
@@ -374,7 +375,7 @@ func TestDeadLetterAnalyticsWithTotal(t *testing.T) {
 	})
 
 	t.Run("negative total clamped to zero", func(t *testing.T) {
-		got := deadLetterAnalyticsWithTotal(base, -1, 24*time.Hour)
+		got := shared.DeadLetterAnalyticsWithTotal(base, -1, 24*time.Hour)
 		if got.Total != 0 {
 			t.Errorf("expected total 0 for negative input, got %d", got.Total)
 		}

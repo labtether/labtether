@@ -11,6 +11,7 @@ import (
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 const (
@@ -40,7 +41,7 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:write") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "files:write") {
 		apiv2.WriteScopeForbidden(w, "files:write")
 		return
 	}
@@ -53,7 +54,7 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 			DestPath         string `json:"dest_path"`
 		} `json:"targets"`
 	}
-	if err := decodeJSONBody(w, r, &req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
@@ -181,7 +182,7 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 
 	s.appendAuditEventBestEffort(audit.Event{
 		Type:      "api.bulk.file_push",
-		ActorID:   principalActorID(r.Context()),
+		ActorID:   apiv2.PrincipalActorID(r.Context()),
 		Details:   map[string]any{"source_connection_id": req.SourceConnectionID, "source_path": req.SourcePath, "target_count": len(req.Targets)},
 		Timestamp: time.Now().UTC(),
 	}, "v2 bulk file-push")

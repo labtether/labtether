@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func (s *apiServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -38,7 +40,7 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			servicehttp.WriteError(w, http.StatusForbidden, "forbidden")
 		}
 		if ticketedReq, ok := s.consumeStreamTicketAuth(r); ok {
-			if rejectHostDataForRole(w, ticketedReq, userRoleFromContext(ticketedReq.Context())) {
+			if rejectHostDataForRole(w, ticketedReq, apiv2.UserRoleFromContext(ticketedReq.Context())) {
 				return
 			}
 			// The ticket may predate a logout, deletion, demotion or key removal.
@@ -153,9 +155,9 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			}
 
 			ctx := contextWithPrincipal(r.Context(), "apikey:"+key.ID, role)
-			ctx = contextWithScopes(ctx, key.Scopes)
-			ctx = contextWithAllowedAssets(ctx, key.AllowedAssets)
-			ctx = contextWithAPIKeyID(ctx, key.ID)
+			ctx = apiv2.ContextWithScopes(ctx, key.Scopes)
+			ctx = apiv2.ContextWithAllowedAssets(ctx, key.AllowedAssets)
+			ctx = apiv2.ContextWithAPIKeyID(ctx, key.ID)
 			next(w, r.WithContext(ctx))
 			return
 		}
@@ -168,7 +170,7 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 				return
 			}
 			ctx := contextWithPrincipal(r.Context(), "console-service", auth.RoleAdmin)
-			ctx = contextWithScopes(ctx, []string{"settings:read"})
+			ctx = apiv2.ContextWithScopes(ctx, []string{"settings:read"})
 			next(w, r.WithContext(ctx))
 			return
 		}
@@ -251,7 +253,7 @@ func (s *apiServer) authenticatedSessionRequest(r *http.Request) (*http.Request,
 
 func (s *apiServer) withAdminAuth(next http.HandlerFunc) http.HandlerFunc {
 	return s.withAuth(func(w http.ResponseWriter, r *http.Request) {
-		if !auth.HasAdminPrivileges(userRoleFromContext(r.Context())) {
+		if !auth.HasAdminPrivileges(apiv2.UserRoleFromContext(r.Context())) {
 			servicehttp.WriteError(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -374,13 +376,13 @@ func (s *apiServer) consumeStreamTicketAuth(r *http.Request) (*http.Request, boo
 	delete(s.streamTicketStore.Tickets, ticket)
 	ctx := contextWithPrincipal(r.Context(), entry.ActorID, entry.Role)
 	if entry.Scopes != nil {
-		ctx = contextWithScopes(ctx, append([]string(nil), entry.Scopes...))
+		ctx = apiv2.ContextWithScopes(ctx, append([]string(nil), entry.Scopes...))
 	}
 	if entry.AllowedAssets != nil {
-		ctx = contextWithAllowedAssets(ctx, append([]string(nil), entry.AllowedAssets...))
+		ctx = apiv2.ContextWithAllowedAssets(ctx, append([]string(nil), entry.AllowedAssets...))
 	}
 	if entry.APIKeyID != "" {
-		ctx = contextWithAPIKeyID(ctx, entry.APIKeyID)
+		ctx = apiv2.ContextWithAPIKeyID(ctx, entry.APIKeyID)
 	}
 	if entry.AuthSessionID != "" {
 		ctx = sharedpkg.ContextWithAuthSessionID(ctx, entry.AuthSessionID)
@@ -393,8 +395,8 @@ func (s *apiServer) issueStreamTicket(ctx context.Context, sessionID string) (st
 	if sessionID == "" {
 		return "", time.Time{}, errors.New("session id is required")
 	}
-	actorID := strings.TrimSpace(userIDFromContext(ctx))
-	role := auth.NormalizeRole(userRoleFromContext(ctx))
+	actorID := strings.TrimSpace(apiv2.UserIDFromContext(ctx))
+	role := auth.NormalizeRole(apiv2.UserRoleFromContext(ctx))
 	if actorID == "" || role == "" {
 		return "", time.Time{}, errors.New("authenticated principal is required")
 	}
@@ -422,9 +424,9 @@ func (s *apiServer) issueStreamTicket(ctx context.Context, sessionID string) (st
 		SessionID:     sessionID,
 		ActorID:       actorID,
 		Role:          role,
-		Scopes:        append([]string(nil), scopesFromContext(ctx)...),
-		AllowedAssets: append([]string(nil), allowedAssetsFromContext(ctx)...),
-		APIKeyID:      apiKeyIDFromContext(ctx),
+		Scopes:        append([]string(nil), apiv2.ScopesFromContext(ctx)...),
+		AllowedAssets: append([]string(nil), apiv2.AllowedAssetsFromContext(ctx)...),
+		APIKeyID:      apiv2.APIKeyIDFromContext(ctx),
 		AuthSessionID: sharedpkg.AuthSessionIDFromContext(ctx),
 		ExpiresAt:     expiresAt,
 	}

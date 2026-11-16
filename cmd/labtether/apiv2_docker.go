@@ -12,7 +12,7 @@ func (s *apiServer) handleV2DockerHosts(w http.ResponseWriter, r *http.Request) 
 	if r.Method == http.MethodPost {
 		scope = "docker:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -25,7 +25,7 @@ func (s *apiServer) handleV2DockerHostActions(w http.ResponseWriter, r *http.Req
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
 		scope = "docker:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -39,7 +39,7 @@ func (s *apiServer) handleV2DockerContainerActions(w http.ResponseWriter, r *htt
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
 		scope = "docker:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -73,7 +73,7 @@ func (s *apiServer) handleV2DockerStackActions(w http.ResponseWriter, r *http.Re
 	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
 		scope = "docker:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

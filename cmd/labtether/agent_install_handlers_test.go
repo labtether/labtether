@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // TestHandleAgentInstallScript exercises the install script endpoint.
@@ -428,7 +430,7 @@ func TestHTTPURLToWS(t *testing.T) {
 		tc := tc
 		t.Run(tc.input, func(t *testing.T) {
 			t.Parallel()
-			got := httpURLToWS(tc.input)
+			got := shared.HTTPURLToWS(tc.input)
 			if got != tc.want {
 				t.Errorf("httpURLToWS(%q) = %q, want %q", tc.input, got, tc.want)
 			}

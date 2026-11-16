@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -37,7 +38,7 @@ func TestHandleSessionStreamRejectsHubLocalForNonOwner(t *testing.T) {
 	session := createHubLocalSession(t, sut)
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/"+session.ID+"/stream", nil)
-	req = req.WithContext(contextWithUserID(req.Context(), "analyst-user"))
+	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "analyst-user"))
 	rec := httptest.NewRecorder()
 	sut.handleSessionStream(rec, req, session)
 

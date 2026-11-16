@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -118,7 +119,7 @@ func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rate limit by client IP.
-	clientIP := requestClientKey(r)
+	clientIP := shared.RequestClientKey(r)
 	if s.demoRateLimiter == nil || !s.demoRateLimiter.allow(clientIP) {
 		servicehttp.WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
 		return

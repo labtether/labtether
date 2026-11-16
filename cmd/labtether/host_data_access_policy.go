@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -120,7 +121,7 @@ func rejectHostDataForRole(w http.ResponseWriter, r *http.Request, role string) 
 // mcpAuthorizeHostDataRead applies the same role floor to MCP tools that read
 // files, process command lines or container logs from a host.
 func mcpAuthorizeHostDataRead(ctx context.Context) error {
-	if !auth.HasWritePrivileges(userRoleFromContext(ctx)) {
+	if !auth.HasWritePrivileges(apiv2.UserRoleFromContext(ctx)) {
 		return errors.New("reading host data requires operator role")
 	}
 	return nil

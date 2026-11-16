@@ -13,6 +13,7 @@ import (
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/modelmap"
@@ -100,7 +101,7 @@ func TestDockerActionDryRunNeverSendsAgentRPC(t *testing.T) {
 						deps.JobQueue = queue
 						body, _ := json.Marshal(actions.ExecuteRequest{Type: actions.RunTypeConnectorAction, ConnectorID: "docker", ActionID: action.id, Target: action.target, DryRun: dryRun})
 						r := httptest.NewRequest(http.MethodPost, "/actions/execute", bytes.NewReader(body))
-						r = r.WithContext(contextWithScopes(contextWithPrincipal(ctx, "owner", "owner"), []string{"actions:exec"}))
+						r = r.WithContext(apiv2.ContextWithScopes(contextWithPrincipal(ctx, "owner", "owner"), []string{"actions:exec"}))
 						rec := httptest.NewRecorder()
 						deps.HandleActionExecute(rec, r)
 						if rec.Code != http.StatusAccepted || len(queue.jobs) != 1 || queue.jobs[0].DryRun != dryRun {

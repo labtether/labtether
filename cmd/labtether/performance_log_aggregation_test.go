@@ -8,6 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
 )
 
 type countingLogStore struct {
@@ -52,7 +55,7 @@ func (c *countingLogStore) QueryDeadLetterEvents(from, to time.Time, limit int) 
 
 	out := make([]logs.DeadLetterEvent, 0, len(events))
 	for _, event := range events {
-		mapped := mapLogEventToDeadLetter(event)
+		mapped := shared.MapLogEventToDeadLetter(event)
 		out = append(out, logs.DeadLetterEvent{
 			ID:         mapped.ID,
 			Component:  mapped.Component,
@@ -92,7 +95,7 @@ func (c *countingLogStore) ListSourcesSince(limit int, from time.Time) ([]logs.S
 	if err != nil {
 		return nil, err
 	}
-	return statusAggregateLogSources(events, limit), nil
+	return statusaggpkg.AggregateLogSources(events, limit), nil
 }
 
 func (c *countingLogStore) ListSources(limit int) ([]logs.SourceSummary, error) {
@@ -149,7 +152,7 @@ func (c *countingLogStore) QueryGroupSeverityCounts(req logs.GroupSeverityCountR
 
 func (c *countingLogStore) LogEventsWatermark() (time.Time, error) {
 	c.logWatermarkCalls++
-	if store, ok := c.LogStore.(statusAggregateLogWatermarkReader); ok {
+	if store, ok := c.LogStore.(statusaggpkg.LogWatermarkReader); ok {
 		return store.LogEventsWatermark()
 	}
 	return time.Unix(0, 0).UTC(), nil

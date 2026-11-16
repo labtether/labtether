@@ -17,6 +17,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentcaps"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -201,7 +202,7 @@ func (s *apiServer) auditSSHHubKeyRotation(
 	failures int,
 ) {
 	event := audit.NewEvent(sshHubKeyRotationAuditType)
-	event.ActorID = principalActorID(r.Context())
+	event.ActorID = apiv2.PrincipalActorID(r.Context())
 	event.Target = "hub"
 	event.Decision = decision
 	event.Reason = reason
@@ -302,7 +303,7 @@ func (s *apiServer) handleSSHHubKeyRotate(w http.ResponseWriter, r *http.Request
 	removalFailures := s.removeHubSSHKeyFromAssets(stagedAssets, identity.PublicKey)
 	s.auditSSHHubKeyRotation(r, "applied", requestPayload.Reason, "complete", oldInfo, newInfo, len(connectedAssets), len(stagedAssets), removalFailures)
 
-	actorID := principalActorID(r.Context())
+	actorID := apiv2.PrincipalActorID(r.Context())
 	log.Printf("ssh-rotate: actor=%s profile=%s key_type=%s staged=%d total=%d old_key_removal_failures=%d", actorID, identity.ProfileID, newInfo.KeyType, len(stagedAssets), len(connectedAssets), removalFailures) // #nosec G706 -- Values are server-derived bounded metadata; request reason and key material are intentionally omitted.
 
 	response := map[string]any{

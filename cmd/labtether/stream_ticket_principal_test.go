@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	sharedpkg "github.com/labtether/labtether/internal/hubapi/shared"
 )
@@ -58,7 +59,7 @@ func TestStreamTicketRefusedAfterLogoutOrDemotion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issue ticket: %v", err)
 	}
-	if err := sut.authStore.UpdateUserRole(userIDFromContext(demoted), auth.RoleOperator); err != nil {
+	if err := sut.authStore.UpdateUserRole(apiv2.UserIDFromContext(demoted), auth.RoleOperator); err != nil {
 		t.Fatalf("demote user: %v", err)
 	}
 	if code, called := redeem(ticket); called || code != http.StatusUnauthorized {

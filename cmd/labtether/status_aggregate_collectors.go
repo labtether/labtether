@@ -4,23 +4,11 @@ import (
 	"time"
 
 	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
-	"github.com/labtether/labtether/internal/logs"
 )
 
 // status_aggregate_collectors.go — thin stub.
 //
 // All implementation has moved to internal/hubapi/statusagg/.
-// Type aliases and thin wrappers are provided so test files and other callers
-// in cmd/labtether/ continue to compile without modification.
-
-// statusAggregateLogWatermarkReader is an alias for the canonical interface.
-type statusAggregateLogWatermarkReader = statusaggpkg.LogWatermarkReader
-
-// statusAggregateLogSources wraps the exported package function for test
-// callers that use the old package-level name.
-func statusAggregateLogSources(events []logs.Event, limit int) []logs.SourceSummary {
-	return statusaggpkg.AggregateLogSources(events, limit)
-}
 
 // statusLogSourcesCacheEntry and statusTelemetryOverviewCacheEntry are
 // referenced by name in admin_handlers.go (via Invalidate) and nowhere
@@ -29,7 +17,7 @@ func statusAggregateLogSources(events []logs.Event, limit int) []logs.SourceSumm
 // statusRecentSourceLister is aliased in statusagg_bridge.go.
 
 // Compile-time assertion that the shim matches the real interface.
-var _ statusAggregateLogWatermarkReader = (*stubLogWatermark)(nil)
+var _ statusaggpkg.LogWatermarkReader = (*stubLogWatermark)(nil)
 
 type stubLogWatermark struct{}
 

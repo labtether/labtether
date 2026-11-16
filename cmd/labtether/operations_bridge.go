@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
@@ -221,16 +222,16 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 			return shared.DecodeJSONBody(w, r, dst)
 		},
 		PrincipalActorID: func(ctx context.Context) string {
-			return principalActorID(ctx)
+			return apiv2.PrincipalActorID(ctx)
 		},
 		AppendAuditEventBestEffort: func(event audit.Event, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
 		},
 		AllowedAssetsFromContext: func(ctx context.Context) []string {
-			return allowedAssetsFromContext(ctx)
+			return apiv2.AllowedAssetsFromContext(ctx)
 		},
 		ScopesFromContext: func(ctx context.Context) []string {
-			return scopesFromContext(ctx)
+			return apiv2.ScopesFromContext(ctx)
 		},
 		EvaluateCommandPolicy:   s.evaluateStructuredCommandPolicy,
 		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
@@ -243,7 +244,7 @@ func (s *apiServer) evaluateStructuredCommandPolicy(ctx context.Context, assetID
 		return policy.CheckResponse{Allowed: false, Reason: "command policy unavailable", Mode: "structured"}
 	}
 	return policy.Evaluate(policy.CheckRequest{
-		ActorID: principalActorID(ctx),
+		ActorID: apiv2.PrincipalActorID(ctx),
 		Target:  assetID,
 		Mode:    "structured",
 		Action:  "command_execute",

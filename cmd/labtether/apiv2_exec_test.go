@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/groupmaintenance"
 )
@@ -44,7 +45,7 @@ func TestHandleV2AssetExec_ScopeDenied(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/v2/assets/srv1/exec", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"}) // no exec scope
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"}) // no exec scope
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

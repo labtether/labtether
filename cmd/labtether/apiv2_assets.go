@@ -11,13 +11,13 @@ import (
 func (s *apiServer) handleV2Assets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:read") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:read") {
 			apiv2.WriteScopeForbidden(w, "assets:read")
 			return
 		}
 		s.v2ListAssets(w, r)
 	case http.MethodPost:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
@@ -42,7 +42,7 @@ func (s *apiServer) handleV2AssetActions(w http.ResponseWriter, r *http.Request)
 		assetID = assetID[:idx]
 
 		// Check asset allowlist with the real asset ID.
-		if !apiv2.AssetCheck(allowedAssetsFromContext(r.Context()), assetID) {
+		if !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), assetID) {
 			apiv2.WriteAssetForbidden(w, assetID)
 			return
 		}
@@ -52,26 +52,26 @@ func (s *apiServer) handleV2AssetActions(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check asset allowlist.
-	if !apiv2.AssetCheck(allowedAssetsFromContext(r.Context()), assetID) {
+	if !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), assetID) {
 		apiv2.WriteAssetForbidden(w, assetID)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodGet:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:read") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:read") {
 			apiv2.WriteScopeForbidden(w, "assets:read")
 			return
 		}
 		s.v2GetAsset(w, r, assetID)
 	case http.MethodPut, http.MethodPatch:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
 		s.v2UpdateAsset(w, r, assetID)
 	case http.MethodDelete:
-		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "assets:write") {
+		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}

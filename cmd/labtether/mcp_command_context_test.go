@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -29,8 +30,8 @@ func TestMCPExecCancellationReachesAgentWaiter(t *testing.T) {
 			agent := agentmgr.NewAgentConn(serverWS, assetID, "linux")
 			s.agentMgr.Register(agent)
 			base := contextWithPrincipal(context.Background(), "mcp-context-owner", "admin")
-			base = contextWithScopes(base, []string{"assets:exec"})
-			base = contextWithAllowedAssets(base, []string{assetID})
+			base = apiv2.ContextWithScopes(base, []string{"assets:exec"})
+			base = apiv2.ContextWithAllowedAssets(base, []string{assetID})
 			ctx, cancel := context.WithCancel(base)
 			var workers []<-chan struct{}
 			t.Cleanup(func() {

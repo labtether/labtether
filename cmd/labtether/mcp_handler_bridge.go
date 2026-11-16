@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
 	dockerconnector "github.com/labtether/labtether/internal/connectors/docker"
@@ -258,16 +259,16 @@ func mcpMutationRate(tool string) int {
 
 func (s *apiServer) mcpAuthorizeMutation() func(context.Context, string, string) error {
 	return func(ctx context.Context, tool, target string) error {
-		actor := strings.TrimSpace(userIDFromContext(ctx))
+		actor := strings.TrimSpace(apiv2.UserIDFromContext(ctx))
 		if actor == "" {
 			return errors.New("MCP principal is unavailable")
 		}
-		if !auth.HasWritePrivileges(userRoleFromContext(ctx)) {
+		if !auth.HasWritePrivileges(apiv2.UserRoleFromContext(ctx)) {
 			return errors.New("MCP mutations require operator role")
 		}
 
 		assetTarget := strings.TrimSpace(target)
-		allowedAssets := allowedAssetsFromContext(ctx)
+		allowedAssets := apiv2.AllowedAssetsFromContext(ctx)
 		if tool == "docker_container_restart" {
 			resolved, err := s.mcpResolveDockerContainer("", target)
 			if err != nil {
@@ -321,7 +322,7 @@ func (s *apiServer) mcpAuditMutation() func(context.Context, string, string, str
 	return func(ctx context.Context, tool, target, decision, reason string, details map[string]any) {
 		s.appendAuditEventBestEffort(audit.Event{
 			Type:      "mcp.tool",
-			ActorID:   principalActorID(ctx),
+			ActorID:   apiv2.PrincipalActorID(ctx),
 			Target:    target,
 			Decision:  decision,
 			Reason:    reason,
@@ -333,12 +334,12 @@ func (s *apiServer) mcpAuditMutation() func(context.Context, string, string, str
 
 func (s *apiServer) mcpWakeAsset() func(context.Context, string) (map[string]any, error) {
 	return func(ctx context.Context, assetID string) (map[string]any, error) {
-		if strings.TrimSpace(userIDFromContext(ctx)) == "" {
+		if strings.TrimSpace(apiv2.UserIDFromContext(ctx)) == "" {
 			return nil, errors.New("MCP principal is unavailable")
 		}
 		deps := s.buildResourcesDeps()
 		deps.EnforceRateLimit = func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool {
-			return s.enforceRateLimitGlobal(w, mcpRateKey(principalActorID(r.Context()), bucket, assetID), limit, window)
+			return s.enforceRateLimitGlobal(w, mcpRateKey(apiv2.PrincipalActorID(r.Context()), bucket, assetID), limit, window)
 		}
 		handler := func(w http.ResponseWriter, r *http.Request) { deps.HandleWakeOnLAN(w, r, assetID) }
 		value, err := s.mcpJSONHandler(http.MethodPost, "/assets/"+url.PathEscape(assetID)+"/wake", nil, handler)(ctx)

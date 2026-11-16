@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
 )
 
 func TestHandleV2Webhooks_Create(t *testing.T) {
@@ -182,7 +184,7 @@ func TestHandleV2Webhooks_ScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest("GET", "/api/v2/webhooks", nil)
 	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
-	ctx = contextWithScopes(ctx, []string{"assets:read"}) // no webhooks scope
+	ctx = apiv2.ContextWithScopes(ctx, []string{"assets:read"}) // no webhooks scope
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	s.handleV2Webhooks(rec, req)

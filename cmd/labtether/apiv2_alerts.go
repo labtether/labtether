@@ -8,7 +8,7 @@ import (
 )
 
 func (s *apiServer) handleV2Alerts(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "alerts:read") {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "alerts:read") {
 		apiv2.WriteScopeForbidden(w, "alerts:read")
 		return
 	}
@@ -21,7 +21,7 @@ func (s *apiServer) handleV2AlertActions(w http.ResponseWriter, r *http.Request)
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "alerts:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -39,7 +39,7 @@ func (s *apiServer) handleV2AlertRules(w http.ResponseWriter, r *http.Request) {
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "alerts:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -52,7 +52,7 @@ func (s *apiServer) handleV2Incidents(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		scope = "alerts:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
@@ -65,7 +65,7 @@ func (s *apiServer) handleV2IncidentActions(w http.ResponseWriter, r *http.Reque
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "alerts:write"
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}

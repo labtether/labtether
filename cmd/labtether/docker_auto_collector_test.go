@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -30,7 +31,7 @@ func (s *autoDockerCollectorStoreSpy) CreateHubCollector(req hubcollector.Create
 	copiedReq := hubcollector.CreateCollectorRequest{
 		AssetID:         req.AssetID,
 		CollectorType:   req.CollectorType,
-		Config:          cloneAnyMap(req.Config),
+		Config:          shared.CloneAnyMap(req.Config),
 		IntervalSeconds: interval,
 	}
 	if req.Enabled != nil {
@@ -47,7 +48,7 @@ func (s *autoDockerCollectorStoreSpy) CreateHubCollector(req hubcollector.Create
 		ID:              fmt.Sprintf("hc-auto-%d", len(s.createCalls)),
 		AssetID:         req.AssetID,
 		CollectorType:   req.CollectorType,
-		Config:          cloneAnyMap(req.Config),
+		Config:          shared.CloneAnyMap(req.Config),
 		Enabled:         enabled,
 		IntervalSeconds: interval,
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/logs"
@@ -79,13 +80,13 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 			return s.consumeStreamTicketAuth(r)
 		},
 		PrincipalActorID: func(ctx context.Context) string {
-			return principalActorID(ctx)
+			return apiv2.PrincipalActorID(ctx)
 		},
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
-			return decodeJSONBody(w, r, dst)
+			return shared.DecodeJSONBody(w, r, dst)
 		},
 		ValidateMaxLen: func(field, value string, maxLen int) error {
-			return validateMaxLen(field, value, maxLen)
+			return shared.ValidateMaxLen(field, value, maxLen)
 		},
 		AppendAuditEventBestEffort: func(event audit.Event, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
@@ -310,7 +311,7 @@ type terminalControlMessage = terminalpkg.TerminalControlMessage
 // Standalone helper functions that were defined in the terminal session handlers
 // and used by other cmd/labtether files.
 func canAccessOwnedSession(r *http.Request, sessionActorID string) bool {
-	actorID := principalActorID(r.Context())
+	actorID := apiv2.PrincipalActorID(r.Context())
 	if apiv2.IsOwnerPrincipal(r.Context()) {
 		return true
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/labtether/labtether/internal/fileproto"
 	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/modelmap"
 	"github.com/labtether/labtether/internal/notifications"
@@ -125,7 +126,7 @@ func newAPIServer(
 		authValidator:              authValidator,
 		oidcRef:                    oidcRef,
 		agentMgr:                   agentManager,
-		allowLegacySharedAgentAuth: envOrDefaultBool("LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH", false),
+		allowLegacySharedAgentAuth: shared.EnvOrDefaultBool("LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH", false),
 		broadcaster:                newEventBroadcaster(),
 		notificationDispatcher: NotificationDispatcher{
 			Adapters:    defaultNotificationAdapters(pushRelayURLFromEnv()),
@@ -138,16 +139,16 @@ func newAPIServer(
 		desktopSPICE:         make(map[string]desktopSPICEProxyTarget, 128),
 		agentCache: func() *agentspkg.AgentCache {
 			cache := &agentspkg.AgentCache{
-				RuntimeDir: envOrDefault("LABTETHER_AGENT_CACHE_DIR", "/data/agents"),
-				BakedInDir: envOrDefault("LABTETHER_AGENT_DIR", "/opt/labtether/agents"),
+				RuntimeDir: shared.EnvOrDefault("LABTETHER_AGENT_CACHE_DIR", "/data/agents"),
+				BakedInDir: shared.EnvOrDefault("LABTETHER_AGENT_DIR", "/opt/labtether/agents"),
 			}
 			if err := cache.LoadManifest(); err != nil {
 				log.Printf("WARN: agent manifest not found: %v (agent binary endpoints will return 503 until manifest is available)", err)
 			}
 			return cache
 		}(),
-		externalURL:            strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
-		consoleURL:             strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
+		externalURL:            strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		consoleURL:             strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
 		pendingAgents:          newPendingAgents(),
 		challengeStore:         auth.NewChallengeStore(),
 		installStateStore:      installStateStore,

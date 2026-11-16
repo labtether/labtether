@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/dependencies"
@@ -71,8 +72,8 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 
 		EnforceRateLimit:        s.enforceRateLimit,
 		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
-		PrincipalActorID:        func(ctx context.Context) string { return principalActorID(ctx) },
-		UserIDFromContext:       func(ctx context.Context) string { return userIDFromContext(ctx) },
+		PrincipalActorID:        func(ctx context.Context) string { return apiv2.PrincipalActorID(ctx) },
+		UserIDFromContext:       func(ctx context.Context) string { return apiv2.UserIDFromContext(ctx) },
 		SecretsManager:          s.secretsManager,
 		AppendAuditEventBestEffort: func(event audit.Event, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)

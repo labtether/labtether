@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -221,7 +222,7 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 // limits keep their own keys. Requests without the header skip the trusted
 // proxy check and its name lookup.
 func auditRequestAddresses(r *http.Request) (client, peer string) {
-	peer = requestClientKey(r)
+	peer = shared.RequestClientKey(r)
 	if strings.TrimSpace(r.Header.Get("X-Forwarded-For")) == "" {
 		return peer, peer
 	}

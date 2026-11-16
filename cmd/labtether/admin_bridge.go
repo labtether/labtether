@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -37,7 +38,7 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		DataDir: s.dataDir,
 
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
-			return decodeJSONBody(w, r, dst)
+			return shared.DecodeJSONBody(w, r, dst)
 		},
 		EnforceRateLimit: s.enforceRateLimit,
 		AppendAuditEventBestEffort: func(event adminpkg.AuditEventAlias, logMessage string) {
@@ -59,7 +60,7 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		InvalidateWebServiceURLGroupingConfigCache: s.invalidateWebServiceURLGroupingConfigCache,
 		InvalidateStatusCaches:                     s.invalidateStatusCaches,
 		PrincipalActorID: func(ctx context.Context) string {
-			return principalActorID(ctx)
+			return apiv2.PrincipalActorID(ctx)
 		},
 		EnsureHubIdentity: func(d *adminpkg.Deps) (*shared.HubSSHIdentity, error) {
 			return s.ensureCurrentHubSSHIdentity()
@@ -69,7 +70,7 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		},
 		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 		UserRoleFromContext: func(ctx context.Context) string {
-			return userRoleFromContext(ctx)
+			return apiv2.UserRoleFromContext(ctx)
 		},
 		// Wire cmd/labtether package-level vars via closures so that test
 		// overrides of tailscaleLookPath, tailscaleFallbackPaths, and
