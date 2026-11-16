@@ -1,4 +1,4 @@
-package main
+package collectors_test
 
 import (
 	"context"
@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/assetid"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
 func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/states", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[{"entity_id":"sun.sun","state":"above_horizon","attributes":{"friendly_name":"Sun"}}]`))
@@ -25,9 +27,9 @@ func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testin
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
-	store := newRecordingHubCollectorStore()
-	sut.hubCollectorStore = store
+	sut := hubdeps.New(t)
+	store := testutil.NewRecordingHubCollectorStore()
+	sut.HubCollectorStore = store
 
 	collectorIDs := []string{"collector-ha-alpha", "collector-ha-harbor"}
 	for index, collectorID := range collectorIDs {
@@ -44,12 +46,12 @@ func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testin
 			},
 		}
 		store.StatusByID[collector.ID] = collector
-		sut.executeCollector(context.Background(), collector)
+		sut.CollectorsDeps().ExecuteCollector(context.Background(), collector)
 	}
 
 	for _, collectorID := range collectorIDs {
 		id := assetid.ScopeCollectorAssetID("ha-entity-sun-sun", collectorID)
-		asset, ok, err := sut.assetStore.GetAsset(id)
+		asset, ok, err := sut.AssetStore.GetAsset(id)
 		if err != nil || !ok {
 			t.Fatalf("expected scoped entity %s: ok=%v err=%v", id, ok, err)
 		}
@@ -57,7 +59,7 @@ func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testin
 			t.Fatalf("unexpected entity metadata for %s: %#v", id, asset.Metadata)
 		}
 	}
-	if _, ok, err := sut.assetStore.GetAsset("ha-entity-sun-sun"); err != nil || ok {
+	if _, ok, err := sut.AssetStore.GetAsset("ha-entity-sun-sun"); err != nil || ok {
 		t.Fatalf("unexpected ambiguous legacy entity: ok=%v err=%v", ok, err)
 	}
 }

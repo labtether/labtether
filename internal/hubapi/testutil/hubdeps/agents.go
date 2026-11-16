@@ -24,8 +24,8 @@ import (
 // BuildAgentsDeps mirrors cmd's buildAgentsDeps field by field. Like cmd's
 // test server, the Hub has no TLS (no CA certificate), no Hub SSH identity
 // and no event broadcaster, so events are dropped as cmd drops them when it
-// has none. Heartbeats with no agent sign-in go to the real resources Deps,
-// as cmd's processHeartbeatRequest does.
+// has none. Heartbeats with no agent sign-in go to the real resources Deps
+// and its canonical heartbeat writer, as cmd's processHeartbeatRequest does.
 //
 // Stand-ins replace cmd's route auth and rate limit, and the origin check of
 // cmd's agent WebSocket upgrader (see testutil/standins.go). Every field cmd
@@ -149,8 +149,9 @@ var errHeartbeatWriterNotTested = errors.New("signed-in agent heartbeats are not
 
 // agentHeartbeatWriterNotTested stands in for the two closures in cmd's
 // buildAgentsDeps that commit a signed-in agent's heartbeat. They are cmd
-// code: they also write the canonical record (cmd's persistCanonicalHeartbeat)
-// and the heartbeat's metrics. It fails the test if reached and refuses.
+// code: after the commit they write the canonical record and then the
+// heartbeat's metrics through cmd's appendAgentHeartbeatTelemetry. It fails
+// the test if reached and refuses.
 func agentHeartbeatWriterNotTested(t *testing.T, mode string, req assets.HeartbeatRequest) (*assets.Asset, error) {
 	t.Errorf("a %s heartbeat for %s reached the heartbeat writer stand-in; it is tested in cmd/labtether", mode, req.AssetID)
 	return nil, errHeartbeatWriterNotTested

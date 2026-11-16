@@ -327,9 +327,6 @@ func newCollectorLifecycle(s *apiServer, collector hubcollector.Collector, sourc
 func (s *apiServer) executePortainerCollector(ctx context.Context, collector hubcollector.Collector) {
 	s.ensureCollectorsDeps().ExecutePortainerCollector(ctx, collector)
 }
-func firstNonEmptyString(values ...string) string {
-	return collectorspkg.FirstNonEmptyString(values...)
-}
 
 // Constant aliases.
 const (

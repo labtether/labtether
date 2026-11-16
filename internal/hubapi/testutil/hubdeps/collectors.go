@@ -21,8 +21,8 @@ import (
 // Stand-ins replace cmd's route auth and rate limit (see
 // testutil/standins.go) and the one field cmd fills with its own code: the
 // Settings switch for integration actions, which fails the test if reached.
-// Heartbeats go through the real resources Deps, which stops at its
-// canonical heartbeat stand-in. The canonical connector snapshot, link
+// Heartbeats go through the real resources Deps and its canonical
+// heartbeat writer. The canonical connector snapshot, link
 // suggestions, the maintenance checks, and the Proxmox and TrueNAS
 // callbacks are the real package code over the Hub's stores.
 func (h *Hub) BuildCollectorsDeps() *collectors.Deps {

@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/telemetry"
 )
 
 // Helpers for the alerting tests moved from cmd/labtether.
@@ -164,4 +165,47 @@ func (m *maintenanceOnlyGroupMaintenanceStore) UpdateGroupMaintenanceWindow(grou
 
 func (m *maintenanceOnlyGroupMaintenanceStore) DeleteGroupMaintenanceWindow(groupID, windowID string) error {
 	return errors.New("not implemented")
+}
+
+// seedAssetViaHeartbeat, seedAssetViaHeartbeatWithSite and seedMetricSamples
+// are copies of cmd's helpers (alerts_incidents_api_test.go), which other cmd
+// tests still use. The heartbeat goes through resources' asset handler and
+// its real canonical heartbeat writer, as in cmd.
+
+// seedAssetViaHeartbeat creates an asset via the heartbeat API endpoint.
+func seedAssetViaHeartbeat(t *testing.T, sut *hubdeps.Hub, assetID, slug string) {
+	t.Helper()
+
+	// Create a group first.
+	groupID := mustCreateGroup(t, sut, slug+" Lab", slug)
+
+	seedAssetViaHeartbeatWithSite(t, sut, assetID, groupID)
+}
+
+// seedAssetViaHeartbeatWithSite creates an asset with a known group ID.
+func seedAssetViaHeartbeatWithSite(t *testing.T, sut *hubdeps.Hub, assetID, groupID string) {
+	t.Helper()
+
+	payload := []byte(`{"asset_id":"` + assetID + `","type":"host","name":"` + assetID + `","source":"agent","group_id":"` + groupID + `","status":"online","platform":"linux"}`)
+	req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	sut.ResourcesDeps().HandleAssetActions(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 for asset heartbeat, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// seedMetricSamples writes metric data points into the telemetry store.
+func seedMetricSamples(t *testing.T, sut *hubdeps.Hub, assetID, metric string, value float64) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	samples := []telemetry.MetricSample{
+		{AssetID: assetID, Metric: metric, Unit: "percent", Value: value, CollectedAt: now.Add(-30 * time.Second)},
+		{AssetID: assetID, Metric: metric, Unit: "percent", Value: value, CollectedAt: now.Add(-15 * time.Second)},
+		{AssetID: assetID, Metric: metric, Unit: "percent", Value: value, CollectedAt: now},
+	}
+	if err := sut.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
+		t.Fatalf("failed to seed metric samples: %v", err)
+	}
 }
