@@ -39,6 +39,17 @@ func RouteAuthNotTested(t *testing.T) func(http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// StreamTicketAuthNotTested returns a stand-in for cmd's
+// consumeStreamTicketAuth. It fails the test and refuses the request if
+// reached: consuming a stream ticket is cmd's request middleware, tested in
+// cmd/labtether.
+func StreamTicketAuthNotTested(t *testing.T) func(*http.Request) (*http.Request, bool) {
+	return func(r *http.Request) (*http.Request, bool) {
+		t.Errorf("a request reached the stream ticket auth stand-in; ticket auth is tested in cmd/labtether")
+		return r, false
+	}
+}
+
 // RequireAdminRole makes the same check as cmd's requireAdminAuth: the
 // request's principal must have an admin role, or it gets 403 "forbidden".
 // Its wiring to the real middleware is tested in cmd.

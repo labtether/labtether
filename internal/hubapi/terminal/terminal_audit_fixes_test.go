@@ -1,4 +1,4 @@
-package main
+package terminal_test
 
 import (
 	"bytes"
@@ -7,13 +7,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -34,143 +33,13 @@ func (s *trackingPersistentSessionStore) ListPersistentSessionsByActor(actorID s
 	return s.MemoryTerminalStore.ListPersistentSessionsByActor(actorID)
 }
 
-type memoryTerminalBookmarkStore struct {
-	mu        sync.RWMutex
-	bookmarks map[string]terminal.Bookmark
-	nextID    int
-}
-
-func newMemoryTerminalBookmarkStore() *memoryTerminalBookmarkStore {
-	return &memoryTerminalBookmarkStore{bookmarks: make(map[string]terminal.Bookmark)}
-}
-
-func (s *memoryTerminalBookmarkStore) CreateBookmark(req terminal.CreateBookmarkRequest) (terminal.Bookmark, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.nextID++
-	now := time.Now().UTC()
-	bookmark := terminal.Bookmark{
-		ID:                  "bkm-test-" + strconv.Itoa(s.nextID),
-		ActorID:             strings.TrimSpace(req.ActorID),
-		Title:               strings.TrimSpace(req.Title),
-		AssetID:             strings.TrimSpace(req.AssetID),
-		Host:                strings.TrimSpace(req.Host),
-		Port:                req.Port,
-		Username:            strings.TrimSpace(req.Username),
-		CredentialProfileID: strings.TrimSpace(req.CredentialProfileID),
-		JumpChainGroupID:    strings.TrimSpace(req.JumpChainGroupID),
-		Tags:                append([]string(nil), req.Tags...),
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
-	s.bookmarks[bookmark.ID] = bookmark
-	return bookmark, nil
-}
-
-func (s *memoryTerminalBookmarkStore) GetBookmark(id string) (terminal.Bookmark, bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	bookmark, ok := s.bookmarks[strings.TrimSpace(id)]
-	return bookmark, ok, nil
-}
-
-func (s *memoryTerminalBookmarkStore) ListBookmarks(actorID string) ([]terminal.Bookmark, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	out := make([]terminal.Bookmark, 0, len(s.bookmarks))
-	for _, bookmark := range s.bookmarks {
-		if bookmark.ActorID == strings.TrimSpace(actorID) {
-			out = append(out, bookmark)
-		}
-	}
-	return out, nil
-}
-
-func (s *memoryTerminalBookmarkStore) UpdateBookmark(id string, req terminal.UpdateBookmarkRequest) (terminal.Bookmark, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	bookmark, ok := s.bookmarks[strings.TrimSpace(id)]
-	if !ok {
-		return terminal.Bookmark{}, persistence.ErrNotFound
-	}
-	if req.Title != nil {
-		bookmark.Title = strings.TrimSpace(*req.Title)
-	}
-	if req.AssetID != nil {
-		bookmark.AssetID = strings.TrimSpace(*req.AssetID)
-	}
-	if req.Host != nil {
-		bookmark.Host = strings.TrimSpace(*req.Host)
-	}
-	if req.Port != nil {
-		bookmark.Port = req.Port
-	}
-	if req.Username != nil {
-		bookmark.Username = strings.TrimSpace(*req.Username)
-	}
-	if req.CredentialProfileID != nil {
-		bookmark.CredentialProfileID = strings.TrimSpace(*req.CredentialProfileID)
-	}
-	if req.JumpChainGroupID != nil {
-		bookmark.JumpChainGroupID = strings.TrimSpace(*req.JumpChainGroupID)
-	}
-	if req.Tags != nil {
-		bookmark.Tags = append([]string(nil), req.Tags...)
-	}
-	bookmark.UpdatedAt = time.Now().UTC()
-	s.bookmarks[bookmark.ID] = bookmark
-	return bookmark, nil
-}
-
-func (s *memoryTerminalBookmarkStore) DeleteBookmark(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if _, ok := s.bookmarks[strings.TrimSpace(id)]; !ok {
-		return persistence.ErrNotFound
-	}
-	delete(s.bookmarks, strings.TrimSpace(id))
-	return nil
-}
-
-func (s *memoryTerminalBookmarkStore) SetBookmarkHostKey(id, hostKey, target string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	bookmark, ok := s.bookmarks[strings.TrimSpace(id)]
-	if !ok {
-		return persistence.ErrNotFound
-	}
-	bookmark.HostKey, bookmark.HostKeyTarget = hostKey, target
-	s.bookmarks[bookmark.ID] = bookmark
-	return nil
-}
-
-func (s *memoryTerminalBookmarkStore) TouchBookmarkLastUsed(id string, at time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	bookmark, ok := s.bookmarks[strings.TrimSpace(id)]
-	if !ok {
-		return persistence.ErrNotFound
-	}
-	atCopy := at.UTC()
-	bookmark.LastUsedAt = &atCopy
-	bookmark.UpdatedAt = atCopy
-	s.bookmarks[bookmark.ID] = bookmark
-	return nil
-}
-
-func mustCreateBookmark(t *testing.T, sut *apiServer, actorID string, body string) terminal.Bookmark {
+func mustCreateBookmark(t *testing.T, sut *hubdeps.Hub, actorID string, body string) terminal.Bookmark {
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/bookmarks", bytes.NewBufferString(body))
 	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actorID))
 	rec := httptest.NewRecorder()
-	sut.handleBookmarks(rec, req)
+	sut.TerminalDeps().HandleBookmarks(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating bookmark, got %d: %s", rec.Code, rec.Body.String())
@@ -185,13 +54,13 @@ func mustCreateBookmark(t *testing.T, sut *apiServer, actorID string, body strin
 	return response.Bookmark
 }
 
-func mustCreatePersistentSession(t *testing.T, sut *apiServer, actorID, target string) terminal.PersistentSession {
+func mustCreatePersistentSession(t *testing.T, sut *hubdeps.Hub, actorID, target string) terminal.PersistentSession {
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewBufferString(`{"target":"`+target+`","title":"Shell"}`))
 	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actorID))
 	rec := httptest.NewRecorder()
-	sut.handlePersistentSessions(rec, req)
+	sut.TerminalDeps().HandlePersistentSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d: %s", rec.Code, rec.Body.String())
@@ -207,23 +76,23 @@ func mustCreatePersistentSession(t *testing.T, sut *apiServer, actorID, target s
 }
 
 func TestAttachPersistentSessionDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	created := mustCreatePersistentSession(t, sut, "actor-a", "lab-host-01")
 
-	sut.ensureTerminalDeps().IssueStreamTicket = func(_ context.Context, _ string) (string, time.Time, error) {
+	sut.TerminalDeps().IssueStreamTicket = func(_ context.Context, _ string) (string, time.Time, error) {
 		return "", time.Time{}, errors.New("synthetic stream ticket failure")
 	}
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.TerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 
 	if attachRec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 attaching persistent session when ticket issuance fails, got %d", attachRec.Code)
 	}
 
-	persistent, ok, err := sut.terminalPersistentStore.GetPersistentSession(created.ID)
+	persistent, ok, err := sut.TerminalPersistentStore.GetPersistentSession(created.ID)
 	if err != nil {
 		t.Fatalf("failed to reload persistent session: %v", err)
 	}
@@ -234,7 +103,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenStreamTicketIssueFails(t 
 		t.Fatalf("expected persistent session to remain detached, got %q", persistent.Status)
 	}
 
-	sessions, err := sut.terminalStore.ListSessions()
+	sessions, err := sut.TerminalStore.ListSessions()
 	if err != nil {
 		t.Fatalf("failed to list terminal sessions: %v", err)
 	}
@@ -244,25 +113,25 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenStreamTicketIssueFails(t 
 }
 
 func TestConnectBookmarkDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.terminalBookmarkStore = newMemoryTerminalBookmarkStore()
-	sut.resetTerminalDepsForTest()
+	sut := hubdeps.New(t)
+	sut.TerminalBookmarkStore = testutil.NewMemoryTerminalBookmarkStore()
+	sut.ResetTerminalDeps()
 	bookmark := mustCreateBookmark(t, sut, "actor-a", `{"title":"Lab Host","asset_id":"lab-host-01"}`)
 
-	sut.ensureTerminalDeps().IssueStreamTicket = func(_ context.Context, _ string) (string, time.Time, error) {
+	sut.TerminalDeps().IssueStreamTicket = func(_ context.Context, _ string) (string, time.Time, error) {
 		return "", time.Time{}, errors.New("synthetic stream ticket failure")
 	}
 
 	connectReq := httptest.NewRequest(http.MethodPost, "/terminal/bookmarks/"+bookmark.ID+"/connect", bytes.NewBufferString(`{}`))
 	connectReq = connectReq.WithContext(apiv2.ContextWithUserID(connectReq.Context(), "actor-a"))
 	connectRec := httptest.NewRecorder()
-	sut.handleBookmarkActions(connectRec, connectReq)
+	sut.TerminalDeps().HandleBookmarkActions(connectRec, connectReq)
 
 	if connectRec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 connecting bookmark when ticket issuance fails, got %d", connectRec.Code)
 	}
 
-	persistentSessions, err := sut.terminalPersistentStore.ListPersistentSessions()
+	persistentSessions, err := sut.TerminalPersistentStore.ListPersistentSessions()
 	if err != nil {
 		t.Fatalf("failed to list persistent sessions: %v", err)
 	}
@@ -273,7 +142,7 @@ func TestConnectBookmarkDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing
 		t.Fatalf("expected bookmark-created persistent session to remain detached, got %q", persistentSessions[0].Status)
 	}
 
-	sessions, err := sut.terminalStore.ListSessions()
+	sessions, err := sut.TerminalStore.ListSessions()
 	if err != nil {
 		t.Fatalf("failed to list terminal sessions: %v", err)
 	}
@@ -283,21 +152,21 @@ func TestConnectBookmarkDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing
 }
 
 func TestUpdateBookmarkRejectsEmptyResolvedTarget(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.terminalBookmarkStore = newMemoryTerminalBookmarkStore()
-	sut.resetTerminalDepsForTest()
+	sut := hubdeps.New(t)
+	sut.TerminalBookmarkStore = testutil.NewMemoryTerminalBookmarkStore()
+	sut.ResetTerminalDeps()
 	bookmark := mustCreateBookmark(t, sut, "actor-a", `{"title":"Lab Host","host":"lab-host-01","port":22}`)
 
 	updateReq := httptest.NewRequest(http.MethodPut, "/terminal/bookmarks/"+bookmark.ID, bytes.NewBufferString(`{"asset_id":"","host":""}`))
 	updateReq = updateReq.WithContext(apiv2.ContextWithUserID(updateReq.Context(), "actor-a"))
 	updateRec := httptest.NewRecorder()
-	sut.handleBookmarkActions(updateRec, updateReq)
+	sut.TerminalDeps().HandleBookmarkActions(updateRec, updateReq)
 
 	if updateRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 updating bookmark to an empty target, got %d: %s", updateRec.Code, updateRec.Body.String())
 	}
 
-	reloaded, ok, err := sut.terminalBookmarkStore.GetBookmark(bookmark.ID)
+	reloaded, ok, err := sut.TerminalBookmarkStore.GetBookmark(bookmark.ID)
 	if err != nil {
 		t.Fatalf("failed to reload bookmark: %v", err)
 	}
@@ -310,10 +179,10 @@ func TestUpdateBookmarkRejectsEmptyResolvedTarget(t *testing.T) {
 }
 
 func TestPersistentSessionListUsesActorScopedStoreWhenAvailable(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	trackingStore := &trackingPersistentSessionStore{MemoryTerminalStore: persistence.NewMemoryTerminalStore()}
-	sut.terminalPersistentStore = trackingStore
-	sut.resetTerminalDepsForTest()
+	sut.TerminalPersistentStore = trackingStore
+	sut.ResetTerminalDeps()
 
 	mustCreatePersistentSession(t, sut, "actor-a", "lab-host-01")
 	mustCreatePersistentSession(t, sut, "actor-b", "lab-host-02")
@@ -321,7 +190,7 @@ func TestPersistentSessionListUsesActorScopedStoreWhenAvailable(t *testing.T) {
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/persistent-sessions", nil)
 	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(listRec, listReq)
+	sut.TerminalDeps().HandlePersistentSessions(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 listing persistent sessions, got %d: %s", listRec.Code, listRec.Body.String())

@@ -6,11 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
 
 func TestHandleNetworkActionBridgesAgentResult(t *testing.T) {
@@ -194,46 +194,7 @@ func TestHandleNetworkListBridgesAgentInventory(t *testing.T) {
 	}
 }
 
+// createWSPairForNetworkTest: one implementation, in testutil.
 func createWSPairForNetworkTest(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
-	t.Helper()
-
-	serverConnCh := make(chan *websocket.Conn, 1)
-	done := make(chan struct{})
-	upgrader := websocket.Upgrader{CheckOrigin: func(_ *http.Request) bool { return true }}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Errorf("upgrade failed: %v", err)
-			return
-		}
-		serverConnCh <- conn
-		<-done
-	}))
-
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	clientConn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		close(done)
-		server.Close()
-		t.Fatalf("dial failed: %v", err)
-	}
-
-	var serverConn *websocket.Conn
-	select {
-	case serverConn = <-serverConnCh:
-	case <-time.After(2 * time.Second):
-		clientConn.Close()
-		close(done)
-		server.Close()
-		t.Fatal("timed out waiting for server websocket")
-	}
-
-	cleanup := func() {
-		close(done)
-		_ = clientConn.Close()
-		_ = serverConn.Close()
-		server.Close()
-	}
-	return serverConn, clientConn, cleanup
+	return testutil.CreateWSPairForNetworkTest(t)
 }

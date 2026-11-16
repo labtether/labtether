@@ -1,21 +1,23 @@
-package main
+package terminal_test
 
 import (
 	"encoding/json"
 	"errors"
 	"github.com/labtether/labtether/internal/agentmgr"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"golang.org/x/crypto/ssh"
 	"testing"
 	"time"
 )
 
 func TestProbeAgentTmuxUsesCachedConnectionMetadata(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 	conn.SetMeta("terminal.tmux.has", "true")
 	conn.SetMeta("terminal.tmux.path", "/usr/bin/tmux")
 
-	resp := srv.probeAgentTmux(conn)
+	resp := srv.TerminalDeps().ProbeAgentTmux(conn)
 	if !resp.HasTmux {
 		t.Fatal("expected cached tmux capability to be used")
 	}
@@ -25,7 +27,7 @@ func TestProbeAgentTmuxUsesCachedConnectionMetadata(t *testing.T) {
 }
 
 func TestProcessAgentTerminalProbedCachesProbeResultOnConnection(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 
 	payload, err := json.Marshal(agentmgr.TerminalProbeResponse{
@@ -36,7 +38,7 @@ func TestProcessAgentTerminalProbedCachesProbeResultOnConnection(t *testing.T) {
 		t.Fatalf("marshal terminal probe payload: %v", err)
 	}
 
-	srv.processAgentTerminalProbed(conn, agentmgr.Message{Data: payload})
+	srv.TerminalDeps().ProcessAgentTerminalProbed(conn, agentmgr.Message{Data: payload})
 
 	if got := conn.Meta("terminal.tmux.has"); got != "true" {
 		t.Fatalf("expected cached tmux flag true, got %q", got)
@@ -50,10 +52,10 @@ func TestProcessAgentTerminalProbedCachesProbeResultOnConnection(t *testing.T) {
 }
 
 func TestStartAgentTmuxProbeAsyncResetsPendingOnSendFailure(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 
-	if !srv.startAgentTmuxProbeAsync(conn) {
+	if !srv.TerminalDeps().StartAgentTmuxProbeAsync(conn) {
 		t.Fatal("expected probe dispatch to be accepted")
 	}
 
@@ -79,7 +81,7 @@ func TestDialSSHWithRetryRetriesOnceThenSucceeds(t *testing.T) {
 	sleepCalls := 0
 	dialCalls := 0
 
-	client, attemptsUsed, err := dialSSHWithRetry(
+	client, attemptsUsed, err := terminalpkg.DialSSHWithRetry(
 		"127.0.0.1:22",
 		baseConfig,
 		3*time.Second,
@@ -137,7 +139,7 @@ func TestDialSSHWithRetryReturnsLastErrorAfterMaxAttempts(t *testing.T) {
 	sleepCalls := 0
 	dialCalls := 0
 
-	client, attemptsUsed, err := dialSSHWithRetry(
+	client, attemptsUsed, err := terminalpkg.DialSSHWithRetry(
 		"127.0.0.1:22",
 		baseConfig,
 		2*time.Second,

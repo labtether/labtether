@@ -1,9 +1,14 @@
-package main
+package terminal_test
 
-import "testing"
+import (
+	"testing"
+
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
+)
 
 func TestTerminalBridgeCloseIsIdempotent(t *testing.T) {
-	b := &terminalBridge{
+	b := &terminalpkg.TerminalBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -12,7 +17,7 @@ func TestTerminalBridgeCloseIsIdempotent(t *testing.T) {
 }
 
 func TestDesktopBridgeCloseIsIdempotent(t *testing.T) {
-	b := &desktopBridge{
+	b := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -21,7 +26,7 @@ func TestDesktopBridgeCloseIsIdempotent(t *testing.T) {
 }
 
 func TestTerminalBridgeTrySendOutputClosedOutputChannelDoesNotPanic(t *testing.T) {
-	b := &terminalBridge{
+	b := &terminalpkg.TerminalBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}
@@ -30,7 +35,7 @@ func TestTerminalBridgeTrySendOutputClosedOutputChannelDoesNotPanic(t *testing.T
 }
 
 func TestDesktopBridgeTrySendOutputClosedOutputChannelDoesNotPanic(t *testing.T) {
-	b := &desktopBridge{
+	b := &desktoppkg.DesktopBridge{
 		OutputCh: make(chan []byte, 1),
 		ClosedCh: make(chan struct{}),
 	}

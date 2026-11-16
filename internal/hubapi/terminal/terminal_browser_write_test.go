@@ -1,4 +1,4 @@
-package main
+package terminal_test
 
 import (
 	"bufio"
@@ -13,6 +13,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -25,14 +27,14 @@ func TestTerminalBrowserWriteFailureEndsAgentStream(t *testing.T) {
 			name = "output_first"
 		}
 		t.Run(name, func(t *testing.T) {
-			s := newTestAPIServer(t)
-			s.agentMgr = agentmgr.NewManager()
-			agentWS, peer, cleanup := newWebSocketPair(t)
+			s := hubdeps.New(t)
+			s.AgentMgr = agentmgr.NewManager()
+			agentWS, peer, cleanup := testutil.NewWebSocketPair(t)
 			defer cleanup()
 			agent := agentmgr.NewAgentConn(agentWS, "node", "linux")
 			agent.SetMeta("terminal.tmux.has", "false")
-			s.agentMgr.Register(agent)
-			defer s.agentMgr.Unregister(agent.AssetID)
+			s.AgentMgr.Register(agent)
+			defer s.AgentMgr.Unregister(agent.AssetID)
 			starts, stops := make(chan string, 1), make(chan string, 1)
 			go func() {
 				for {
@@ -60,7 +62,7 @@ func TestTerminalBrowserWriteFailureEndsAgentStream(t *testing.T) {
 			finished := make(chan struct{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer close(finished)
-				s.handleAgentTerminalStream(binaryWriteFailureResponse{w}, r, terminal.Session{ID: "sess-write-failure", Target: agent.AssetID})
+				s.TerminalDeps().HandleAgentTerminalStream(binaryWriteFailureResponse{w}, r, terminal.Session{ID: "sess-write-failure", Target: agent.AssetID})
 			}))
 			defer server.Close()
 			browser, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)

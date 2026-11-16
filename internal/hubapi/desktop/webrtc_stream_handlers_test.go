@@ -1,4 +1,4 @@
-package main
+package desktop_test
 
 import (
 	"encoding/json"
@@ -13,25 +13,28 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
 func TestCloseWebRTCBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
-	var srv apiServer
-	matching := &webrtcSignalingBridge{
+	srv := hubdeps.NewEmpty(t)
+	matching := &desktoppkg.WebRTCSignalingBridge{
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	nonMatching := &webrtcSignalingBridge{
+	nonMatching := &desktoppkg.WebRTCSignalingBridge{
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-2",
 	}
 
-	srv.webrtcBridges.Store("sess-node-1", matching)
-	srv.webrtcBridges.Store("sess-node-2", nonMatching)
-	srv.webrtcBridges.Store("non-bridge-entry", "ignore-me")
+	srv.WebRTCBridges.Store("sess-node-1", matching)
+	srv.WebRTCBridges.Store("sess-node-2", nonMatching)
+	srv.WebRTCBridges.Store("non-bridge-entry", "ignore-me")
 
-	srv.closeWebRTCBridgesForAsset("node-1")
+	srv.DesktopDeps().CloseWebRTCBridgesForAsset("node-1")
 
 	select {
 	case <-matching.ClosedCh:
@@ -47,8 +50,8 @@ func TestCloseWebRTCBridgesForAssetClosesMatchingSessionsOnly(t *testing.T) {
 }
 
 func TestProcessAgentWebRTCHandlersIgnoreNonBridgeEntries(t *testing.T) {
-	var srv apiServer
-	srv.webrtcBridges.Store("sess-non-bridge", "probe-ish-value")
+	srv := hubdeps.NewEmpty(t)
+	srv.WebRTCBridges.Store("sess-non-bridge", "probe-ish-value")
 
 	startedData, err := json.Marshal(agentmgr.WebRTCStartedData{SessionID: "sess-non-bridge"})
 	if err != nil {
@@ -68,33 +71,33 @@ func TestProcessAgentWebRTCHandlersIgnoreNonBridgeEntries(t *testing.T) {
 	}
 
 	assertNoPanicWebRTC(t, func() {
-		srv.processAgentWebRTCStarted(nil, agentmgr.Message{Data: startedData})
+		srv.DesktopDeps().ProcessAgentWebRTCStarted(nil, agentmgr.Message{Data: startedData})
 	})
 	assertNoPanicWebRTC(t, func() {
-		srv.processAgentWebRTCAnswer(nil, agentmgr.Message{Data: answerData})
+		srv.DesktopDeps().ProcessAgentWebRTCAnswer(nil, agentmgr.Message{Data: answerData})
 	})
 	assertNoPanicWebRTC(t, func() {
-		srv.processAgentWebRTCICE(nil, agentmgr.Message{Data: iceData})
+		srv.DesktopDeps().ProcessAgentWebRTCICE(nil, agentmgr.Message{Data: iceData})
 	})
 	assertNoPanicWebRTC(t, func() {
-		srv.processAgentWebRTCStopped(nil, agentmgr.Message{Data: stoppedData})
+		srv.DesktopDeps().ProcessAgentWebRTCStopped(nil, agentmgr.Message{Data: stoppedData})
 	})
 }
 
 func TestProcessAgentWebRTCStoppedSkipsMismatchedAgent(t *testing.T) {
-	var srv apiServer
-	bridge := &webrtcSignalingBridge{
+	srv := hubdeps.NewEmpty(t)
+	bridge := &desktoppkg.WebRTCSignalingBridge{
 		ClosedCh:        make(chan struct{}),
 		ExpectedAgentID: "node-1",
 	}
-	srv.webrtcBridges.Store("sess-mismatch", bridge)
+	srv.WebRTCBridges.Store("sess-mismatch", bridge)
 
 	stoppedData, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: "sess-mismatch", Reason: "agent stopped"})
 	if err != nil {
 		t.Fatalf("marshal webrtc.stopped payload: %v", err)
 	}
 
-	srv.processAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{Data: stoppedData})
+	srv.DesktopDeps().ProcessAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-2"}, agentmgr.Message{Data: stoppedData})
 
 	select {
 	case <-bridge.ClosedCh:
@@ -104,7 +107,7 @@ func TestProcessAgentWebRTCStoppedSkipsMismatchedAgent(t *testing.T) {
 }
 
 func TestProcessAgentWebRTCCapabilitiesStoresUnavailableReason(t *testing.T) {
-	var srv apiServer
+	srv := hubdeps.NewEmpty(t)
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 
 	data, err := json.Marshal(agentmgr.WebRTCCapabilitiesData{
@@ -115,7 +118,7 @@ func TestProcessAgentWebRTCCapabilitiesStoresUnavailableReason(t *testing.T) {
 		t.Fatalf("marshal webrtc capabilities payload: %v", err)
 	}
 
-	srv.processAgentWebRTCCapabilities(conn, agentmgr.Message{Data: data})
+	srv.DesktopDeps().ProcessAgentWebRTCCapabilities(conn, agentmgr.Message{Data: data})
 
 	if got := conn.Meta("webrtc_available"); got != "false" {
 		t.Fatalf("expected webrtc_available=false, got %q", got)
@@ -126,19 +129,19 @@ func TestProcessAgentWebRTCCapabilitiesStoresUnavailableReason(t *testing.T) {
 }
 
 func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	agentServerConn, agentClientConn, agentCleanup := createWSPairForNetworkTest(t)
+	agentServerConn, agentClientConn, agentCleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer agentCleanup()
 
 	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
-	sut.agentMgr.Register(agentConn)
-	defer sut.agentMgr.Unregister("node-1")
+	sut.AgentMgr.Register(agentConn)
+	defer sut.AgentMgr.Unregister("node-1")
 
 	session := terminal.Session{ID: "sess-webrtc", Target: "node-1"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleWebRTCStream(w, r, session)
+		sut.DesktopDeps().HandleWebRTCStream(w, r, session)
 	}))
 	defer server.Close()
 
@@ -256,7 +259,7 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal stopped acknowledgement: %v", err)
 	}
-	sut.processAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
+	sut.DesktopDeps().ProcessAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
 	browserStopped := readWebRTCBrowserMessage(t, browserConn)
 	if browserStopped.Type != "stopped" {
 		t.Fatalf("browser message type=%q, want stopped", browserStopped.Type)
@@ -266,19 +269,19 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 }
 
 func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T) {
-	sut := newTestAPIServer(t)
-	sut.agentMgr = agentmgr.NewManager()
+	sut := hubdeps.New(t)
+	sut.AgentMgr = agentmgr.NewManager()
 
-	agentServerConn, agentClientConn, agentCleanup := createWSPairForNetworkTest(t)
+	agentServerConn, agentClientConn, agentCleanup := testutil.CreateWSPairForNetworkTest(t)
 	defer agentCleanup()
 
 	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
-	sut.agentMgr.Register(agentConn)
-	defer sut.agentMgr.Unregister("node-1")
+	sut.AgentMgr.Register(agentConn)
+	defer sut.AgentMgr.Unregister("node-1")
 
 	session := terminal.Session{ID: "sess-webrtc-ignore", Target: "node-1"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sut.handleWebRTCStream(w, r, session)
+		sut.DesktopDeps().HandleWebRTCStream(w, r, session)
 	}))
 	defer server.Close()
 
@@ -317,21 +320,21 @@ func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T
 	if err != nil {
 		t.Fatalf("marshal stopped acknowledgement: %v", err)
 	}
-	sut.processAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
+	sut.DesktopDeps().ProcessAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
 	waitForWebRTCBridgeRemoval(t, sut, start.SessionID)
 }
 
 func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T) {
-	var srv apiServer
-	browserServerConn, browserClientConn, cleanup := newWebSocketPair(t)
+	srv := hubdeps.NewEmpty(t)
+	browserServerConn, browserClientConn, cleanup := testutil.NewWebSocketPair(t)
 	defer cleanup()
 
-	bridge := &webrtcSignalingBridge{
+	bridge := &desktoppkg.WebRTCSignalingBridge{
 		BrowserWS:       browserServerConn,
 		ExpectedAgentID: "node-1",
 		ClosedCh:        make(chan struct{}),
 	}
-	srv.webrtcBridges.Store("sess-relay", bridge)
+	srv.WebRTCBridges.Store("sess-relay", bridge)
 
 	conn := &agentmgr.AgentConn{AssetID: "node-1"}
 
@@ -343,7 +346,7 @@ func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal started payload: %v", err)
 	}
-	srv.processAgentWebRTCStarted(conn, agentmgr.Message{Data: startedData})
+	srv.DesktopDeps().ProcessAgentWebRTCStarted(conn, agentmgr.Message{Data: startedData})
 	startedMsg := readWebRTCBrowserMessage(t, browserClientConn)
 	if startedMsg.Type != "ready" {
 		t.Fatalf("browser message type=%q, want ready", startedMsg.Type)
@@ -357,7 +360,7 @@ func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal answer payload: %v", err)
 	}
-	srv.processAgentWebRTCAnswer(conn, agentmgr.Message{Data: answerData})
+	srv.DesktopDeps().ProcessAgentWebRTCAnswer(conn, agentmgr.Message{Data: answerData})
 	answerMsg := readWebRTCBrowserMessage(t, browserClientConn)
 	if answerMsg.Type != "answer" {
 		t.Fatalf("browser message type=%q, want answer", answerMsg.Type)
@@ -370,7 +373,7 @@ func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal ice payload: %v", err)
 	}
-	srv.processAgentWebRTCICE(conn, agentmgr.Message{Data: iceData})
+	srv.DesktopDeps().ProcessAgentWebRTCICE(conn, agentmgr.Message{Data: iceData})
 	iceMsg := readWebRTCBrowserMessage(t, browserClientConn)
 	if iceMsg.Type != "ice" {
 		t.Fatalf("browser message type=%q, want ice", iceMsg.Type)
@@ -383,7 +386,7 @@ func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T)
 	if err != nil {
 		t.Fatalf("marshal stopped payload: %v", err)
 	}
-	srv.processAgentWebRTCStopped(conn, agentmgr.Message{Data: stoppedData})
+	srv.DesktopDeps().ProcessAgentWebRTCStopped(conn, agentmgr.Message{Data: stoppedData})
 	stoppedMsg := readWebRTCBrowserMessage(t, browserClientConn)
 	if stoppedMsg.Type != "stopped" {
 		t.Fatalf("browser message type=%q, want stopped", stoppedMsg.Type)
@@ -397,16 +400,16 @@ func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T)
 }
 
 func TestProcessAgentWebRTCStartedAnswerICESkipMismatchedAgent(t *testing.T) {
-	var srv apiServer
-	browserServerConn, browserClientConn, cleanup := newWebSocketPair(t)
+	srv := hubdeps.NewEmpty(t)
+	browserServerConn, browserClientConn, cleanup := testutil.NewWebSocketPair(t)
 	defer cleanup()
 
-	bridge := &webrtcSignalingBridge{
+	bridge := &desktoppkg.WebRTCSignalingBridge{
 		BrowserWS:       browserServerConn,
 		ExpectedAgentID: "node-1",
 		ClosedCh:        make(chan struct{}),
 	}
-	srv.webrtcBridges.Store("sess-mismatch", bridge)
+	srv.WebRTCBridges.Store("sess-mismatch", bridge)
 
 	conn := &agentmgr.AgentConn{AssetID: "node-2"}
 
@@ -414,21 +417,21 @@ func TestProcessAgentWebRTCStartedAnswerICESkipMismatchedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal started payload: %v", err)
 	}
-	srv.processAgentWebRTCStarted(conn, agentmgr.Message{Data: startedData})
+	srv.DesktopDeps().ProcessAgentWebRTCStarted(conn, agentmgr.Message{Data: startedData})
 	assertNoBrowserMessageWithin(t, browserClientConn, 150*time.Millisecond)
 
 	answerData, err := json.Marshal(agentmgr.WebRTCSDPData{SessionID: "sess-mismatch", Type: "answer", SDP: "v=0"})
 	if err != nil {
 		t.Fatalf("marshal answer payload: %v", err)
 	}
-	srv.processAgentWebRTCAnswer(conn, agentmgr.Message{Data: answerData})
+	srv.DesktopDeps().ProcessAgentWebRTCAnswer(conn, agentmgr.Message{Data: answerData})
 	assertNoBrowserMessageWithin(t, browserClientConn, 150*time.Millisecond)
 
 	iceData, err := json.Marshal(agentmgr.WebRTCICEData{SessionID: "sess-mismatch", Candidate: "candidate:1 1 UDP 123 10.0.0.10 10000 typ host"})
 	if err != nil {
 		t.Fatalf("marshal ice payload: %v", err)
 	}
-	srv.processAgentWebRTCICE(conn, agentmgr.Message{Data: iceData})
+	srv.DesktopDeps().ProcessAgentWebRTCICE(conn, agentmgr.Message{Data: iceData})
 	assertNoBrowserMessageWithin(t, browserClientConn, 150*time.Millisecond)
 }
 
@@ -474,12 +477,12 @@ func readWebRTCBrowserMessage(t *testing.T, conn *websocket.Conn) struct {
 	return payload
 }
 
-func waitForWebRTCBridgeRemoval(t *testing.T, srv *apiServer, sessionID string) {
+func waitForWebRTCBridgeRemoval(t *testing.T, srv *hubdeps.Hub, sessionID string) {
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := srv.webrtcBridges.Load(sessionID); !ok {
+		if _, ok := srv.WebRTCBridges.Load(sessionID); !ok {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
