@@ -1,9 +1,11 @@
-package main
+package proxmox_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +14,7 @@ import (
 )
 
 func TestLoadProxmoxAssetDetailsStorageContentSorting(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -43,11 +45,11 @@ func TestLoadProxmoxAssetDetailsStorageContentSorting(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	sut := newTestAPIServer(t)
-	details, err := sut.loadProxmoxAssetDetails(
+	sut := hubdeps.New(t)
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-storage-local-zfs",
-		proxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {
@@ -62,7 +64,7 @@ func TestLoadProxmoxAssetDetailsStorageContentSorting(t *testing.T) {
 }
 
 func TestLoadProxmoxAssetDetailsNodeZFSWarningAndSuccess(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	makeClient := func(t *testing.T, handler http.HandlerFunc) *proxmox.Client {
 		t.Helper()
@@ -100,11 +102,11 @@ func TestLoadProxmoxAssetDetailsNodeZFSWarningAndSuccess(t *testing.T) {
 			}
 		})
 
-		sut := newTestAPIServer(t)
-		details, err := sut.loadProxmoxAssetDetails(
+		sut := hubdeps.New(t)
+		details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 			context.Background(),
 			"proxmox-node-pve01",
-			proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+			proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 			proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		)
 		if err != nil {
@@ -136,11 +138,11 @@ func TestLoadProxmoxAssetDetailsNodeZFSWarningAndSuccess(t *testing.T) {
 			}
 		})
 
-		sut := newTestAPIServer(t)
-		details, err := sut.loadProxmoxAssetDetails(
+		sut := hubdeps.New(t)
+		details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 			context.Background(),
 			"proxmox-node-pve01",
-			proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+			proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 			proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		)
 		if err != nil {
@@ -150,10 +152,10 @@ func TestLoadProxmoxAssetDetailsNodeZFSWarningAndSuccess(t *testing.T) {
 			t.Fatalf("expected zfs pools to be included, got %+v", details.ZFSPools)
 		}
 
-		unknownDetails, err := sut.loadProxmoxAssetDetails(
+		unknownDetails, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 			context.Background(),
 			"proxmox-weird",
-			proxmoxSessionTarget{Kind: "weird", Node: "pve01"},
+			proxmoxpkg.ProxmoxSessionTarget{Kind: "weird", Node: "pve01"},
 			proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		)
 		if err != nil {
@@ -166,7 +168,7 @@ func TestLoadProxmoxAssetDetailsNodeZFSWarningAndSuccess(t *testing.T) {
 }
 
 func TestLoadProxmoxAssetDetailsStorageContentErrorAndTieSort(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -197,11 +199,11 @@ func TestLoadProxmoxAssetDetailsStorageContentErrorAndTieSort(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	sut := newTestAPIServer(t)
-	details, err := sut.loadProxmoxAssetDetails(
+	sut := hubdeps.New(t)
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-storage-local-zfs",
-		proxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {
@@ -240,10 +242,10 @@ func TestLoadProxmoxAssetDetailsStorageContentErrorAndTieSort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	errorDetails, err := sut.loadProxmoxAssetDetails(
+	errorDetails, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-storage-local-zfs",
-		proxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "local-zfs"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(errorClient, "collector-1"),
 	)
 	if err != nil {

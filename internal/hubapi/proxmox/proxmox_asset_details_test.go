@@ -1,10 +1,12 @@
-package main
+package proxmox_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,7 +15,7 @@ import (
 )
 
 func TestLoadProxmoxAssetDetails(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -55,8 +57,8 @@ func TestLoadProxmoxAssetDetails(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	srv := &apiServer{}
-	target := proxmoxSessionTarget{
+	srv := hubdeps.NewEmpty(t)
+	target := proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -64,7 +66,7 @@ func TestLoadProxmoxAssetDetails(t *testing.T) {
 	}
 	runtime := proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1")
 
-	details, err := srv.loadProxmoxAssetDetails(context.Background(), "proxmox-vm-101", target, runtime)
+	details, err := srv.ProxmoxDeps().LoadProxmoxAssetDetails(context.Background(), "proxmox-vm-101", target, runtime)
 	if err != nil {
 		t.Fatalf("loadProxmoxAssetDetails failed: %v", err)
 	}
@@ -95,7 +97,7 @@ func TestLoadProxmoxAssetDetails(t *testing.T) {
 }
 
 func TestHandleProxmoxAssetsDetailsSuccess(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -122,10 +124,10 @@ func TestHandleProxmoxAssetsDetailsSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-node-pve01",
 		Type:    "hypervisor-node",
 		Name:    "pve01",
@@ -143,7 +145,7 @@ func TestHandleProxmoxAssetsDetailsSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 	}
@@ -183,12 +185,12 @@ func TestLoadProxmoxAssetDetailsFatalAndWarningBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err = sut.loadProxmoxAssetDetails(
+	_, err = sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-vm-101",
-		proxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err == nil {
@@ -221,10 +223,10 @@ func TestLoadProxmoxAssetDetailsFatalAndWarningBranches(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	details, err := sut.loadProxmoxAssetDetails(
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-storage-local-zfs",
-		proxmoxSessionTarget{Kind: "storage", Node: "pve01"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {
@@ -236,7 +238,7 @@ func TestLoadProxmoxAssetDetailsFatalAndWarningBranches(t *testing.T) {
 }
 
 func TestLoadProxmoxAssetDetailsLXCWarningsAndCephData(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -278,11 +280,11 @@ func TestLoadProxmoxAssetDetailsLXCWarningsAndCephData(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	sut := newTestAPIServer(t)
-	details, err := sut.loadProxmoxAssetDetails(
+	sut := hubdeps.New(t)
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-ct-200",
-		proxmoxSessionTarget{Kind: "lxc", Node: "pve01", VMID: "200"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "lxc", Node: "pve01", VMID: "200"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {
@@ -306,7 +308,7 @@ func TestLoadProxmoxAssetDetailsLXCWarningsAndCephData(t *testing.T) {
 }
 
 func TestLoadProxmoxAssetDetailsSnapshotWarningBranch(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -338,11 +340,11 @@ func TestLoadProxmoxAssetDetailsSnapshotWarningBranch(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	sut := newTestAPIServer(t)
-	details, err := sut.loadProxmoxAssetDetails(
+	sut := hubdeps.New(t)
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-vm-101",
-		proxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {
@@ -354,7 +356,7 @@ func TestLoadProxmoxAssetDetailsSnapshotWarningBranch(t *testing.T) {
 }
 
 func TestLoadProxmoxAssetDetailsVersionWarningBranch(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -388,11 +390,11 @@ func TestLoadProxmoxAssetDetailsVersionWarningBranch(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	sut := newTestAPIServer(t)
-	details, err := sut.loadProxmoxAssetDetails(
+	sut := hubdeps.New(t)
+	details, err := sut.ProxmoxDeps().LoadProxmoxAssetDetails(
 		context.Background(),
 		"proxmox-vm-101",
-		proxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "qemu", Node: "pve01", VMID: "101"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 	)
 	if err != nil {

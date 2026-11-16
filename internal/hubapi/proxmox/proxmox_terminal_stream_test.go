@@ -1,9 +1,10 @@
-package main
+package proxmox_test
 
 import (
 	"errors"
 	"github.com/gorilla/websocket"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
 	"net/http/httptest"
@@ -13,12 +14,12 @@ import (
 )
 
 func TestTryProxmoxTerminalStreamLoadRuntimeFailure(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 	rec := httptest.NewRecorder()
 
-	err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind: "qemu",
 		Node: "pve01",
 		VMID: "101",
@@ -57,13 +58,13 @@ func TestTryProxmoxTerminalStreamAuthRejected(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 	rec := httptest.NewRecorder()
 
-	err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -75,7 +76,7 @@ func TestTryProxmoxTerminalStreamAuthRejected(t *testing.T) {
 }
 
 func TestTryProxmoxTerminalStreamTicketAndDialFailures(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	ticketFailure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api2/json/nodes/pve01/qemu/101/termproxy" {
@@ -90,7 +91,7 @@ func TestTryProxmoxTerminalStreamTicketAndDialFailures(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 	rec := httptest.NewRecorder()
-	err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -117,7 +118,7 @@ func TestTryProxmoxTerminalStreamTicketAndDialFailures(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 	rec = httptest.NewRecorder()
-	err = sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	err = sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",
@@ -151,12 +152,12 @@ func TestTryProxmoxTerminalStreamAuthTransportFailures(t *testing.T) {
 		}))
 		defer mock.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 		req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 		rec := httptest.NewRecorder()
-		err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -189,7 +190,7 @@ func TestTryProxmoxTerminalStreamAuthWriteAndDeadlineFailures(t *testing.T) {
 		}))
 		defer mock.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -207,7 +208,7 @@ func TestTryProxmoxTerminalStreamAuthWriteAndDeadlineFailures(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 		rec := httptest.NewRecorder()
-		err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -236,7 +237,7 @@ func TestTryProxmoxTerminalStreamAuthWriteAndDeadlineFailures(t *testing.T) {
 		}))
 		defer mock.Close()
 
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 		withProxmoxStreamHooks(t,
@@ -250,7 +251,7 @@ func TestTryProxmoxTerminalStreamAuthWriteAndDeadlineFailures(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 		rec := httptest.NewRecorder()
-		err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -305,11 +306,11 @@ func TestTryProxmoxTerminalStreamWebSocketBridge(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	handler := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := sut.tryProxmoxTerminalStream(w, r, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+		err := sut.ProxmoxDeps().TryProxmoxTerminalStream(w, r, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 			Kind:        "qemu",
 			Node:        "pve01",
 			VMID:        "101",
@@ -385,12 +386,12 @@ func TestTryProxmoxTerminalStreamBrowserUpgradeFailure(t *testing.T) {
 	}))
 	defer mock.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	configureProxmoxStreamCollector(t, sut, mock.URL, "collector-proxmox-stream", "cred-proxmox-stream")
 
 	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess/stream", nil)
 	rec := httptest.NewRecorder()
-	err := sut.tryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxSessionTarget{
+	err := sut.ProxmoxDeps().TryProxmoxTerminalStream(rec, req, terminal.Session{ID: "sess"}, proxmoxpkg.ProxmoxSessionTarget{
 		Kind:        "qemu",
 		Node:        "pve01",
 		VMID:        "101",

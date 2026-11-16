@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -165,7 +166,7 @@ func TestPerformProxmoxVNCAuthTransportAndWriteBranches(t *testing.T) {
 
 func TestPerformProxmoxVNCAuthExplicitWriteFailures(t *testing.T) {
 	t.Run("send RFB version failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -191,7 +192,7 @@ func TestPerformProxmoxVNCAuthExplicitWriteFailures(t *testing.T) {
 	})
 
 	t.Run("send None selection failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -220,7 +221,7 @@ func TestPerformProxmoxVNCAuthExplicitWriteFailures(t *testing.T) {
 	})
 
 	t.Run("send VNC Auth selection failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -249,7 +250,7 @@ func TestPerformProxmoxVNCAuthExplicitWriteFailures(t *testing.T) {
 	})
 
 	t.Run("send VNC auth response failure", func(t *testing.T) {
-		serverConn, clientConn, cleanup := newWebSocketPair(t)
+		serverConn, clientConn, cleanup := testutil.NewWebSocketPair(t)
 		defer cleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage

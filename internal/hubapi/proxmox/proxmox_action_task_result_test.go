@@ -1,8 +1,10 @@
-package main
+package proxmox_test
 
 import (
 	"context"
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +13,7 @@ import (
 )
 
 func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && r.URL.Path == "/api2/json/nodes/pve01/qemu/101/resize" {
@@ -23,8 +25,8 @@ func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
 	defer server.Close()
 
 	createProxmoxCredentialProfile(t, sut, "cred-no-upid", "labtether@pve!agent", "token-secret", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-proxmox-1",
 				CollectorType: hubcollector.CollectorTypeProxmox,
@@ -40,7 +42,7 @@ func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
 	}
 
 	// Dry runs still verify the named collector exists before validating.
-	dryRun, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
+	dryRun, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
 		"collector_id": "collector-proxmox-1",
 	}, true)
 	if err != nil {
@@ -53,7 +55,7 @@ func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
 		t.Fatalf("expected dry-run collector id passthrough, got %q", dryRun.Metadata["collector_id"])
 	}
 
-	result, err := sut.executeProxmoxAction(context.Background(), "vm.disk_resize", "pve01/101", map[string]string{
+	result, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.disk_resize", "pve01/101", map[string]string{
 		"disk":         "scsi0",
 		"size":         "+10G",
 		"collector_id": "collector-proxmox-1",
@@ -83,10 +85,10 @@ func TestExecuteProxmoxActionTaskExitFailureAndExecuteActionFailureResult(t *tes
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-exit-fail", "labtether@pve!agent", "token-secret", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-proxmox-1",
 				CollectorType: hubcollector.CollectorTypeProxmox,
@@ -101,7 +103,7 @@ func TestExecuteProxmoxActionTaskExitFailureAndExecuteActionFailureResult(t *tes
 		},
 	}
 
-	result, err := sut.executeProxmoxAction(context.Background(), "vm.stop", "pve01/101", map[string]string{
+	result, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.stop", "pve01/101", map[string]string{
 		"collector_id": "collector-proxmox-1",
 	}, false)
 	if err != nil {
@@ -111,7 +113,7 @@ func TestExecuteProxmoxActionTaskExitFailureAndExecuteActionFailureResult(t *tes
 		t.Fatalf("expected failed result from non-ok exitstatus, got %+v", result)
 	}
 
-	failedStatus := sut.executeActionInProcess(actions.Job{
+	failedStatus := sut.ProxmoxDeps().ExecuteActionInProcess(actions.Job{
 		JobID:       "job-proxmox-exit-fail",
 		RunID:       "run-proxmox-exit-fail",
 		Type:        actions.RunTypeConnectorAction,
@@ -126,7 +128,7 @@ func TestExecuteProxmoxActionTaskExitFailureAndExecuteActionFailureResult(t *tes
 		t.Fatalf("expected executeActionInProcess to map failed exec result status, got %+v", failedStatus)
 	}
 
-	failed := sut.executeActionInProcess(actions.Job{
+	failed := sut.ProxmoxDeps().ExecuteActionInProcess(actions.Job{
 		JobID:       "job-proxmox-fail",
 		RunID:       "run-proxmox-fail",
 		Type:        actions.RunTypeConnectorAction,
@@ -160,10 +162,10 @@ func TestExecuteProxmoxActionTaskWaitErrorAndBlankExitStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-task-wait", "labtether@pve!agent", "token-secret", server.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{
 			{
 				ID:            "collector-proxmox-1",
 				CollectorType: hubcollector.CollectorTypeProxmox,
@@ -178,7 +180,7 @@ func TestExecuteProxmoxActionTaskWaitErrorAndBlankExitStatus(t *testing.T) {
 		},
 	}
 
-	waitErrResult, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
+	waitErrResult, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
 		"collector_id": "collector-proxmox-1",
 	}, false)
 	if err != nil {
@@ -188,7 +190,7 @@ func TestExecuteProxmoxActionTaskWaitErrorAndBlankExitStatus(t *testing.T) {
 		t.Fatalf("expected wait error to map to failed result, got %+v", waitErrResult)
 	}
 
-	blankExitResult, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/102", map[string]string{
+	blankExitResult, err := sut.ProxmoxDeps().ExecuteProxmoxAction(context.Background(), "vm.start", "pve01/102", map[string]string{
 		"collector_id": "collector-proxmox-1",
 	}, false)
 	if err != nil {

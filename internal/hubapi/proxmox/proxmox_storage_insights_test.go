@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/telemetry"
 	"net/http"
 	"net/http/httptest"
@@ -16,11 +18,11 @@ import (
 )
 
 func TestLoadProxmoxStorageInsights(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-node-pve01",
 		Type:    "hypervisor-node",
 		Name:    "pve01",
@@ -34,7 +36,7 @@ func TestLoadProxmoxStorageInsights(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed host asset: %v", err)
 	}
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-local-zfs",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/local-zfs",
@@ -62,7 +64,7 @@ func TestLoadProxmoxStorageInsights(t *testing.T) {
 			CollectedAt: now.Add(-time.Duration(6-idx) * 24 * time.Hour),
 		})
 	}
-	if err := sut.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
+	if err := sut.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
 		t.Fatalf("failed to seed telemetry: %v", err)
 	}
 
@@ -91,12 +93,12 @@ func TestLoadProxmoxStorageInsights(t *testing.T) {
 	}
 
 	runtime := proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1")
-	target := proxmoxSessionTarget{
+	target := proxmoxpkg.ProxmoxSessionTarget{
 		Kind: "node",
 		Node: "pve01",
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(context.Background(), "proxmox-node-pve01", target, runtime, 7*24*time.Hour)
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(context.Background(), "proxmox-node-pve01", target, runtime, 7*24*time.Hour)
 	if err != nil {
 		t.Fatalf("loadProxmoxStorageInsights failed: %v", err)
 	}
@@ -148,12 +150,12 @@ func TestLoadProxmoxStorageInsights(t *testing.T) {
 }
 
 func TestLoadProxmoxStorageInsightsMissingNodeAndWarningAggregation(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.loadProxmoxStorageInsights(
+	_, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"asset-1",
-		proxmoxSessionTarget{Kind: "node"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "node"},
 		proxmoxpkg.NewProxmoxRuntime(nil),
 		7*24*time.Hour,
 	)
@@ -161,7 +163,7 @@ func TestLoadProxmoxStorageInsightsMissingNodeAndWarningAggregation(t *testing.T
 		t.Fatalf("expected proxmoxpkg.ErrProxmoxMissingNode, got %v", err)
 	}
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-local-zfs",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/local-zfs",
@@ -193,10 +195,10 @@ func TestLoadProxmoxStorageInsightsMissingNodeAndWarningAggregation(t *testing.T
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"proxmox-node-pve01",
-		proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		7*24*time.Hour,
 	)
@@ -212,9 +214,9 @@ func TestLoadProxmoxStorageInsightsMissingNodeAndWarningAggregation(t *testing.T
 }
 
 func TestLoadProxmoxStorageInsightsStorageTargetFallbackState(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -240,10 +242,10 @@ func TestLoadProxmoxStorageInsightsStorageTargetFallbackState(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"missing-storage-asset",
-		proxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "scratch"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "storage", Node: "pve01", StorageName: "scratch"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		24*time.Hour,
 	)
@@ -259,9 +261,9 @@ func TestLoadProxmoxStorageInsightsStorageTargetFallbackState(t *testing.T) {
 }
 
 func TestLoadProxmoxStorageInsightsEmptyState(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -285,10 +287,10 @@ func TestLoadProxmoxStorageInsightsEmptyState(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"proxmox-node-pve01",
-		proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		24*time.Hour,
 	)
@@ -301,11 +303,11 @@ func TestLoadProxmoxStorageInsightsEmptyState(t *testing.T) {
 }
 
 func TestLoadProxmoxStorageInsightsAdditionalBranches(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-alpha",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/alpha",
@@ -321,8 +323,8 @@ func TestLoadProxmoxStorageInsightsAdditionalBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed alpha storage asset: %v", err)
 	}
-	sut.telemetryStore = &proxmoxTelemetryStoreWithSeriesError{
-		inner:       sut.telemetryStore,
+	sut.TelemetryStore = &proxmoxTelemetryStoreWithSeriesError{
+		inner:       sut.TelemetryStore,
 		failingID:   "proxmox-storage-alpha",
 		seriesError: errors.New("telemetry offline"),
 	}
@@ -353,10 +355,10 @@ func TestLoadProxmoxStorageInsightsAdditionalBranches(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"proxmox-node-pve01",
-		proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		24*time.Hour,
 	)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"io"
 	"testing"
 	"time"
@@ -11,9 +12,9 @@ import (
 
 func TestBridgeWebSocketPairAdditionalLifecycleBranches(t *testing.T) {
 	t.Run("ignore non binary/text and handle upstream write failure", func(t *testing.T) {
-		browserServerConn, browserClientConn, browserCleanup := newWebSocketPair(t)
+		browserServerConn, browserClientConn, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, upstreamClientConn, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, upstreamClientConn, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		go proxmoxpkg.BridgeWebSocketPair(browserServerConn, upstreamServerConn)
@@ -29,9 +30,9 @@ func TestBridgeWebSocketPairAdditionalLifecycleBranches(t *testing.T) {
 	})
 
 	t.Run("upstream close triggers done branch", func(t *testing.T) {
-		browserServerConn, browserClientConn, browserCleanup := newWebSocketPair(t)
+		browserServerConn, browserClientConn, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, upstreamClientConn, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, upstreamClientConn, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		go proxmoxpkg.BridgeWebSocketPair(browserServerConn, upstreamServerConn)
@@ -44,9 +45,9 @@ func TestBridgeWebSocketPairAdditionalLifecycleBranches(t *testing.T) {
 	})
 
 	t.Run("browser write failure while forwarding upstream payload", func(t *testing.T) {
-		browserServerConn, browserClientConn, browserCleanup := newWebSocketPair(t)
+		browserServerConn, browserClientConn, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, upstreamClientConn, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, upstreamClientConn, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		go proxmoxpkg.BridgeWebSocketPair(browserServerConn, upstreamServerConn)
@@ -60,9 +61,9 @@ func TestBridgeWebSocketPairAdditionalLifecycleBranches(t *testing.T) {
 
 func TestBridgeWebSocketPairDeterministicRemainingBranches(t *testing.T) {
 	t.Run("upstream to browser write failure", func(t *testing.T) {
-		browserServerConn, _, browserCleanup := newWebSocketPair(t)
+		browserServerConn, _, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, _, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, _, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage
@@ -98,9 +99,9 @@ func TestBridgeWebSocketPairDeterministicRemainingBranches(t *testing.T) {
 	})
 
 	t.Run("done channel exits main loop", func(t *testing.T) {
-		browserServerConn, _, browserCleanup := newWebSocketPair(t)
+		browserServerConn, _, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, _, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, _, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		releaseUpstream := make(chan struct{})
@@ -139,9 +140,9 @@ func TestBridgeWebSocketPairDeterministicRemainingBranches(t *testing.T) {
 	})
 
 	t.Run("ignore non data frame", func(t *testing.T) {
-		browserServerConn, _, browserCleanup := newWebSocketPair(t)
+		browserServerConn, _, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, _, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, _, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		originalRead := proxmoxpkg.ProxmoxWSReadMessage
@@ -171,9 +172,9 @@ func TestBridgeWebSocketPairDeterministicRemainingBranches(t *testing.T) {
 	})
 
 	t.Run("upstream write failure", func(t *testing.T) {
-		browserServerConn, _, browserCleanup := newWebSocketPair(t)
+		browserServerConn, _, browserCleanup := testutil.NewWebSocketPair(t)
 		defer browserCleanup()
-		upstreamServerConn, _, upstreamCleanup := newWebSocketPair(t)
+		upstreamServerConn, _, upstreamCleanup := testutil.NewWebSocketPair(t)
 		defer upstreamCleanup()
 
 		originalWrite := proxmoxpkg.ProxmoxWSWriteMessage

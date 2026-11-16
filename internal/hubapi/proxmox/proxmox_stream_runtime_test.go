@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/credentials"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
@@ -18,21 +20,21 @@ import (
 )
 
 func TestLoadProxmoxRuntimeBranches(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "hub collector store unavailable") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "hub collector store unavailable") {
 		t.Fatalf("expected missing hub collector store error, got %v", err)
 	}
 
-	sut.hubCollectorStore = &stubHubCollectorStore{collectors: nil}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "no active proxmox collector configured") {
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{Collectors: nil}
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "no active proxmox collector configured") {
 		t.Fatalf("expected no active collector error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
-	sut.credentialStore = nil
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut = hubdeps.New(t)
+	sut.CredentialStore = nil
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -42,13 +44,13 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "credential store unavailable") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "credential store unavailable") {
 		t.Fatalf("expected missing credential store error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut = hubdeps.New(t)
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -57,13 +59,13 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "config is incomplete") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "config is incomplete") {
 		t.Fatalf("expected incomplete config error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut = hubdeps.New(t)
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -73,12 +75,12 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "credential profile not found") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "credential profile not found") {
 		t.Fatalf("expected missing credential error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
-	if _, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+	sut = hubdeps.New(t)
+	if _, err := sut.CredentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               "cred-bad-cipher",
 		Name:             "bad-cipher",
 		Kind:             credentials.KindProxmoxAPIToken,
@@ -90,8 +92,8 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to create invalid ciphertext profile: %v", err)
 	}
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -101,14 +103,14 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "failed to decrypt proxmox credential") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "failed to decrypt proxmox credential") {
 		t.Fatalf("expected decrypt error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
+	sut = hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-password-missing-user", "", "secret", "https://proxmox.example.local")
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -119,14 +121,14 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "username missing") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "username missing") {
 		t.Fatalf("expected password-mode username missing error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
+	sut = hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-token-missing-id", "", "secret", "https://proxmox.example.local")
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -136,14 +138,14 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 			},
 		}},
 	}
-	if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "token_id missing") {
+	if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "token_id missing") {
 		t.Fatalf("expected token_id missing error, got %v", err)
 	}
 
-	sut = newTestAPIServer(t)
+	sut = hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-cache-hit", "labtether@pve!agent", "secret", "https://proxmox.example.local")
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-1",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -156,13 +158,13 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 	}
 
 	// Pin the proxmox deps so the cache persists across calls.
-	sut.proxmoxDeps = sut.buildProxmoxDeps()
+	sut.Proxmox = sut.BuildProxmoxDeps()
 
-	first, err := sut.loadProxmoxRuntime("")
+	first, err := sut.ProxmoxDeps().LoadProxmoxRuntime("")
 	if err != nil {
 		t.Fatalf("first loadProxmoxRuntime failed: %v", err)
 	}
-	second, err := sut.loadProxmoxRuntime("")
+	second, err := sut.ProxmoxDeps().LoadProxmoxRuntime("")
 	if err != nil {
 		t.Fatalf("second loadProxmoxRuntime failed: %v", err)
 	}
@@ -176,19 +178,19 @@ func TestLoadProxmoxRuntimeBranches(t *testing.T) {
 
 func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 	t.Run("collector list failure", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.hubCollectorStore = &listErrorHubCollectorStore{
+		sut := hubdeps.New(t)
+		sut.HubCollectorStore = &listErrorHubCollectorStore{
 			listErr: errors.New("list failed"),
 		}
-		if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "failed to list hub collectors") {
+		if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "failed to list hub collectors") {
 			t.Fatalf("expected list hub collectors error, got %v", err)
 		}
 	})
 
 	t.Run("skip non proxmox collector", func(t *testing.T) {
-		sut := newTestAPIServer(t)
-		sut.hubCollectorStore = &stubHubCollectorStore{
-			collectors: []hubcollector.Collector{{
+		sut := hubdeps.New(t)
+		sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+			Collectors: []hubcollector.Collector{{
 				ID:            "collector-docker-1",
 				CollectorType: hubcollector.CollectorTypeDocker,
 				Enabled:       true,
@@ -197,16 +199,16 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 				},
 			}},
 		}
-		if _, err := sut.loadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "no active proxmox collector configured") {
+		if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil || !strings.Contains(err.Error(), "no active proxmox collector configured") {
 			t.Fatalf("expected no proxmox collector configured error, got %v", err)
 		}
 	})
 
 	t.Run("password auth success path", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createProxmoxCredentialProfile(t, sut, "cred-password-ok", "root@pam", "secret", "https://proxmox.example.local")
-		sut.hubCollectorStore = &stubHubCollectorStore{
-			collectors: []hubcollector.Collector{{
+		sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+			Collectors: []hubcollector.Collector{{
 				ID:            "collector-proxmox-password",
 				CollectorType: hubcollector.CollectorTypeProxmox,
 				Enabled:       true,
@@ -218,7 +220,7 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 			}},
 		}
 
-		runtime, err := sut.loadProxmoxRuntime("")
+		runtime, err := sut.ProxmoxDeps().LoadProxmoxRuntime("")
 		if err != nil {
 			t.Fatalf("expected password auth runtime to load, got %v", err)
 		}
@@ -228,7 +230,7 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 	})
 
 	t.Run("password auth prefers collector username over credential username", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/api2/json/access/ticket" {
 				t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -247,8 +249,8 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 		defer server.Close()
 
 		createProxmoxCredentialProfile(t, sut, "cred-password-stale-user", "labtether@pve!monitoring", "secret", server.URL)
-		sut.hubCollectorStore = &stubHubCollectorStore{
-			collectors: []hubcollector.Collector{{
+		sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+			Collectors: []hubcollector.Collector{{
 				ID:            "collector-proxmox-password-override",
 				CollectorType: hubcollector.CollectorTypeProxmox,
 				Enabled:       true,
@@ -261,7 +263,7 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 			}},
 		}
 
-		runtime, err := sut.loadProxmoxRuntime("")
+		runtime, err := sut.ProxmoxDeps().LoadProxmoxRuntime("")
 		if err != nil {
 			t.Fatalf("expected password auth runtime to load, got %v", err)
 		}
@@ -275,10 +277,10 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 	})
 
 	t.Run("invalid client config", func(t *testing.T) {
-		sut := newTestAPIServer(t)
+		sut := hubdeps.New(t)
 		createProxmoxCredentialProfile(t, sut, "cred-invalid-client", "labtether@pve!agent", "secret", "https://proxmox.example.local")
-		sut.hubCollectorStore = &stubHubCollectorStore{
-			collectors: []hubcollector.Collector{{
+		sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+			Collectors: []hubcollector.Collector{{
 				ID:            "collector-proxmox-invalid",
 				CollectorType: hubcollector.CollectorTypeProxmox,
 				Enabled:       true,
@@ -290,17 +292,17 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 				},
 			}},
 		}
-		if _, err := sut.loadProxmoxRuntime(""); err == nil {
+		if _, err := sut.ProxmoxDeps().LoadProxmoxRuntime(""); err == nil {
 			t.Fatalf("expected proxmox client initialization to fail for invalid ca_pem")
 		}
 	})
 }
 
 func TestLoadProxmoxRuntimeSeparatesAPIAndSPICECertificateBypasses(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-spice-tls-split", "labtether@pve!agent", "secret", "https://proxmox.example.local")
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-proxmox-spice-tls-split",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -314,7 +316,7 @@ func TestLoadProxmoxRuntimeSeparatesAPIAndSPICECertificateBypasses(t *testing.T)
 		}},
 	}
 
-	runtime, err := sut.loadProxmoxRuntime("")
+	runtime, err := sut.ProxmoxDeps().LoadProxmoxRuntime("")
 	if err != nil {
 		t.Fatalf("load Proxmox runtime: %v", err)
 	}
@@ -334,10 +336,10 @@ func TestProxmoxSPICETicketRejectsCertificateDataFromUnverifiedAPI(t *testing.T)
 	}))
 	defer forgedAPI.Close()
 
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 	createProxmoxCredentialProfile(t, sut, "cred-spice-untrusted-api", "labtether@pve!agent", "secret", forgedAPI.URL)
-	sut.hubCollectorStore = &stubHubCollectorStore{
-		collectors: []hubcollector.Collector{{
+	sut.HubCollectorStore = &testutil.StubHubCollectorStore{
+		Collectors: []hubcollector.Collector{{
 			ID:            "collector-spice-untrusted-api",
 			CollectorType: hubcollector.CollectorTypeProxmox,
 			Enabled:       true,
@@ -350,7 +352,7 @@ func TestProxmoxSPICETicketRejectsCertificateDataFromUnverifiedAPI(t *testing.T)
 			},
 		}},
 	}
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-vm-101",
 		Type:    "vm",
 		Name:    "pve01",
@@ -369,7 +371,7 @@ func TestProxmoxSPICETicketRejectsCertificateDataFromUnverifiedAPI(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions/session-untrusted-api/spice-ticket", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSPICETicket(rec, req, terminal.Session{
+	sut.ProxmoxDeps().HandleDesktopSPICETicket(rec, req, terminal.Session{
 		ID:     "session-untrusted-api",
 		Target: "proxmox-vm-101",
 		Mode:   "desktop",
@@ -401,15 +403,15 @@ func TestNewProxmoxDialerValidPEM(t *testing.T) {
 }
 
 func TestOpenProxmoxTerminalTicketUnsupportedKind(t *testing.T) {
-	sut := newTestAPIServer(t)
-	_, err := sut.openProxmoxTerminalTicket(context.Background(), nil, proxmoxSessionTarget{Kind: "unsupported"})
+	sut := hubdeps.New(t)
+	_, err := sut.ProxmoxDeps().OpenProxmoxTerminalTicket(context.Background(), nil, proxmoxpkg.ProxmoxSessionTarget{Kind: "unsupported"})
 	if err == nil || !strings.Contains(err.Error(), "unsupported proxmox terminal kind") {
 		t.Fatalf("expected unsupported kind error, got %v", err)
 	}
 }
 
 func TestOpenProxmoxTerminalTicketSupportedKinds(t *testing.T) {
-	allowInsecureTransportForConnectorTests(t)
+	testutil.AllowInsecureTransportForConnectorTests(t)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -434,15 +436,15 @@ func TestOpenProxmoxTerminalTicketSupportedKinds(t *testing.T) {
 	}
 
 	runtime := proxmoxpkg.NewProxmoxRuntime(client)
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	cases := []proxmoxSessionTarget{
+	cases := []proxmoxpkg.ProxmoxSessionTarget{
 		{Kind: "node", Node: "pve01"},
 		{Kind: "qemu", Node: "pve01", VMID: "100"},
 		{Kind: "lxc", Node: "pve01", VMID: "200"},
 	}
 	for _, tc := range cases {
-		ticket, err := sut.openProxmoxTerminalTicket(context.Background(), runtime, tc)
+		ticket, err := sut.ProxmoxDeps().OpenProxmoxTerminalTicket(context.Background(), runtime, tc)
 		if err != nil {
 			t.Fatalf("openProxmoxTerminalTicket(%s) failed: %v", tc.Kind, err)
 		}

@@ -1,4 +1,4 @@
-package main
+package proxmox_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/testutil/hubdeps"
 	"github.com/labtether/labtether/internal/telemetry"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ import (
 
 func TestBuildProxmoxStorageInsightEventsFiltersAndMapsPools(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0).UTC()
-	states := []proxmoxStoragePoolState{
+	states := []proxmoxpkg.ProxmoxStoragePoolState{
 		{
 			PoolName: "local-zfs",
 			Content: []proxmox.StorageContent{
@@ -59,7 +60,7 @@ func TestBuildProxmoxStorageInsightEventsFiltersAndMapsPools(t *testing.T) {
 		},
 	}
 
-	events := buildProxmoxStorageInsightEvents(tasks, states, now, 24*time.Hour)
+	events := proxmoxpkg.BuildProxmoxStorageInsightEvents(tasks, states, now, 24*time.Hour)
 	if len(events) != 1 {
 		t.Fatalf("expected exactly one storage event, got %d", len(events))
 	}
@@ -72,9 +73,9 @@ func TestBuildProxmoxStorageInsightEventsFiltersAndMapsPools(t *testing.T) {
 }
 
 func TestHandleProxmoxAssetsStorageInsightsSuccessAndErrors(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-bad",
 		Type:    "storage-pool",
 		Name:    "broken",
@@ -91,14 +92,14 @@ func TestHandleProxmoxAssetsStorageInsightsSuccessAndErrors(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-storage-bad/storage/insights", nil)
 	rec := httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when proxmox asset metadata is incomplete, got %d", rec.Code)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-storage-bad/storage/other", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown storage sub-action, got %d", rec.Code)
 	}
@@ -120,7 +121,7 @@ func TestHandleProxmoxAssetsStorageInsightsSuccessAndErrors(t *testing.T) {
 	defer server.Close()
 	configureSingleProxmoxCollector(t, sut, server.URL, "collector-proxmox-1")
 
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-local-zfs",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/local-zfs",
@@ -139,7 +140,7 @@ func TestHandleProxmoxAssetsStorageInsightsSuccessAndErrors(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-storage-local-zfs/storage/insights?window=36h", nil)
 	rec = httptest.NewRecorder()
-	sut.handleProxmoxAssets(rec, req)
+	sut.ProxmoxDeps().HandleProxmoxAssets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for storage insights handler, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 	}
@@ -149,9 +150,9 @@ func TestHandleProxmoxAssetsStorageInsightsSuccessAndErrors(t *testing.T) {
 }
 
 func TestLoadProxmoxStorageInsightsSummaryAndSorting(t *testing.T) {
-	sut := newTestAPIServer(t)
+	sut := hubdeps.New(t)
 
-	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err := sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-pool-a",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/pool-a",
@@ -167,7 +168,7 @@ func TestLoadProxmoxStorageInsightsSummaryAndSorting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to seed pool-a asset: %v", err)
 	}
-	_, err = sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+	_, err = sut.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "proxmox-storage-pool-b",
 		Type:    "storage-pool",
 		Name:    "storage/pve01/pool-b",
@@ -222,7 +223,7 @@ func TestLoadProxmoxStorageInsightsSummaryAndSorting(t *testing.T) {
 			CollectedAt: now,
 		},
 	}
-	if err := sut.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
+	if err := sut.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
 		t.Fatalf("failed to append telemetry samples: %v", err)
 	}
 
@@ -256,10 +257,10 @@ func TestLoadProxmoxStorageInsightsSummaryAndSorting(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	resp, err := sut.loadProxmoxStorageInsights(
+	resp, err := sut.ProxmoxDeps().LoadProxmoxStorageInsights(
 		context.Background(),
 		"proxmox-node-pve01",
-		proxmoxSessionTarget{Kind: "node", Node: "pve01"},
+		proxmoxpkg.ProxmoxSessionTarget{Kind: "node", Node: "pve01"},
 		proxmoxpkg.NewProxmoxRuntimeWithCollector(client, "collector-1"),
 		7*24*time.Hour,
 	)
@@ -301,7 +302,7 @@ func TestBuildProxmoxStorageInsightEventsUnmappedAndTruncated(t *testing.T) {
 		})
 	}
 
-	events := buildProxmoxStorageInsightEvents(tasks, nil, now, 24*time.Hour)
+	events := proxmoxpkg.BuildProxmoxStorageInsightEvents(tasks, nil, now, 24*time.Hour)
 	if len(events) != 80 {
 		t.Fatalf("expected event list to be truncated to 80 entries, got %d", len(events))
 	}
@@ -315,7 +316,7 @@ func TestBuildProxmoxStorageInsightEventsUnmappedAndTruncated(t *testing.T) {
 
 func TestBuildProxmoxStorageInsightEventsAndIndexEdgeBranches(t *testing.T) {
 	now := time.Unix(1_700_200_000, 0).UTC()
-	states := []proxmoxStoragePoolState{
+	states := []proxmoxpkg.ProxmoxStoragePoolState{
 		{
 			PoolName: "",
 			Content: []proxmox.StorageContent{
@@ -371,7 +372,7 @@ func TestBuildProxmoxStorageInsightEventsAndIndexEdgeBranches(t *testing.T) {
 			StartTime: float64(now.Unix()),
 		},
 	}
-	events := buildProxmoxStorageInsightEvents(tasks, states, now, 0)
+	events := proxmoxpkg.BuildProxmoxStorageInsightEvents(tasks, states, now, 0)
 	if len(events) < 4 {
 		t.Fatalf("expected mapped events across pools plus unmapped scrub event, got %+v", events)
 	}
