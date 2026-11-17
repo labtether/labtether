@@ -67,7 +67,18 @@ func start(t *testing.T, ctx context.Context, p *Pending[testReply], call Call[t
 	select {
 	case <-rec.sent:
 	case got := <-done:
-		t.Fatalf("Request returned before sending: %+v", got)
+		// A reply delivered during Send (a test hook does this) ends the
+		// request at once, so done and sent can both be ready and select
+		// may pick done. send marks sent first, so it is set by now if the
+		// message went out.
+		select {
+		case <-rec.sent:
+		default:
+			t.Fatalf("Request returned before sending: %+v", got)
+		}
+		ended := make(chan outcome, 1)
+		ended <- got
+		return ended
 	case <-time.After(guard):
 		t.Fatal("Request sent nothing")
 	}
