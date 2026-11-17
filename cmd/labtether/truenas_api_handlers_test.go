@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
@@ -203,7 +204,7 @@ func TestHandleTrueNASAssetFilesystemSuccess(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "filesystem.listdir":
-			if len(params) == 0 || collectorAnyString(params[0]) != "/mnt" {
+			if len(params) == 0 || collectorspkg.CollectorAnyString(params[0]) != "/mnt" {
 				t.Fatalf("expected filesystem.listdir first param to be /mnt, got %#v", params)
 			}
 			return []map[string]any{

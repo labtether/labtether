@@ -57,7 +57,7 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		AgentDefaultsChanged: func(changedKeys, resetKeys []string) {
 			s.ensureAgentsDeps().PushAgentDefaultsToConnected(changedKeys, resetKeys)
 		},
-		InvalidateWebServiceURLGroupingConfigCache: s.invalidateWebServiceURLGroupingConfigCache,
+		InvalidateWebServiceURLGroupingConfigCache: func() { s.ensureCollectorsDeps().InvalidateWebServiceURLGroupingConfigCache() },
 		InvalidateStatusCaches:                     s.invalidateStatusCaches,
 		PrincipalActorID: func(ctx context.Context) string {
 			return apiv2.PrincipalActorID(ctx)

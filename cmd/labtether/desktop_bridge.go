@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
@@ -70,7 +71,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return respkg.GenerateRequestID()
 		},
 		SanitizeUpstreamError: func(msg string) string {
-			return sanitizeUpstreamError(msg)
+			return collectorspkg.SanitizeUpstreamError(msg)
 		},
 		EnvOrDefaultBool: func(key string, fallback bool) bool {
 			return shared.EnvOrDefaultBool(key, fallback)

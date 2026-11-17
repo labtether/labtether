@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
@@ -104,10 +105,10 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		},
 
 		ResolveSyntheticServiceAsset:   s.resolveSyntheticServiceAsset,
-		WebServiceHealthLogSource:      webServiceHealthLogSource,
-		WebServiceStatusTransitionKind: webServiceStatusTransitionKind,
-		WebServiceUptimeDropKind:       webServiceUptimeDropKind,
-		WebServiceUptimeDropThreshold:  webServiceUptimeDropThreshold,
+		WebServiceHealthLogSource:      collectorspkg.WebServiceHealthLogSource,
+		WebServiceStatusTransitionKind: collectorspkg.WebServiceStatusTransitionKind,
+		WebServiceUptimeDropKind:       collectorspkg.WebServiceUptimeDropKind,
+		WebServiceUptimeDropThreshold:  collectorspkg.WebServiceUptimeDropThreshold,
 
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,

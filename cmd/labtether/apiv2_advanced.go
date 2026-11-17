@@ -159,11 +159,11 @@ func (s *apiServer) handleV2WebServices(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		scope = "web-services:read"
 		path = "/api/v1/services/web"
-		handler = s.handleWebServices
+		handler = func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServices(w, r) }
 	case http.MethodPost:
 		scope = "web-services:write"
 		path = "/api/v1/services/web/manual"
-		handler = s.handleWebServiceManual
+		handler = func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceManual(w, r) }
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or POST required")
 		return
@@ -182,7 +182,7 @@ func (s *apiServer) handleV2WebServiceSync(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	r.URL.Path = "/api/v1/services/web/sync"
-	apiv2.WrapV1Handler(s.handleWebServiceSync)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleWebServiceSync)(w, r)
 }
 
 func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/web-services/", "/api/v1/services/web/manual/", 1)
-	apiv2.WrapV1Handler(s.handleWebServiceManualActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleWebServiceManualActions)(w, r)
 }
 
 // --- Hub Collectors ---
@@ -210,7 +210,7 @@ func (s *apiServer) handleV2Collectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/hub-collectors"
-	apiv2.WrapV1Handler(s.handleHubCollectors)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleHubCollectors)(w, r)
 }
 
 func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +223,7 @@ func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/collectors/", "/hub-collectors/", 1)
-	apiv2.WrapV1Handler(s.handleHubCollectorActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleHubCollectorActions)(w, r)
 }
 
 // --- Notifications ---

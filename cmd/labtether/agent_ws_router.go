@@ -183,7 +183,7 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureDockerDeps().ProcessAgentDockerComposeResult(conn, msg)
 	}
 	router[agentmgr.MsgWebServiceReport] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebServiceReport(conn, msg)
+		s.ensureCollectorsDeps().ProcessAgentWebServiceReport(conn, msg)
 	}
 	router[agentmgr.MsgClipboardData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureDesktopDeps().ProcessAgentClipboardData(conn, msg)

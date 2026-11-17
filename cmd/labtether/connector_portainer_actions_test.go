@@ -20,7 +20,7 @@ func TestHandleConnectorActionsPortainerDiscover(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/discover", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -38,7 +38,7 @@ func TestHandleConnectorActionsPortainerDiscover(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/discover", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
@@ -59,7 +59,7 @@ func TestHandleConnectorActionsPortainerDiscover(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/discover", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -92,7 +92,7 @@ func TestHandleConnectorActionsPortainerHealth(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/health", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -110,7 +110,7 @@ func TestHandleConnectorActionsPortainerHealth(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/health", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
@@ -128,7 +128,7 @@ func TestHandleConnectorActionsPortainerHealth(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/health", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -166,7 +166,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -186,7 +186,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/actions", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -208,7 +208,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/actions/container.restart/execute", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -222,7 +222,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", strings.NewReader("{"))
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
@@ -238,7 +238,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", strings.NewReader(`{}`))
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
@@ -259,7 +259,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -280,7 +280,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", strings.NewReader(`{"target_id":"container-1"}`))
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())

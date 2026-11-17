@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/connectors/truenas"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
@@ -82,7 +83,7 @@ func newTrueNASSubscriptionServer(
 			reportErr("read auth request: %v", err)
 			return
 		}
-		if strings.TrimSpace(collectorAnyString(authReq["method"])) != "auth.login_with_api_key" {
+		if strings.TrimSpace(collectorspkg.CollectorAnyString(authReq["method"])) != "auth.login_with_api_key" {
 			reportErr("expected auth.login_with_api_key, got %#v", authReq["method"])
 			return
 		}
@@ -99,7 +100,7 @@ func newTrueNASSubscriptionServer(
 			reportErr("read subscribe request: %v", err)
 			return
 		}
-		if strings.TrimSpace(collectorAnyString(subscribeReq["method"])) != "core.subscribe" {
+		if strings.TrimSpace(collectorspkg.CollectorAnyString(subscribeReq["method"])) != "core.subscribe" {
 			reportErr("expected core.subscribe, got %#v", subscribeReq["method"])
 			return
 		}

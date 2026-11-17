@@ -40,9 +40,9 @@ func startRuntimeLoops(
 	safeGo(ctx, wg, "alert-evaluator", func(ctx context.Context) { srv.runAlertEvaluator(ctx) })
 	safeGo(ctx, wg, "synthetic-runner", func(ctx context.Context) { srv.runSyntheticRunner(ctx) })
 	safeGo(ctx, wg, "incident-correlator", func(ctx context.Context) { srv.runIncidentCorrelator(ctx) })
-	safeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.runHubCollectorLoop(ctx) })
+	safeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.ensureCollectorsDeps().RunHubCollectorLoop(ctx) })
 	safeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
-	safeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
+	safeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.ensureCollectorsDeps().RunWebServiceCleanup(ctx) })
 	safeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
 	if srv.demoMode {
 		safeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })

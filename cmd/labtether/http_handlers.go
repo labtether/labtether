@@ -72,44 +72,56 @@ func (s *apiServer) buildHTTPHandlers(
 			s.ensureResourcesDeps().HandleMobileClientTelemetry(w, r)
 		})),
 		"/queue/dead-letters":     s.withAuth(requireReadWriteScopes("dead-letters:read", "dead-letters:write", s.handleDeadLetters)),
-		"/connectors":             s.withAuth(requireScope("connectors:read", s.handleListConnectors)),
-		"/connectors/":            s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleConnectorActions)),
+		"/connectors":             s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleListConnectors(w, r) })),
+		"/connectors/":            s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleConnectorActions(w, r) })),
 		"/proxmox/assets/":        s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleProxmoxAssets)),
 		"/proxmox/tasks/":         s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleProxmoxTaskRoutes)),
 		"/proxmox/cluster/status": s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensureProxmoxDeps().HandleProxmoxClusterStatus(w, r) })),
 		"/proxmox/cluster/resources": s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) {
 			s.ensureProxmoxDeps().HandleProxmoxClusterResources(w, r)
 		})),
-		"/proxmox/nodes/":                            s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleProxmoxNodeRoutes)),
-		"/proxmox/ceph/":                             s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.guardIntegrationActions(s.ensureProxmoxDeps().HandleProxmoxCeph))),
-		"/proxmox/ceph/status":                       s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensureProxmoxDeps().HandleProxmoxCephStatus(w, r) })),
-		"/pbs/assets/":                               s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSAssets)),
-		"/pbs/tasks/":                                s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSTaskRoutes)),
-		"/truenas/assets/":                           s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleTrueNASAssets)),
-		"/portainer/endpoints":                       s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensurePortainerDeps().HandlePortainerEndpoints(w, r) })),
-		"/portainer/assets/":                         s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePortainerAssets)),
-		"/api/v1/services/web":                       s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServices)),
-		"/api/v1/services/web/compat":                s.withAuth(requireScope("web-services:read", s.handleWebServiceCompat)),
-		"/api/v1/services/web/categories":            s.withAuth(requireScope("web-services:read", s.handleWebServiceCategories)),
-		"/api/v1/services/web/sync":                  s.withAuth(requireScope("web-services:write", s.handleWebServiceSync)),
-		"/api/v1/services/web/manual":                s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceManual)),
-		"/api/v1/services/web/manual/":               s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceManualActions)),
-		"/api/v1/services/web/overrides":             s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceOverrides)),
-		"/api/v1/services/web/icon-library":          s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceIconLibrary)),
-		"/api/v1/services/web/alt-urls/":             s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceAltURLs)),
-		"/api/v1/services/web/never-group-rules":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceNeverGroupRules)),
-		"/api/v1/services/web/grouping-settings":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceGroupingSettings)),
-		"/api/v1/services/web/grouping-suggestions/": s.withAuth(requireScope("web-services:write", s.handleWebServiceGroupingSuggestionResponse)),
-		"/api/v1/docker/hosts":                       s.withAuth(requireReadWriteScopes("docker:read", "docker:write", func(w http.ResponseWriter, r *http.Request) { s.ensureDockerDeps().HandleDockerHosts(w, r) })),
-		"/api/v1/docker/hosts/":                      s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerHostActions)),
-		"/api/v1/docker/containers/":                 s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerContainerActions)),
-		"/api/v1/docker/stacks/":                     s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerStackActions)),
-		"/api/v2/docker/hosts":                       s.withAuth(s.handleV2DockerHosts),
-		"/api/v2/docker/hosts/":                      s.withAuth(s.handleV2DockerHostActions),
-		"/api/v2/docker/containers/":                 s.withAuth(s.handleV2DockerContainerActions),
-		"/api/v2/docker/stacks/":                     s.withAuth(s.handleV2DockerStackActions),
-		"/api/v2/metrics/overview":                   s.withAuth(s.handleV2MetricsOverview),
-		"/api/v2/metrics/query":                      s.withAuth(s.handleV2MetricsQuery),
+		"/proxmox/nodes/":             s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleProxmoxNodeRoutes)),
+		"/proxmox/ceph/":              s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.guardIntegrationActions(s.ensureProxmoxDeps().HandleProxmoxCeph))),
+		"/proxmox/ceph/status":        s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensureProxmoxDeps().HandleProxmoxCephStatus(w, r) })),
+		"/pbs/assets/":                s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSAssets)),
+		"/pbs/tasks/":                 s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSTaskRoutes)),
+		"/truenas/assets/":            s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleTrueNASAssets)),
+		"/portainer/endpoints":        s.withAuth(requireScope("connectors:read", func(w http.ResponseWriter, r *http.Request) { s.ensurePortainerDeps().HandlePortainerEndpoints(w, r) })),
+		"/portainer/assets/":          s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePortainerAssets)),
+		"/api/v1/services/web":        s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServices(w, r) })),
+		"/api/v1/services/web/compat": s.withAuth(requireScope("web-services:read", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceCompat(w, r) })),
+		"/api/v1/services/web/categories": s.withAuth(requireScope("web-services:read", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceCategories(w, r)
+		})),
+		"/api/v1/services/web/sync":   s.withAuth(requireScope("web-services:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceSync(w, r) })),
+		"/api/v1/services/web/manual": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceManual(w, r) })),
+		"/api/v1/services/web/manual/": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceManualActions(w, r)
+		})),
+		"/api/v1/services/web/overrides": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceOverrides(w, r) })),
+		"/api/v1/services/web/icon-library": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceIconLibrary(w, r)
+		})),
+		"/api/v1/services/web/alt-urls/": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceAltURLs(w, r) })),
+		"/api/v1/services/web/never-group-rules": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceNeverGroupRules(w, r)
+		})),
+		"/api/v1/services/web/grouping-settings": s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceGroupingSettings(w, r)
+		})),
+		"/api/v1/services/web/grouping-suggestions/": s.withAuth(requireScope("web-services:write", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureCollectorsDeps().HandleWebServiceGroupingSuggestionResponse(w, r)
+		})),
+		"/api/v1/docker/hosts":       s.withAuth(requireReadWriteScopes("docker:read", "docker:write", func(w http.ResponseWriter, r *http.Request) { s.ensureDockerDeps().HandleDockerHosts(w, r) })),
+		"/api/v1/docker/hosts/":      s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerHostActions)),
+		"/api/v1/docker/containers/": s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerContainerActions)),
+		"/api/v1/docker/stacks/":     s.withAuth(requireReadWriteScopes("docker:read", "docker:write", s.handleDockerStackActions)),
+		"/api/v2/docker/hosts":       s.withAuth(s.handleV2DockerHosts),
+		"/api/v2/docker/hosts/":      s.withAuth(s.handleV2DockerHostActions),
+		"/api/v2/docker/containers/": s.withAuth(s.handleV2DockerContainerActions),
+		"/api/v2/docker/stacks/":     s.withAuth(s.handleV2DockerStackActions),
+		"/api/v2/metrics/overview":   s.withAuth(s.handleV2MetricsOverview),
+		"/api/v2/metrics/query":      s.withAuth(s.handleV2MetricsQuery),
 		// Updates
 		"/api/v2/updates/plans":  s.withAuth(s.handleV2UpdatePlans),
 		"/api/v2/updates/plans/": s.withAuth(s.handleV2UpdatePlanActions),
@@ -347,8 +359,8 @@ func (s *apiServer) buildHTTPHandlers(
 		"/synthetic-checks/": s.withAuth(requireReadWriteScopes("assets:read", "assets:write", func(w http.ResponseWriter, r *http.Request) {
 			s.ensureResourcesDeps().HandleSyntheticCheckActions(w, r)
 		})),
-		"/hub-collectors":  s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", s.handleHubCollectors)),
-		"/hub-collectors/": s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", s.handleHubCollectorActions)),
+		"/hub-collectors":  s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleHubCollectors(w, r) })),
+		"/hub-collectors/": s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleHubCollectorActions(w, r) })),
 		// Push registration is self-scoped to the authenticated user's device;
 		// viewer accounts must be able to opt in/out without asset mutation rights.
 		"/api/v1/devices/register":    s.withAuth(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleDeviceRegister(w, r) }),

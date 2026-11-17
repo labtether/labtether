@@ -148,10 +148,10 @@ type apiServer struct {
 	desktopSPICEMu                sync.RWMutex
 	desktopSPICE                  map[string]desktoppkg.DesktopSPICEProxyTarget // map[sessionID]DesktopSPICEProxyTarget
 	webServiceURLGroupingCfgMu    sync.RWMutex
-	webServiceURLGroupingCfg      webServiceURLGroupingConfig
+	webServiceURLGroupingCfg      collectorspkg.WebServiceURLGroupingConfig
 	webServiceURLGroupingCfgAt    time.Time
 	webServiceURLGroupingCfgTTL   time.Duration
-	urlGroupingSuggestions        []webServiceGroupingSuggestion
+	urlGroupingSuggestions        []collectorspkg.WebServiceGroupingSuggestion
 	urlGroupingSuggestionsMu      sync.Mutex
 	statusCache                   StatusCache
 	linkSuggestionScanMu          sync.Mutex

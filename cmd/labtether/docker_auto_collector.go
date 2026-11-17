@@ -36,7 +36,7 @@ func (s *apiServer) autoProvisionDockerCollectorIfNeeded(agentAssetID string, co
 	}
 
 	collectorAssetID := autoDockerCollectorAssetID(agentAssetID)
-	_, clusterMeta := withCanonicalResourceMetadata("docker", "connector-cluster", map[string]string{
+	_, clusterMeta := collectorspkg.WithCanonicalResourceMetadata("docker", "connector-cluster", map[string]string{
 		"connector_type": "docker",
 		"provision_mode": "auto",
 		"agent_id":       strings.TrimSpace(agentAssetID),
@@ -79,7 +79,7 @@ func (s *apiServer) autoProvisionDockerCollectorIfNeeded(agentAssetID string, co
 	if s.connectorRegistry == nil {
 		return
 	}
-	if err := s.runHubCollectorNow(collector.ID); err != nil {
+	if err := s.ensureCollectorsDeps().RunHubCollectorNow(collector.ID); err != nil {
 		log.Printf("agentws: failed to start auto-provisioned docker collector %s: %v", collector.ID, err)
 	}
 }
@@ -100,7 +100,7 @@ func (s *apiServer) triggerDockerCollectorRunForDiscovery() {
 		return
 	}
 
-	if err := s.runHubCollectorNow(collector.ID); err != nil {
+	if err := s.ensureCollectorsDeps().RunHubCollectorNow(collector.ID); err != nil {
 		log.Printf("agentws: failed to trigger docker collector run on discovery for collector %s: %v", collector.ID, err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -114,8 +115,8 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		PersistCanonicalHeartbeatFn: func(assetEntry assets.Asset, req assets.HeartbeatRequest) {
 			s.persistCanonicalHeartbeat(assetEntry, req)
 		},
-		CollectorConfigString: collectorConfigString,
-		NormalizeAssetKey:     normalizeAssetKey,
+		CollectorConfigString: collectorspkg.CollectorConfigString,
+		NormalizeAssetKey:     collectorspkg.NormalizeAssetKey,
 		AutoDockerCollectorAssetID: func(agentAssetID string) string {
 			return autoDockerCollectorAssetID(agentAssetID)
 		},

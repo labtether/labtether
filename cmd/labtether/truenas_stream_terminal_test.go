@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/assets"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
@@ -80,7 +81,7 @@ func TestTryTrueNASTerminalStreamProxySuccess(t *testing.T) {
 			if err := conn.ReadJSON(&tokenReq); err != nil {
 				t.Fatalf("read token request: %v", err)
 			}
-			if strings.TrimSpace(collectorAnyString(tokenReq["method"])) != "auth.generate_token" {
+			if strings.TrimSpace(collectorspkg.CollectorAnyString(tokenReq["method"])) != "auth.generate_token" {
 				t.Fatalf("expected auth.generate_token, got %#v", tokenReq["method"])
 			}
 			if err := conn.WriteJSON(map[string]any{
@@ -101,7 +102,7 @@ func TestTryTrueNASTerminalStreamProxySuccess(t *testing.T) {
 			if err := conn.ReadJSON(&authMsg); err != nil {
 				t.Fatalf("read shell auth message: %v", err)
 			}
-			if got := strings.TrimSpace(collectorAnyString(authMsg["token"])); got != "token-123" {
+			if got := strings.TrimSpace(collectorspkg.CollectorAnyString(authMsg["token"])); got != "token-123" {
 				t.Fatalf("shell token = %q, want token-123", got)
 			}
 			if err := conn.WriteJSON(map[string]any{"msg": "connected"}); err != nil {
