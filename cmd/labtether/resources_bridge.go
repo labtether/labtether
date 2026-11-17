@@ -128,14 +128,24 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		HandleDisplayList: func(w http.ResponseWriter, r *http.Request, assetID string) {
 			s.ensureDesktopDeps().HandleDisplayListDirect(w, r, assetID)
 		},
-		HandlePushHubKey:             s.handlePushHubKey,
-		HandleTestProtocolConnection: s.handleTestProtocolConnection,
-		HandleListProtocolConfigs:    s.handleListProtocolConfigs,
-		HandleCreateProtocolConfig:   s.handleCreateProtocolConfig,
-		HandleUpdateProtocolConfig:   s.handleUpdateProtocolConfig,
-		HandleDeleteProtocolConfig:   s.handleDeleteProtocolConfig,
-		HandleHubSSHKey:              s.handleAssetHubSSHKey,
-		HubSSHKeyEnabled:             s.hubSSHKeyEnabled,
+		HandlePushHubKey: s.handlePushHubKey,
+		HandleTestProtocolConnection: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleTestProtocolConnection(w, r, assetID, protocol)
+		},
+		HandleListProtocolConfigs: func(w http.ResponseWriter, r *http.Request, assetID string) {
+			s.ensureAdminDeps().HandleListProtocolConfigs(w, r, assetID)
+		},
+		HandleCreateProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID string) {
+			s.ensureAdminDeps().HandleCreateProtocolConfig(w, r, assetID)
+		},
+		HandleUpdateProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleUpdateProtocolConfig(w, r, assetID, protocol)
+		},
+		HandleDeleteProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleDeleteProtocolConfig(w, r, assetID, protocol)
+		},
+		HandleHubSSHKey:  s.handleAssetHubSSHKey,
+		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 	}
 }
 

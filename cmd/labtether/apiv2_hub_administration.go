@@ -62,7 +62,7 @@ func (s *apiServer) handleV2HubTLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/settings/tls"
-	apiv2.WrapV1Handler(s.handleTLSSettings)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandleTLSSettings)(w, r)
 }
 
 func (s *apiServer) handleV2HubTailscale(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +78,7 @@ func (s *apiServer) handleV2HubTailscale(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	r.URL.Path = "/settings/tailscale/serve"
-	apiv2.WrapV1Handler(s.handleTailscaleServeStatus)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandleTailscaleServeStatus)(w, r)
 }
 
 // --- TLS Renew ---

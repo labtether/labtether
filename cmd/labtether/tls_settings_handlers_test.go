@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/certmgr"
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 )
 
 type testTLSKeyPair struct {
@@ -72,15 +73,15 @@ func TestHandleTLSSettingsUpdateAppliesUploadedCertificateLive(t *testing.T) {
 		t.Fatalf("marshal request: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, tlsSettingsRoute, bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, adminpkg.TLSSettingsRoute, bytes.NewReader(body))
 	rec := httptest.NewRecorder()
-	sut.handleTLSSettings(rec, req)
+	sut.ensureAdminDeps().HandleTLSSettings(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp tlsSettingsResponse
+	var resp adminpkg.TLSSettingsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -172,21 +173,21 @@ func TestHandleTLSSettingsClearRestoresStartupTLSProviderLive(t *testing.T) {
 		t.Fatalf("marshal update request: %v", err)
 	}
 
-	updateReq := httptest.NewRequest(http.MethodPost, tlsSettingsRoute, bytes.NewReader(updateBody))
+	updateReq := httptest.NewRequest(http.MethodPost, adminpkg.TLSSettingsRoute, bytes.NewReader(updateBody))
 	updateRec := httptest.NewRecorder()
-	sut.handleTLSSettings(updateRec, updateReq)
+	sut.ensureAdminDeps().HandleTLSSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected upload to succeed, got %d: %s", updateRec.Code, updateRec.Body.String())
 	}
 
-	clearReq := httptest.NewRequest(http.MethodDelete, tlsSettingsRoute, nil)
+	clearReq := httptest.NewRequest(http.MethodDelete, adminpkg.TLSSettingsRoute, nil)
 	clearRec := httptest.NewRecorder()
-	sut.handleTLSSettings(clearRec, clearReq)
+	sut.ensureAdminDeps().HandleTLSSettings(clearRec, clearReq)
 	if clearRec.Code != http.StatusOK {
 		t.Fatalf("expected clear to succeed, got %d: %s", clearRec.Code, clearRec.Body.String())
 	}
 
-	var resp tlsSettingsResponse
+	var resp adminpkg.TLSSettingsResponse
 	if err := json.Unmarshal(clearRec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode clear response: %v", err)
 	}

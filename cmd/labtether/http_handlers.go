@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/runtimesettings"
 	"github.com/labtether/labtether/internal/telemetry/promexport"
@@ -289,23 +290,25 @@ func (s *apiServer) buildHTTPHandlers(
 		"/live-activities/incidents/": s.withAuth(requireScope("alerts:read", func(w http.ResponseWriter, r *http.Request) {
 			s.ensureAlertingDeps().HandleIncidentLiveActivityTokens(w, r)
 		})),
-		"/settings/retention":                  s.withAuth(requireAdminForMutation(requireReadWriteScopes("settings:read", "settings:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleRetentionSettings(w, r) }))),
-		"/settings/oidc":                       s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettings))),
-		"/settings/oidc/apply":                 s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettingsApply))),
-		"/settings/managed-database":           s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("managed database settings", s.handleManagedDatabaseSettings))),
-		"/settings/managed-database/reveal":    s.withAdminAuth(requireScope("settings:read", requireScope("credentials:use", guardAssetRestrictedGlobalAPI("managed database credentials", s.handleManagedDatabasePasswordReveal)))),
-		"/settings/runtime":                    s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("runtime settings", s.handleRuntimeSettings))),
-		"/settings/runtime/reset":              s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("runtime settings", s.handleRuntimeSettingsReset))),
+		"/settings/retention":        s.withAuth(requireAdminForMutation(requireReadWriteScopes("settings:read", "settings:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleRetentionSettings(w, r) }))),
+		"/settings/oidc":             s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettings))),
+		"/settings/oidc/apply":       s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettingsApply))),
+		"/settings/managed-database": s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("managed database settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleManagedDatabaseSettings(w, r) }))),
+		"/settings/managed-database/reveal": s.withAdminAuth(requireScope("settings:read", requireScope("credentials:use", guardAssetRestrictedGlobalAPI("managed database credentials", func(w http.ResponseWriter, r *http.Request) {
+			s.ensureAdminDeps().HandleManagedDatabasePasswordReveal(w, r)
+		})))),
+		"/settings/runtime":                    s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("runtime settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleRuntimeSettings(w, r) }))),
+		"/settings/runtime/reset":              s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("runtime settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleRuntimeSettingsReset(w, r) }))),
 		"/settings/restart":                    s.withAdminAuth(requireScope("settings:write", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleRestartSettings(w, r) })),
-		"/settings/tls":                        s.withAdminAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("TLS settings", s.handleTLSSettings))),
-		"/settings/prometheus/test-connection": s.withAdminAuth(requireScope("settings:read", guardAssetRestrictedGlobalAPI("Prometheus settings", s.handlePrometheusTestConnection))),
-		"/settings/tailscale/serve":            s.withAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("Tailscale Serve settings", s.handleTailscaleServeStatus))),
+		"/settings/tls":                        s.withAdminAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("TLS settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleTLSSettings(w, r) }))),
+		"/settings/prometheus/test-connection": s.withAdminAuth(requireScope("settings:read", guardAssetRestrictedGlobalAPI("Prometheus settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandlePrometheusTestConnection(w, r) }))),
+		"/settings/tailscale/serve":            s.withAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("Tailscale Serve settings", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleTailscaleServeStatus(w, r) }))),
 		"/audit/events":                        s.withAuth(requireScope("audit:read", func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleAuditEvents(w, r) })),
 		"/policy/check":                        s.withAuth(requireScope("settings:read", s.handlePolicyCheck)),
 		"/api/v1/enroll":                       func(w http.ResponseWriter, r *http.Request) { s.ensureAgentsDeps().HandleEnroll(w, r) },
 		"/api/v1/discover":                     func(w http.ResponseWriter, r *http.Request) { s.ensureAgentsDeps().HandleDiscover(w, r) },
-		"/api/v1/ca.crt":                       s.handleCACert,
-		"/api/v1/tls/info":                     s.handleTLSInfo,
+		"/api/v1/ca.crt":                       func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleCACert(w, r) },
+		"/api/v1/tls/info":                     func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleTLSInfo(w, r) },
 		"/api/v1/agent/binary":                 func(w http.ResponseWriter, r *http.Request) { s.ensureAgentsDeps().HandleAgentBinary(w, r) },
 		"/api/v1/agent/releases/latest":        func(w http.ResponseWriter, r *http.Request) { s.ensureAgentsDeps().HandleAgentReleaseLatest(w, r) },
 		"/api/v1/agent/manifest":               s.withAuth(requireScope("agents:read", func(w http.ResponseWriter, r *http.Request) { s.ensureAgentsDeps().HandleAgentManifest(w, r) })),
@@ -369,7 +372,7 @@ func (s *apiServer) buildHTTPHandlers(
 		// viewer accounts must be able to opt in/out without asset mutation rights.
 		"/api/v1/devices/register":    s.withAuth(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleDeviceRegister(w, r) }),
 		"/api/v1/devices/deregister":  s.withAuth(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleDeviceDeregister(w, r) }),
-		"/admin/reset":                s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("administrative reset", s.handleAdminReset))),
+		"/admin/reset":                s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("administrative reset", func(w http.ResponseWriter, r *http.Request) { s.ensureAdminDeps().HandleAdminReset(w, r) }))),
 		"/api/v2/keys":                s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("API key administration", s.handleAPIKeys))),
 		"/api/v2/keys/":               s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("API key administration", s.handleAPIKeyActions))),
 		"/api/v2/schedules":           s.withAuth(s.handleV2Schedules),
@@ -418,7 +421,7 @@ func (s *apiServer) handlePrometheusMetrics() http.HandlerFunc {
 	src := newPrometheusSnapshotSource(s)
 	h := promexport.NewHandler(src)
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !prometheusSettingsEnabled(s.runtimeStore, runtimesettings.KeyPrometheusScrapeEnabled) {
+		if !adminpkg.PrometheusSettingsEnabled(s.runtimeStore, runtimesettings.KeyPrometheusScrapeEnabled) {
 			http.Error(w, "prometheus scrape endpoint is disabled", http.StatusNotFound)
 			return
 		}

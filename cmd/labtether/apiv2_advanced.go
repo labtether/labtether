@@ -353,7 +353,7 @@ func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Re
 		return
 	}
 	r.URL.Path = "/settings/runtime"
-	apiv2.WrapV1Handler(s.handleRuntimeSettings)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandleRuntimeSettings)(w, r)
 }
 
 // --- File Transfers ---
@@ -439,5 +439,5 @@ func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Reques
 	}
 
 	r.URL.Path = "/settings/prometheus/test-connection"
-	apiv2.WrapV1Handler(s.handlePrometheusTestConnection)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandlePrometheusTestConnection)(w, r)
 }

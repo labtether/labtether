@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -36,15 +37,15 @@ func TestHandleTailscaleServeStatus_NotInstalled(t *testing.T) {
 		return nil, nil
 	}
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -97,15 +98,15 @@ func TestHandleTailscaleServeStatus_LoginRequired(t *testing.T) {
 		return nil, nil
 	}
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -163,15 +164,15 @@ func TestHandleTailscaleServeStatus_LoggedInWithoutServe(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -194,7 +195,7 @@ func TestHandleTailscaleServeStatus_LoggedInWithoutServe(t *testing.T) {
 }
 
 func TestHandleTailscaleServeStatus_Configured(t *testing.T) {
-	t.Setenv(envTailscaleManaged, "true")
+	t.Setenv(adminpkg.EnvTailscaleManaged, "true")
 
 	sut := newTestAPIServer(t)
 	sut.tlsState.Enabled = true
@@ -241,15 +242,15 @@ func TestHandleTailscaleServeStatus_Configured(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -317,15 +318,15 @@ func TestHandleTailscaleServeStatus_FindsMacOSAppBundleBinary(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -359,15 +360,15 @@ func TestHandleTailscaleServeStatus_RespectsSavedModeChoice(t *testing.T) {
 	}
 	tailscaleFallbackPaths = func() []string { return nil }
 
-	req := httptest.NewRequest(http.MethodGet, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -383,9 +384,9 @@ func TestHandleTailscaleServeStatus_RespectsSavedModeChoice(t *testing.T) {
 func TestHandleTailscaleServeStatus_MethodNotAllowed(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	req := httptest.NewRequest(http.MethodPut, tailscaleServeStatusRoute, nil)
+	req := httptest.NewRequest(http.MethodPut, adminpkg.TailscaleServeStatusRoute, nil)
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
@@ -393,13 +394,13 @@ func TestHandleTailscaleServeStatus_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleTailscaleServeStatusMutation_RequiresAdmin(t *testing.T) {
-	t.Setenv(envTailscaleManaged, "true")
+	t.Setenv(adminpkg.EnvTailscaleManaged, "true")
 	sut := newTestAPIServer(t)
 
-	req := httptest.NewRequest(http.MethodPost, tailscaleServeStatusRoute, strings.NewReader(`{"action":"apply"}`))
+	req := httptest.NewRequest(http.MethodPost, adminpkg.TailscaleServeStatusRoute, strings.NewReader(`{"action":"apply"}`))
 	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-1", "operator"))
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
@@ -407,7 +408,7 @@ func TestHandleTailscaleServeStatusMutation_RequiresAdmin(t *testing.T) {
 }
 
 func TestHandleTailscaleServeStatusMutation_AppliesManagedServe(t *testing.T) {
-	t.Setenv(envTailscaleManaged, "true")
+	t.Setenv(adminpkg.EnvTailscaleManaged, "true")
 	sut := newTestAPIServer(t)
 	sut.tlsState.Enabled = true
 
@@ -440,16 +441,16 @@ func TestHandleTailscaleServeStatusMutation_AppliesManagedServe(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodPost, tailscaleServeStatusRoute, strings.NewReader(`{"action":"apply"}`))
+	req := httptest.NewRequest(http.MethodPost, adminpkg.TailscaleServeStatusRoute, strings.NewReader(`{"action":"apply"}`))
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec := httptest.NewRecorder()
-	sut.handleTailscaleServeStatus(rec, req)
+	sut.ensureAdminDeps().HandleTailscaleServeStatus(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var response tailscaleServeStatusResponse
+	var response adminpkg.TailscaleServeStatusResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}

@@ -15,7 +15,7 @@ func TestHandleCACert_ReturnsPEM(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/ca.crt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleCACert(rec, req)
+	sut.ensureAdminDeps().HandleCACert(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -43,7 +43,7 @@ func TestHandleCACert_NoCert(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/ca.crt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleCACert(rec, req)
+	sut.ensureAdminDeps().HandleCACert(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
@@ -64,7 +64,7 @@ func TestHandleCACert_MethodNotAllowed(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ca.crt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleCACert(rec, req)
+	sut.ensureAdminDeps().HandleCACert(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
@@ -78,7 +78,7 @@ func TestHandleTLSInfo(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -106,7 +106,7 @@ func TestHandleTLSInfo_NoTLS(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -135,7 +135,7 @@ func TestHandleTLSInfo_ExternalCert(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -169,7 +169,7 @@ func TestHandleTLSInfo_WithRealCert(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -195,7 +195,7 @@ func TestHandleTLSInfo_MethodNotAllowed(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
@@ -211,7 +211,7 @@ func TestHandleTLSInfo_IncludesPortFields(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -239,7 +239,7 @@ func TestHandleTLSInfo_DisabledIncludesPortFields(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tls/info", nil)
 	rec := httptest.NewRecorder()
-	sut.handleTLSInfo(rec, req)
+	sut.ensureAdminDeps().HandleTLSInfo(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/labtether/labtether/internal/enrollment"
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -183,7 +184,7 @@ func TestEnrollFullFlow_UsesExternalURLForHubEndpoints(t *testing.T) {
 // enrolled over the LAN may not be on the tailnet, so it must keep the origin
 // it reached instead of the Hub's Tailscale HTTPS address.
 func TestEnrollFullFlow_KeepsRequestOriginWhenTailscaleIsAvailable(t *testing.T) {
-	t.Setenv(envTailscaleManaged, "true")
+	t.Setenv(adminpkg.EnvTailscaleManaged, "true")
 
 	sut := newTestAPIServer(t)
 
