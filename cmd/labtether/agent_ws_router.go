@@ -42,16 +42,16 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureAgentsDeps().ProcessAgentUpdateResult(conn, msg)
 	}
 	router[agentmgr.MsgTerminalProbed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentTerminalProbed(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalProbed(conn, msg)
 	}
 	router[agentmgr.MsgTerminalStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentTerminalStarted(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalStarted(conn, msg)
 	}
 	router[agentmgr.MsgTerminalData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentTerminalData(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalData(conn, msg)
 	}
 	router[agentmgr.MsgTerminalClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentTerminalClosed(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalClosed(conn, msg)
 	}
 	router[agentmgr.MsgSSHKeyInstalled] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, msg)
@@ -183,7 +183,7 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureDockerDeps().ProcessAgentDockerComposeResult(conn, msg)
 	}
 	router[agentmgr.MsgWebServiceReport] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebServiceReport(conn, msg)
+		s.ensureCollectorsDeps().ProcessAgentWebServiceReport(conn, msg)
 	}
 	router[agentmgr.MsgClipboardData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureDesktopDeps().ProcessAgentClipboardData(conn, msg)

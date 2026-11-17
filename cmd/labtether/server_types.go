@@ -123,7 +123,7 @@ type apiServer struct {
 	pendingAgentCmds              sync.Map // map[jobID]shared.PendingAgentCommand
 	collectorRunState             sync.Map // map[collectorID]*atomic.Bool
 	syntheticCheckRunState        sync.Map // map[checkID]struct{}
-	terminalBridges               sync.Map // map[sessionID]*terminalBridge
+	terminalBridges               sync.Map // map[sessionID]*terminalpkg.TerminalBridge
 	dockerExecBridges             sync.Map // map[sessionID]*dockerpkg.DockerExecBridge
 	desktopBridges                sync.Map // map[sessionID]*desktoppkg.DesktopBridge
 	webrtcBridges                 sync.Map // map[sessionID]*desktoppkg.WebRTCSignalingBridge
@@ -148,10 +148,10 @@ type apiServer struct {
 	desktopSPICEMu                sync.RWMutex
 	desktopSPICE                  map[string]desktoppkg.DesktopSPICEProxyTarget // map[sessionID]DesktopSPICEProxyTarget
 	webServiceURLGroupingCfgMu    sync.RWMutex
-	webServiceURLGroupingCfg      webServiceURLGroupingConfig
+	webServiceURLGroupingCfg      collectorspkg.WebServiceURLGroupingConfig
 	webServiceURLGroupingCfgAt    time.Time
 	webServiceURLGroupingCfgTTL   time.Duration
-	urlGroupingSuggestions        []webServiceGroupingSuggestion
+	urlGroupingSuggestions        []collectorspkg.WebServiceGroupingSuggestion
 	urlGroupingSuggestionsMu      sync.Mutex
 	statusCache                   StatusCache
 	linkSuggestionScanMu          sync.Mutex

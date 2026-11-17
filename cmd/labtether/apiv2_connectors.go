@@ -13,7 +13,7 @@ func (s *apiServer) handleV2Connectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/connectors"
-	apiv2.WrapV1Handler(s.handleListConnectors)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleListConnectors)(w, r)
 }
 
 func (s *apiServer) handleV2ConnectorActions(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func (s *apiServer) handleV2ConnectorActions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/", "/", 1)
-	apiv2.WrapV1Handler(s.handleConnectorActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleConnectorActions)(w, r)
 }
 
 // Proxmox v2 wrappers

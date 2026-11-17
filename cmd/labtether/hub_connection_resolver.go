@@ -58,12 +58,12 @@ func (s *apiServer) buildHubConnectionResolverDeps() *shared.HubConnectionResolv
 		ListInterfaceAddrs:                   listHubInterfaceAddrs,
 		ResolveTrustedForwardedRequestOrigin: resolveTrustedForwardedRequestOrigin,
 
-		CurrentTLSCertType: s.currentTLSCertType,
+		CurrentTLSCertType: func() string { return s.ensureAdminDeps().CurrentTLSCertType() },
 		BuildPinnedBootstrapURL: func(hubURL string, caCertPEM []byte) string {
 			return buildPinnedBootstrapURL(hubURL, caCertPEM)
 		},
 		InspectTailscaleServeStatus: func() shared.HubTailscaleServeStatus {
-			status := s.inspectTailscaleServeStatus()
+			status := s.ensureAdminDeps().InspectTailscaleServeStatus()
 			return tailscaleServeStatusToShared(status)
 		},
 

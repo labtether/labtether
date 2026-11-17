@@ -9,6 +9,7 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
@@ -61,14 +62,14 @@ func (b *blockingDockerConnector) ExecuteAction(ctx context.Context, actionID st
 func TestCollectorRunGuardSingleFlight(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	if ok := sut.tryBeginCollectorRun("collector-a"); !ok {
+	if ok := sut.ensureCollectorsDeps().TryBeginCollectorRun("collector-a"); !ok {
 		t.Fatalf("expected first tryBeginCollectorRun to acquire run guard")
 	}
-	if ok := sut.tryBeginCollectorRun("collector-a"); ok {
+	if ok := sut.ensureCollectorsDeps().TryBeginCollectorRun("collector-a"); ok {
 		t.Fatalf("expected second tryBeginCollectorRun to be rejected")
 	}
-	sut.finishCollectorRun("collector-a")
-	if ok := sut.tryBeginCollectorRun("collector-a"); !ok {
+	sut.ensureCollectorsDeps().FinishCollectorRun("collector-a")
+	if ok := sut.ensureCollectorsDeps().TryBeginCollectorRun("collector-a"); !ok {
 		t.Fatalf("expected run guard to be released after finishCollectorRun")
 	}
 }
@@ -89,7 +90,7 @@ func TestExecuteDockerCollectorEmptyDiscoveryIsOK(t *testing.T) {
 		IntervalSeconds: 60,
 	}
 
-	sut.executeDockerCollector(context.Background(), collector)
+	sut.ensureCollectorsDeps().ExecuteDockerCollector(context.Background(), collector)
 
 	updated, ok, err := store.GetHubCollector(collector.ID)
 	if err != nil {
@@ -145,7 +146,7 @@ func TestExecuteDockerCollectorAddsCanonicalResourceMetadata(t *testing.T) {
 		IntervalSeconds: 60,
 	}
 
-	sut.executeDockerCollector(context.Background(), collector)
+	sut.ensureCollectorsDeps().ExecuteDockerCollector(context.Background(), collector)
 
 	asset, exists, err := sut.assetStore.GetAsset("docker-ct-agent-01-abc123")
 	if err != nil {
@@ -258,7 +259,7 @@ func TestExecuteDockerCollectorPrunesStaleDiscoveredAssets(t *testing.T) {
 		}
 	}
 
-	sut.executeDockerCollector(context.Background(), collector)
+	sut.ensureCollectorsDeps().ExecuteDockerCollector(context.Background(), collector)
 
 	if _, exists, err := sut.assetStore.GetAsset("docker-ct-agent-01-keep123"); err != nil {
 		t.Fatalf("GetAsset(keep) error = %v", err)
@@ -309,7 +310,7 @@ func TestExecuteCollectorSingleFlightSkipsDuplicateConcurrentRuns(t *testing.T) 
 	for i := 0; i < 3; i++ {
 		go func() {
 			defer wg.Done()
-			sut.executeCollector(context.Background(), collector)
+			sut.ensureCollectorsDeps().ExecuteCollector(context.Background(), collector)
 		}()
 	}
 
@@ -388,7 +389,7 @@ func TestWithCanonicalResourceMetadataCrossSourceAliases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resourceKind, metadata := withCanonicalResourceMetadata(tc.source, tc.assetType, tc.metadata)
+			resourceKind, metadata := collectorspkg.WithCanonicalResourceMetadata(tc.source, tc.assetType, tc.metadata)
 			if resourceKind != tc.wantKind {
 				t.Fatalf("resourceKind = %q, want %q", resourceKind, tc.wantKind)
 			}

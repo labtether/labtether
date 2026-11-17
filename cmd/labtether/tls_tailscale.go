@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // via `tailscale cert`. Requires Tailscale to be installed, logged in, and able
 // to provision ACME certs for the machine's MagicDNS name.
 func provisionTailscaleCert(certsDir string) (certPath, keyPath, domain string, err error) {
-	path, err := resolveTailscaleBinaryPath()
+	path, err := adminpkg.ResolveTailscaleBinaryPathWith(tailscaleLookPath, tailscaleFallbackPaths)
 	if err != nil {
 		return "", "", "", fmt.Errorf("tailscale binary not found: %w", err)
 	}
@@ -25,7 +26,7 @@ func provisionTailscaleCert(certsDir string) (certPath, keyPath, domain string, 
 	if err != nil {
 		return "", "", "", fmt.Errorf("tailscale status: %w", err)
 	}
-	status := parseTailscaleStatusSnapshot(statusOut)
+	status := adminpkg.ParseTailscaleStatusSnapshot(statusOut)
 	if !status.LoggedIn || status.DNSName == "" {
 		return "", "", "", fmt.Errorf("tailscale not logged in or no DNS name available")
 	}

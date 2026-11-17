@@ -22,7 +22,7 @@ func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *test
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -37,7 +37,7 @@ func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *test
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 
 	if deleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 deleting never-attached metadata, got %d: %s", deleteRec.Code, deleteRec.Body.String())
@@ -58,7 +58,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Legacy Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent metadata, got %d", createRec.Code)
 	}
@@ -74,7 +74,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 reproducing legacy attached state, got %d", attachRec.Code)
 	}
@@ -111,7 +111,7 @@ func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 	<-closed
 	if deleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 cleaning legacy plain-shell state, got %d: %s", deleteRec.Code, deleteRec.Body.String())
@@ -159,7 +159,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -174,7 +174,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 attaching persistent session, got %d", attachRec.Code)
 	}
@@ -182,7 +182,7 @@ func TestDeletePersistentSessionEndsRemoteRuntimeBeforeRemovingMetadata(t *testi
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 
 	if deleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 deleting persistent session, got %d", deleteRec.Code)
@@ -219,7 +219,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -234,7 +234,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 attaching persistent session, got %d", attachRec.Code)
 	}
@@ -253,7 +253,7 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 deleting persistent session when attached session cleanup fails, got %d", deleteRec.Code)
 	}
@@ -283,7 +283,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -298,7 +298,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 attaching persistent session, got %d: %s", attachRec.Code, attachRec.Body.String())
 	}
@@ -356,7 +356,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 	<-done
 
 	if deleteRec.Code != http.StatusOK {

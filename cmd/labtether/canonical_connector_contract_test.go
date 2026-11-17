@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	"github.com/labtether/labtether/internal/model"
 	"os"
 	"path/filepath"
@@ -183,7 +184,7 @@ type canonicalStatusReconciliationFixture struct {
 func seedCanonicalContractAsset(t *testing.T, sut *apiServer, asset connectorsdk.Asset) {
 	t.Helper()
 
-	_, metadata := withCanonicalResourceMetadata(asset.Source, asset.Type, asset.Metadata)
+	_, metadata := collectorspkg.WithCanonicalResourceMetadata(asset.Source, asset.Type, asset.Metadata)
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID:  asset.ID,
 		Type:     asset.Type,

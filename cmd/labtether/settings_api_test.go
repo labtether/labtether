@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/installstate"
 )
@@ -38,7 +39,7 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/settings/runtime", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleRuntimeSettings(getRec, getReq)
+	sut.ensureAdminDeps().HandleRuntimeSettings(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -139,7 +140,7 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 	)
 	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgAt = time.Now().UTC()
 	updateRec := httptest.NewRecorder()
-	sut.handleRuntimeSettings(updateRec, updateReq)
+	sut.ensureAdminDeps().HandleRuntimeSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -174,7 +175,7 @@ func TestRuntimeSettingsGetUpdateAndReset(t *testing.T) {
 	)
 	sut.ensureCollectorsDeps().WebServiceURLGroupingCfgAt = time.Now().UTC()
 	resetRec := httptest.NewRecorder()
-	sut.handleRuntimeSettingsReset(resetRec, resetReq)
+	sut.ensureAdminDeps().HandleRuntimeSettingsReset(resetRec, resetReq)
 	if resetRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resetRec.Code)
 	}
@@ -229,7 +230,7 @@ func TestRuntimeSettingsRejectUnknownKey(t *testing.T) {
 
 	updateReq := httptest.NewRequest(http.MethodPatch, "/settings/runtime", bytes.NewReader([]byte(`{"values":{"unknown.key":"123"}}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleRuntimeSettings(updateRec, updateReq)
+	sut.ensureAdminDeps().HandleRuntimeSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", updateRec.Code)
 	}
@@ -248,7 +249,7 @@ func TestRuntimeSettingsUpdateAppliesPolicyStateImmediately(t *testing.T) {
 		bytes.NewReader([]byte(`{"values":{"policy.interactive_enabled":"false"}}`)),
 	)
 	updateRec := httptest.NewRecorder()
-	sut.handleRuntimeSettings(updateRec, updateReq)
+	sut.ensureAdminDeps().HandleRuntimeSettings(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -262,7 +263,7 @@ func TestRuntimeSettingsUpdateAppliesPolicyStateImmediately(t *testing.T) {
 		bytes.NewReader([]byte(`{"keys":["policy.interactive_enabled"]}`)),
 	)
 	resetRec := httptest.NewRecorder()
-	sut.handleRuntimeSettingsReset(resetRec, resetReq)
+	sut.ensureAdminDeps().HandleRuntimeSettingsReset(resetRec, resetReq)
 	if resetRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resetRec.Code)
 	}
@@ -283,12 +284,12 @@ func TestManagedDatabaseSettingsAndReveal(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/settings/managed-database", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleManagedDatabaseSettings(getRec, getReq)
+	sut.ensureAdminDeps().HandleManagedDatabaseSettings(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
 
-	var getPayload managedDatabaseSettingsPayload
+	var getPayload adminpkg.ManagedDatabaseSettingsPayload
 	if err := json.Unmarshal(getRec.Body.Bytes(), &getPayload); err != nil {
 		t.Fatalf("failed to decode managed database payload: %v", err)
 	}
@@ -305,12 +306,12 @@ func TestManagedDatabaseSettingsAndReveal(t *testing.T) {
 	revealReq := httptest.NewRequest(http.MethodPost, "/settings/managed-database/reveal", nil)
 	revealReq = revealReq.WithContext(contextWithPrincipal(revealReq.Context(), "owner", "owner"))
 	revealRec := httptest.NewRecorder()
-	sut.handleManagedDatabasePasswordReveal(revealRec, revealReq)
+	sut.ensureAdminDeps().HandleManagedDatabasePasswordReveal(revealRec, revealReq)
 	if revealRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", revealRec.Code)
 	}
 
-	var revealPayload managedDatabaseRevealPayload
+	var revealPayload adminpkg.ManagedDatabaseRevealPayload
 	if err := json.Unmarshal(revealRec.Body.Bytes(), &revealPayload); err != nil {
 		t.Fatalf("failed to decode managed database reveal payload: %v", err)
 	}
@@ -324,7 +325,7 @@ func TestManagedDatabaseSettingsAndReveal(t *testing.T) {
 	}
 	foundReveal := false
 	for _, event := range auditEvents {
-		if event.Type == managedDatabaseRevealAuditType && event.ActorID == "owner" {
+		if event.Type == adminpkg.ManagedDatabaseRevealAuditType && event.ActorID == "owner" {
 			foundReveal = true
 			break
 		}
@@ -345,12 +346,12 @@ func TestManagedDatabaseSettingsHidePasswordForExternalPostgres(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/settings/managed-database", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleManagedDatabaseSettings(getRec, getReq)
+	sut.ensureAdminDeps().HandleManagedDatabaseSettings(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
 
-	var getPayload managedDatabaseSettingsPayload
+	var getPayload adminpkg.ManagedDatabaseSettingsPayload
 	if err := json.Unmarshal(getRec.Body.Bytes(), &getPayload); err != nil {
 		t.Fatalf("failed to decode managed database payload: %v", err)
 	}
@@ -361,7 +362,7 @@ func TestManagedDatabaseSettingsHidePasswordForExternalPostgres(t *testing.T) {
 	revealReq := httptest.NewRequest(http.MethodPost, "/settings/managed-database/reveal", nil)
 	revealReq = revealReq.WithContext(contextWithPrincipal(revealReq.Context(), "owner", "owner"))
 	revealRec := httptest.NewRecorder()
-	sut.handleManagedDatabasePasswordReveal(revealRec, revealReq)
+	sut.ensureAdminDeps().HandleManagedDatabasePasswordReveal(revealRec, revealReq)
 	if revealRec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 when postgres is not marked managed, got %d", revealRec.Code)
 	}
@@ -372,7 +373,7 @@ func TestRuntimeSettingsResetRejectsUnknownKey(t *testing.T) {
 
 	resetReq := httptest.NewRequest(http.MethodPost, "/settings/runtime/reset", bytes.NewReader([]byte(`{"keys":["unknown.key"]}`)))
 	resetRec := httptest.NewRecorder()
-	sut.handleRuntimeSettingsReset(resetRec, resetReq)
+	sut.ensureAdminDeps().HandleRuntimeSettingsReset(resetRec, resetReq)
 	if resetRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resetRec.Code)
 	}

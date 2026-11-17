@@ -27,7 +27,7 @@ func attachedSavedSessionOnDevice(t *testing.T, sut *apiServer) terminal.Persist
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"nas01","title":"Ops Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create saved session: got %d: %s", createRec.Code, createRec.Body.String())
 	}
@@ -41,7 +41,7 @@ func attachedSavedSessionOnDevice(t *testing.T, sut *apiServer) terminal.Persist
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("attach saved session: got %d: %s", attachRec.Code, attachRec.Body.String())
 	}
@@ -52,7 +52,7 @@ func deleteSavedSession(sut *apiServer, id string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+id, nil)
 	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "actor-a"))
 	rec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(rec, req)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(rec, req)
 	return rec
 }
 

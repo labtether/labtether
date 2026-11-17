@@ -44,7 +44,7 @@ func TestBootstrapOwnerCookieGetsOwnerTerminalScopeWhileAdminDoesNot(t *testing.
 	ownerReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions", nil)
 	ownerReq.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: ownerToken})
 	ownerRec := httptest.NewRecorder()
-	sut.withAuth(sut.handleSessions)(ownerRec, ownerReq)
+	sut.withAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureTerminalDeps().HandleSessions(w, r) })(ownerRec, ownerReq)
 	ownerSessions := decodeTerminalSessions(t, ownerRec)
 	if len(ownerSessions) != 3 {
 		t.Fatalf("bootstrap owner saw %d sessions, want all 3", len(ownerSessions))
@@ -54,7 +54,7 @@ func TestBootstrapOwnerCookieGetsOwnerTerminalScopeWhileAdminDoesNot(t *testing.
 	adminReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions", nil)
 	adminReq.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: adminToken})
 	adminRec := httptest.NewRecorder()
-	sut.withAuth(sut.handleSessions)(adminRec, adminReq)
+	sut.withAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureTerminalDeps().HandleSessions(w, r) })(adminRec, adminReq)
 	adminSessions := decodeTerminalSessions(t, adminRec)
 	if len(adminSessions) != 1 || adminSessions[0].ActorID != admin.ID {
 		t.Fatalf("admin terminal scope = %+v, want only its own session", adminSessions)

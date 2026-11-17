@@ -9,8 +9,10 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/connectorsdk"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	dockerpkg "github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -33,13 +35,13 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 			return shared.DecodeJSONBody(w, r, dst)
 		},
 		SanitizeUpstreamError: func(msg string) string {
-			return sanitizeUpstreamError(msg)
+			return collectorspkg.SanitizeUpstreamError(msg)
 		},
 		ParseTerminalSize: func(colsRaw, rowsRaw string) (int, int) {
-			return parseTerminalSize(colsRaw, rowsRaw)
+			return terminalpkg.ParseTerminalSize(colsRaw, rowsRaw)
 		},
 		IsControlMessage: func(payload []byte) bool {
-			return isControlMessage(payload)
+			return terminalpkg.IsControlMessage(payload)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
 			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)

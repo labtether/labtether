@@ -13,7 +13,7 @@ func (s *apiServer) handleV2Alerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/alerts/instances"
-	apiv2.WrapV1Handler(s.handleAlertInstances)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleAlertInstances)(w, r)
 }
 
 func (s *apiServer) handleV2AlertActions(w http.ResponseWriter, r *http.Request) {
@@ -27,11 +27,11 @@ func (s *apiServer) handleV2AlertActions(w http.ResponseWriter, r *http.Request)
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v2/alerts/rules/") {
 		r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/alerts/rules/", "/alerts/rules/", 1)
-		apiv2.WrapV1Handler(s.handleAlertRuleActions)(w, r)
+		apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleAlertRuleActions)(w, r)
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/alerts/", "/alerts/instances/", 1)
-	apiv2.WrapV1Handler(s.handleAlertInstanceActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleAlertInstanceActions)(w, r)
 }
 
 func (s *apiServer) handleV2AlertRules(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,7 @@ func (s *apiServer) handleV2AlertRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/alerts/rules"
-	apiv2.WrapV1Handler(s.handleAlertRules)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleAlertRules)(w, r)
 }
 
 func (s *apiServer) handleV2Incidents(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (s *apiServer) handleV2Incidents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/incidents"
-	apiv2.WrapV1Handler(s.handleIncidents)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleIncidents)(w, r)
 }
 
 func (s *apiServer) handleV2IncidentActions(w http.ResponseWriter, r *http.Request) {
@@ -70,5 +70,5 @@ func (s *apiServer) handleV2IncidentActions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/", "/", 1)
-	apiv2.WrapV1Handler(s.handleIncidentActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleIncidentActions)(w, r)
 }

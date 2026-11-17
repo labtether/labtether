@@ -28,15 +28,15 @@ func TestIntegrationActionsOffRefusesEveryConnectorWrite(t *testing.T) {
 		{http.MethodPost, "/truenas/assets/truenas-host-1/services/smb/start", sut.handleTrueNASAssets},
 		{http.MethodPost, "/pbs/assets/pbs-datastore-a/datastores/a/gc", sut.handlePBSAssets},
 		{http.MethodPost, "/proxmox/assets/proxmox-vm-100/backup", sut.handleProxmoxAssets},
-		{http.MethodPost, "/connectors/proxmox/actions/vm.start/execute", sut.handleConnectorActions},
+		{http.MethodPost, "/connectors/proxmox/actions/vm.start/execute", func(w http.ResponseWriter, r *http.Request) { sut.ensureCollectorsDeps().HandleConnectorActions(w, r) }},
 		{http.MethodPost, "/api/v2/homeassistant/entities/ha-entity-light-desk", sut.handleV2HAEntityActions},
 		{http.MethodPost, "/api/v1/docker/containers/docker-ct-a-1/action", sut.handleDockerContainerActions},
 		// Objects named "test" are writes like any other, and only the exact
 		// Test connection route is exempt.
 		{http.MethodDelete, "/portainer/assets/portainer-endpoint-1/volumes/test", sut.handlePortainerAssets},
 		{http.MethodDelete, "/truenas/assets/truenas-host-1/datasets/test", sut.handleTrueNASAssets},
-		{http.MethodPost, "/connectors/proxmox/actions/vm.start/test", sut.handleConnectorActions},
-		{http.MethodPost, "/connectors/proxmox%2Factions%2Fvm.start/test", sut.handleConnectorActions},
+		{http.MethodPost, "/connectors/proxmox/actions/vm.start/test", func(w http.ResponseWriter, r *http.Request) { sut.ensureCollectorsDeps().HandleConnectorActions(w, r) }},
+		{http.MethodPost, "/connectors/proxmox%2Factions%2Fvm.start/test", func(w http.ResponseWriter, r *http.Request) { sut.ensureCollectorsDeps().HandleConnectorActions(w, r) }},
 	} {
 		rec := httptest.NewRecorder()
 		tc.handle(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"action":"toggle"}`)))
@@ -51,7 +51,7 @@ func TestIntegrationActionsOffRefusesEveryConnectorWrite(t *testing.T) {
 		handle       http.HandlerFunc
 	}{
 		{http.MethodGet, "/portainer/assets/portainer-endpoint-1/containers", sut.handlePortainerAssets},
-		{http.MethodPost, "/connectors/proxmox/test", sut.handleConnectorActions},
+		{http.MethodPost, "/connectors/proxmox/test", func(w http.ResponseWriter, r *http.Request) { sut.ensureCollectorsDeps().HandleConnectorActions(w, r) }},
 	} {
 		rec := httptest.NewRecorder()
 		tc.handle(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`)))

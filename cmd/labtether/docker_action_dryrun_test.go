@@ -83,7 +83,7 @@ func TestDockerActionDryRunNeverSendsAgentRPC(t *testing.T) {
 						r := httptest.NewRequest(http.MethodPost, "/connectors/docker/actions/"+action.id+"/execute", bytes.NewReader(body))
 						r = r.WithContext(contextWithPrincipal(ctx, "owner", "owner"))
 						rec := httptest.NewRecorder()
-						sut.handleConnectorActions(rec, r)
+						sut.ensureCollectorsDeps().HandleConnectorActions(rec, r)
 						want := http.StatusOK
 						if dryRun {
 							want = http.StatusBadRequest

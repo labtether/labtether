@@ -9,10 +9,12 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -69,7 +71,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return respkg.GenerateRequestID()
 		},
 		SanitizeUpstreamError: func(msg string) string {
-			return sanitizeUpstreamError(msg)
+			return collectorspkg.SanitizeUpstreamError(msg)
 		},
 		EnvOrDefaultBool: func(key string, fallback bool) bool {
 			return shared.EnvOrDefaultBool(key, fallback)
@@ -81,7 +83,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return shared.StreamTraceLogValue(traceID)
 		},
 		SanitizeAgentStreamReason: func(raw string) string {
-			return sanitizeAgentStreamReason(raw)
+			return terminalpkg.SanitizeAgentStreamReason(raw)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
 			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)

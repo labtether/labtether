@@ -37,20 +37,20 @@ func startRuntimeLoops(
 	startMetricsExport(ctx, srv)
 	startPrometheusRemoteWrite(ctx, srv, pgStore)
 	safeGo(ctx, wg, "session-cleanup", func(ctx context.Context) { runSessionCleanupLoop(ctx, pgStore) })
-	safeGo(ctx, wg, "alert-evaluator", func(ctx context.Context) { srv.runAlertEvaluator(ctx) })
+	safeGo(ctx, wg, "alert-evaluator", func(ctx context.Context) { srv.ensureAlertingDeps().RunAlertEvaluator(ctx) })
 	safeGo(ctx, wg, "synthetic-runner", func(ctx context.Context) { srv.runSyntheticRunner(ctx) })
-	safeGo(ctx, wg, "incident-correlator", func(ctx context.Context) { srv.runIncidentCorrelator(ctx) })
-	safeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.runHubCollectorLoop(ctx) })
+	safeGo(ctx, wg, "incident-correlator", func(ctx context.Context) { srv.ensureAlertingDeps().RunIncidentCorrelator(ctx) })
+	safeGo(ctx, wg, "hub-collector", func(ctx context.Context) { srv.ensureCollectorsDeps().RunHubCollectorLoop(ctx) })
 	safeGo(ctx, wg, "presence-cleanup", func(ctx context.Context) { srv.runPresenceCleanup(ctx) })
-	safeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.runWebServiceCleanup(ctx) })
-	safeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
+	safeGo(ctx, wg, "web-service-cleanup", func(ctx context.Context) { srv.ensureCollectorsDeps().RunWebServiceCleanup(ctx) })
+	safeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.ensureAlertingDeps().RunNotificationRetryLoop(ctx) })
 	if srv.demoMode {
 		safeGo(ctx, wg, "demo-fleet", func(ctx context.Context) { srv.runDemoFleet(ctx) })
 	} else {
 		safeGo(ctx, wg, "schedule-runner", func(ctx context.Context) { srv.runScheduleRunner(ctx) })
 	}
 	safeGo(ctx, wg, "live-activity-dispatch", func(ctx context.Context) { srv.runLiveActivityDispatchLoop(ctx) })
-	safeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.runLiveActivityRetryLoop(ctx) })
+	safeGo(ctx, wg, "live-activity-retry", func(ctx context.Context) { srv.ensureAlertingDeps().RunLiveActivityRetryLoop(ctx) })
 	safeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
 	safeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
 	if !srv.demoMode {

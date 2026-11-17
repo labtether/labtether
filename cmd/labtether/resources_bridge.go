@@ -9,6 +9,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -114,8 +115,8 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		PersistCanonicalHeartbeatFn: func(assetEntry assets.Asset, req assets.HeartbeatRequest) {
 			s.persistCanonicalHeartbeat(assetEntry, req)
 		},
-		CollectorConfigString: collectorConfigString,
-		NormalizeAssetKey:     normalizeAssetKey,
+		CollectorConfigString: collectorspkg.CollectorConfigString,
+		NormalizeAssetKey:     collectorspkg.NormalizeAssetKey,
 		AutoDockerCollectorAssetID: func(agentAssetID string) string {
 			return autoDockerCollectorAssetID(agentAssetID)
 		},
@@ -127,14 +128,24 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		HandleDisplayList: func(w http.ResponseWriter, r *http.Request, assetID string) {
 			s.ensureDesktopDeps().HandleDisplayListDirect(w, r, assetID)
 		},
-		HandlePushHubKey:             s.handlePushHubKey,
-		HandleTestProtocolConnection: s.handleTestProtocolConnection,
-		HandleListProtocolConfigs:    s.handleListProtocolConfigs,
-		HandleCreateProtocolConfig:   s.handleCreateProtocolConfig,
-		HandleUpdateProtocolConfig:   s.handleUpdateProtocolConfig,
-		HandleDeleteProtocolConfig:   s.handleDeleteProtocolConfig,
-		HandleHubSSHKey:              s.handleAssetHubSSHKey,
-		HubSSHKeyEnabled:             s.hubSSHKeyEnabled,
+		HandlePushHubKey: s.handlePushHubKey,
+		HandleTestProtocolConnection: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleTestProtocolConnection(w, r, assetID, protocol)
+		},
+		HandleListProtocolConfigs: func(w http.ResponseWriter, r *http.Request, assetID string) {
+			s.ensureAdminDeps().HandleListProtocolConfigs(w, r, assetID)
+		},
+		HandleCreateProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID string) {
+			s.ensureAdminDeps().HandleCreateProtocolConfig(w, r, assetID)
+		},
+		HandleUpdateProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleUpdateProtocolConfig(w, r, assetID, protocol)
+		},
+		HandleDeleteProtocolConfig: func(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
+			s.ensureAdminDeps().HandleDeleteProtocolConfig(w, r, assetID, protocol)
+		},
+		HandleHubSSHKey:  s.handleAssetHubSSHKey,
+		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"github.com/gorilla/websocket"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
@@ -30,7 +31,7 @@ func TestTryTrueNASTerminalStreamAuthFailure(t *testing.T) {
 		if err := conn.ReadJSON(&authReq); err != nil {
 			t.Fatalf("read auth request: %v", err)
 		}
-		if method := strings.TrimSpace(collectorAnyString(authReq["method"])); method != "auth.login_with_api_key" {
+		if method := strings.TrimSpace(collectorspkg.CollectorAnyString(authReq["method"])); method != "auth.login_with_api_key" {
 			t.Fatalf("expected auth.login_with_api_key, got %q", method)
 		}
 		if err := conn.WriteJSON(map[string]any{

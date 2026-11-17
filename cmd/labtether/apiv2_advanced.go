@@ -52,7 +52,7 @@ func (s *apiServer) handleV2TerminalSessions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = "/terminal/sessions"
-	apiv2.WrapV1Handler(s.handleSessions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleSessions)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,7 @@ func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.URL.Path = "/terminal/commands/recent"
-	apiv2.WrapV1Handler(s.handleRecentCommands)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleRecentCommands)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *htt
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/history/", "/terminal/commands/", 1)
-	apiv2.WrapV1Handler(s.handleTerminalCommandActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleCommandActions)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +83,7 @@ func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = "/terminal/snippets"
-	apiv2.WrapV1Handler(s.handleTerminalSnippets)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleTerminalSnippets)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +96,7 @@ func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *htt
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/snippets/", "/terminal/snippets/", 1)
-	apiv2.WrapV1Handler(s.handleTerminalSnippetActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleTerminalSnippetActions)(w, r)
 }
 
 // --- Agent Lifecycle ---
@@ -159,11 +159,11 @@ func (s *apiServer) handleV2WebServices(w http.ResponseWriter, r *http.Request) 
 	case http.MethodGet:
 		scope = "web-services:read"
 		path = "/api/v1/services/web"
-		handler = s.handleWebServices
+		handler = func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServices(w, r) }
 	case http.MethodPost:
 		scope = "web-services:write"
 		path = "/api/v1/services/web/manual"
-		handler = s.handleWebServiceManual
+		handler = func(w http.ResponseWriter, r *http.Request) { s.ensureCollectorsDeps().HandleWebServiceManual(w, r) }
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or POST required")
 		return
@@ -182,7 +182,7 @@ func (s *apiServer) handleV2WebServiceSync(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	r.URL.Path = "/api/v1/services/web/sync"
-	apiv2.WrapV1Handler(s.handleWebServiceSync)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleWebServiceSync)(w, r)
 }
 
 func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/web-services/", "/api/v1/services/web/manual/", 1)
-	apiv2.WrapV1Handler(s.handleWebServiceManualActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleWebServiceManualActions)(w, r)
 }
 
 // --- Hub Collectors ---
@@ -210,7 +210,7 @@ func (s *apiServer) handleV2Collectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/hub-collectors"
-	apiv2.WrapV1Handler(s.handleHubCollectors)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleHubCollectors)(w, r)
 }
 
 func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Request) {
@@ -223,7 +223,7 @@ func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/collectors/", "/hub-collectors/", 1)
-	apiv2.WrapV1Handler(s.handleHubCollectorActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureCollectorsDeps().HandleHubCollectorActions)(w, r)
 }
 
 // --- Notifications ---
@@ -238,7 +238,7 @@ func (s *apiServer) handleV2NotificationChannels(w http.ResponseWriter, r *http.
 		return
 	}
 	r.URL.Path = "/notifications/channels"
-	apiv2.WrapV1Handler(s.handleNotificationChannels)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleNotificationChannels)(w, r)
 }
 
 func (s *apiServer) handleV2NotificationHistory(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (s *apiServer) handleV2NotificationHistory(w http.ResponseWriter, r *http.R
 		return
 	}
 	r.URL.Path = "/notifications/history"
-	apiv2.WrapV1Handler(s.handleNotificationHistory)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleNotificationHistory)(w, r)
 }
 
 // --- Synthetic Checks ---
@@ -353,7 +353,7 @@ func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Re
 		return
 	}
 	r.URL.Path = "/settings/runtime"
-	apiv2.WrapV1Handler(s.handleRuntimeSettings)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandleRuntimeSettings)(w, r)
 }
 
 // --- File Transfers ---
@@ -439,5 +439,5 @@ func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Reques
 	}
 
 	r.URL.Path = "/settings/prometheus/test-connection"
-	apiv2.WrapV1Handler(s.handlePrometheusTestConnection)(w, r)
+	apiv2.WrapV1Handler(s.ensureAdminDeps().HandlePrometheusTestConnection)(w, r)
 }

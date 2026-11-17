@@ -276,7 +276,7 @@ func TestHandleConnectorActionsDiscoverPersistsCanonicalSnapshot(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/proxmox/discover", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
@@ -330,7 +330,7 @@ func TestHandleConnectorActionsDiscoverPersistsCanonicalSnapshot(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/connectors/portainer/discover", nil)
 		rec := httptest.NewRecorder()
-		sut.handleConnectorActions(rec, req)
+		sut.ensureCollectorsDeps().HandleConnectorActions(rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())

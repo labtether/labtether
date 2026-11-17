@@ -5,6 +5,7 @@ import (
 
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
+	"time"
 )
 
 // buildTruenasDeps constructs the truenaspkg.Deps from the apiServer's fields.
@@ -26,8 +27,12 @@ func (s *apiServer) buildTruenasDeps() *truenaspkg.Deps {
 
 		CheckSameOrigin: checkSameOrigin,
 
-		AppendConnectorLogEvent:       s.appendConnectorLogEvent,
-		AppendConnectorLogEventWithID: s.appendConnectorLogEventWithID,
+		AppendConnectorLogEvent: func(assetID, source, level, message string, fields map[string]string, at time.Time) {
+			s.ensureCollectorsDeps().AppendConnectorLogEvent(assetID, source, level, message, fields, at)
+		},
+		AppendConnectorLogEventWithID: func(eventID, assetID, source, level, message string, fields map[string]string, at time.Time) {
+			s.ensureCollectorsDeps().AppendConnectorLogEventWithID(eventID, assetID, source, level, message, fields, at)
+		},
 
 		StartBrowserWebSocketKeepalive:    shared.StartBrowserWebSocketKeepalive,
 		TouchBrowserWebSocketReadDeadline: shared.TouchBrowserWebSocketReadDeadline,

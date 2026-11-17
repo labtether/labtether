@@ -93,10 +93,10 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 	call(s.handleV2ScheduleActions, http.MethodPatch, "/api/v2/schedules/"+scheduleID, `{"name":"nightly 2"}`)
 	call(s.handleV2ScheduleActions, http.MethodDelete, "/api/v2/schedules/"+scheduleID, "")
 
-	rule := call(s.handleAlertRules, http.MethodPost, "/alerts/rules", `{"name":"Disk nearly full","kind":"metric_threshold","severity":"high","target_scope":"global","condition":{"metric":"disk_used_percent","operator":">=","value":90,"aggregate":"max"}}`)
+	rule := call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRules(w, r) }, http.MethodPost, "/alerts/rules", `{"name":"Disk nearly full","kind":"metric_threshold","severity":"high","target_scope":"global","condition":{"metric":"disk_used_percent","operator":">=","value":90,"aggregate":"max"}}`)
 	ruleID := field(rule, "rule", "id")
-	call(s.handleAlertRuleActions, http.MethodPatch, "/alerts/rules/"+ruleID, `{"name":"Disk full"}`)
-	call(s.handleAlertRuleActions, http.MethodDelete, "/alerts/rules/"+ruleID, "")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRuleActions(w, r) }, http.MethodPatch, "/alerts/rules/"+ruleID, `{"name":"Disk full"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRuleActions(w, r) }, http.MethodDelete, "/alerts/rules/"+ruleID, "")
 
 	group := call(func(w http.ResponseWriter, r *http.Request) { s.ensureResourcesDeps().HandleGroups(w, r) }, http.MethodPost, "/groups", `{"name":"Rack A"}`)
 	groupID := field(group, "group", "id")

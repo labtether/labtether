@@ -129,11 +129,11 @@ func runSessionDeleteLifecycle(t *testing.T, kind, phase string, failDelete bool
 			}
 		}
 		if strings.HasPrefix(r.URL.Path, "/terminal/persistent-sessions/") {
-			s.handlePersistentSessionActions(w, r)
+			s.ensureTerminalDeps().HandlePersistentSessionActions(w, r)
 		} else if request.Mode == "desktop" {
 			s.ensureDesktopDeps().HandleDesktopSessionActions(w, r)
 		} else {
-			s.handleSessionActions(w, r)
+			s.ensureTerminalDeps().HandleSessionActions(w, r)
 		}
 	}))
 	defer func() { release(); server.Close() }()

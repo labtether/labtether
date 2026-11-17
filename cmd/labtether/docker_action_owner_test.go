@@ -112,7 +112,7 @@ func (f *dockerActionOwnerFixture) direct(action, target string, want int) {
 	ctx, cancel := context.WithTimeout(contextWithPrincipal(r.Context(), "owner", "owner"), 3*time.Second)
 	defer cancel()
 	rec := httptest.NewRecorder()
-	f.sut.handleConnectorActions(rec, r.WithContext(ctx))
+	f.sut.ensureCollectorsDeps().HandleConnectorActions(rec, r.WithContext(ctx))
 	f.response = rec.Body.String()
 	if rec.Code != want {
 		f.t.Fatalf("direct status=%d want=%d body=%s", rec.Code, want, rec.Body.String())

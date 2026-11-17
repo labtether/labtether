@@ -29,7 +29,7 @@ func TestRuntimeAgentDefaultsReachConnectedAgents(t *testing.T) {
 	patch := httptest.NewRequest(http.MethodPatch, "/settings/runtime",
 		bytes.NewReader([]byte(`{"values":{"services.discovery_default_port_scan_ports":"22,443,7443"}}`)))
 	rec := httptest.NewRecorder()
-	sut.handleRuntimeSettings(rec, patch)
+	sut.ensureAdminDeps().HandleRuntimeSettings(rec, patch)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PATCH runtime settings: %d %s", rec.Code, rec.Body.String())
 	}
@@ -40,7 +40,7 @@ func TestRuntimeAgentDefaultsReachConnectedAgents(t *testing.T) {
 	reset := httptest.NewRequest(http.MethodPost, "/settings/runtime/reset",
 		bytes.NewReader([]byte(`{"keys":["services.discovery_default_port_scan_ports"]}`)))
 	rec = httptest.NewRecorder()
-	sut.handleRuntimeSettingsReset(rec, reset)
+	sut.ensureAdminDeps().HandleRuntimeSettingsReset(rec, reset)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("reset runtime setting: %d %s", rec.Code, rec.Body.String())
 	}

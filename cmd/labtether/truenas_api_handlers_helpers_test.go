@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/truenas"
+	collectorspkg "github.com/labtether/labtether/internal/hubapi/collectors"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
@@ -191,7 +192,7 @@ func TestTrueNASAPIHelperCoverage(t *testing.T) {
 		{"disk": map[string]any{"name": "sda"}, "status": "FAILED", "created_at": "2026-02-23T00:00:00Z"},
 		{"disk": "sdb", "status": "SUCCESS", "end_time": "2026-02-22T10:00:00Z"},
 	})
-	if got := strings.TrimSpace(collectorAnyString(results["sda"]["status"])); got != "FAILED" {
+	if got := strings.TrimSpace(collectorspkg.CollectorAnyString(results["sda"]["status"])); got != "FAILED" {
 		t.Fatalf("latestSmartResultsByDisk(sda).status = %q, want FAILED", got)
 	}
 	if _, ok := results["sdb"]; !ok {
@@ -328,7 +329,7 @@ func TestTrueNASAPIHelpersAdditionalBranches(t *testing.T) {
 			{"disk": "sda", "status": "old", "created_at": "bad-time", "end_time": "2026-02-22T00:00:00Z"},
 			{"disk": "sda", "status": "new", "created_at": "bad-time", "end_time": "2026-02-23T00:00:00Z"},
 		})
-		if got := strings.TrimSpace(collectorAnyString(out["sda"]["status"])); got != "new" {
+		if got := strings.TrimSpace(collectorspkg.CollectorAnyString(out["sda"]["status"])); got != "new" {
 			t.Fatalf("expected end_time fallback comparison to pick newest, got %q", got)
 		}
 	})

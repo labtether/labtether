@@ -38,7 +38,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
@@ -63,7 +63,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 attaching persistent session, got %d", attachRec.Code)
@@ -86,7 +86,7 @@ func TestPersistentSessionCreateAttachAndDeleteLifecycle(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(deleteRec, deleteReq)
 
 	if deleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 deleting persistent session, got %d", deleteRec.Code)
@@ -112,7 +112,7 @@ func TestPersistentSessionCreateAppliesInteractivePolicy(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 
 	if createRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 creating persistent session when interactive mode is disabled, got %d", createRec.Code)
@@ -134,7 +134,7 @@ func TestCreatePersistentSessionRejectsConnectedAgentWithoutTmux(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 
 	if createRec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 creating a persistent session without tmux, got %d: %s", createRec.Code, createRec.Body.String())
@@ -155,7 +155,7 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -175,7 +175,7 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 
 	if attachRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 attaching persistent session when interactive mode is disabled, got %d", attachRec.Code)
@@ -188,7 +188,7 @@ func TestAttachPersistentSessionRejectsConnectedAgentWithoutTmuxAndStaysDetached
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent metadata, got %d", createRec.Code)
 	}
@@ -211,7 +211,7 @@ func TestAttachPersistentSessionRejectsConnectedAgentWithoutTmuxAndStaysDetached
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 attaching a persistent session without tmux, got %d: %s", attachRec.Code, attachRec.Body.String())
 	}
@@ -240,7 +240,7 @@ func TestAttachPersistentSessionReturnsUpdatedAttachedState(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -255,7 +255,7 @@ func TestAttachPersistentSessionReturnsUpdatedAttachedState(t *testing.T) {
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 attaching persistent session, got %d", attachRec.Code)
 	}
@@ -285,7 +285,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenSessionCreateFails(t *tes
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating persistent session, got %d", createRec.Code)
 	}
@@ -306,7 +306,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenSessionCreateFails(t *tes
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(apiv2.ContextWithUserID(attachReq.Context(), "actor-a"))
 	attachRec := httptest.NewRecorder()
-	sut.handlePersistentSessionActions(attachRec, attachReq)
+	sut.ensureTerminalDeps().HandlePersistentSessionActions(attachRec, attachReq)
 	if attachRec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 attaching persistent session when create fails, got %d", attachRec.Code)
 	}
@@ -334,7 +334,7 @@ func TestPersistentSessionListFiltersByAuthenticatedActor(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"`+target+`","title":"Shell"}`)))
 		req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actor))
 		rec := httptest.NewRecorder()
-		sut.handlePersistentSessions(rec, req)
+		sut.ensureTerminalDeps().HandlePersistentSessions(rec, req)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201 creating persistent session for %s, got %d", actor, rec.Code)
 		}
@@ -345,7 +345,7 @@ func TestPersistentSessionListFiltersByAuthenticatedActor(t *testing.T) {
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/persistent-sessions", nil)
 	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
-	sut.handlePersistentSessions(listRec, listReq)
+	sut.ensureTerminalDeps().HandlePersistentSessions(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 listing persistent sessions, got %d", listRec.Code)

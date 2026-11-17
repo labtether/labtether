@@ -66,7 +66,7 @@ func mustCreateSession(t *testing.T, sut *apiServer) string {
 	payload := []byte(`{"actor_id":"owner","target":"lab-host-01","mode":"interactive"}`)
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleSessions(rec, req)
+	sut.ensureTerminalDeps().HandleSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating session, got %d", rec.Code)
