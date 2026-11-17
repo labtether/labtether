@@ -8,7 +8,9 @@ import (
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/notifications"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 // TestAlertingRoutesReachHandlersThroughRouteTable sends one signed-in admin
@@ -74,4 +76,67 @@ func TestAlertingRoutesReachHandlersThroughRouteTable(t *testing.T) {
 	// The test server's live activity store is its nil Postgres store. This
 	// request is refused on its path, before the store is read.
 	call("/live-activities/incidents/", http.MethodPost, "/live-activities/incidents/"+incidentID, "", http.StatusNotFound, "live activity path not found")
+}
+
+// TestAlertingRoutesBuildDepsPerRequest catches an alerting route bound to
+// an alerting Deps built once, when the route table was built. cmd builds
+// the alerting Deps for each request (ensureAlertingDeps), so the stores set
+// on the server after start are the ones a request reads. A route that took
+// s.ensureAlertingDeps().H as a method value would keep the first stores.
+// The template list and the live activity route read no store here, so
+// this test cannot see either of them pinned.
+func TestAlertingRoutesBuildDepsPerRequest(t *testing.T) {
+	sut := newTestAPIServer(t)
+	admin := createRoleSessionToken(t, sut, "admin-alerting-per-request", auth.RoleAdmin)
+	call := routeWiringCaller(t, sut.buildHTTPHandlers(nil, nil, nil), admin)
+
+	rules, instances, incidentStore := persistence.NewMemoryAlertStore(), persistence.NewMemoryAlertInstanceStore(), persistence.NewMemoryIncidentStore()
+	notes := newNotificationStoreStub()
+	notes.channels["chan-later"] = notifications.Channel{ID: "chan-later", Name: "Later hook", Type: notifications.ChannelTypeWebhook, Enabled: true}
+	notes.routes["route-later"] = notifications.Route{ID: "route-later", Name: "Later route", ChannelIDs: []string{"chan-later"}, Enabled: true}
+	notes.records = append(notes.records, notifications.Record{ID: "rec-later", ChannelID: "chan-later"})
+	sut.alertStore, sut.alertInstanceStore, sut.incidentStore, sut.notificationStore = rules, instances, incidentStore, notes
+
+	created := call("/alerts/templates/", http.MethodPost, "/alerts/templates/starter.error_burst/enable", `{"name":"Later rule"}`, http.StatusCreated, `"name":"Later rule"`)
+	var enabled struct {
+		Rule struct {
+			ID string `json:"id"`
+		} `json:"rule"`
+	}
+	if err := json.Unmarshal([]byte(created), &enabled); err != nil || enabled.Rule.ID == "" {
+		t.Fatalf("no rule id in %s (err %v)", created, err)
+	}
+	if _, ok, err := rules.GetAlertRule(enabled.Rule.ID); err != nil || !ok {
+		t.Fatalf("the enabled template did not reach the rule store set after start: found=%v err=%v", ok, err)
+	}
+	call("/alerts/rules", http.MethodGet, "/alerts/rules", "", http.StatusOK, `"name":"Later rule"`)
+	call("/alerts/rules/", http.MethodGet, "/alerts/rules/"+enabled.Rule.ID, "", http.StatusOK, `"name":"Later rule"`)
+
+	instance, err := instances.CreateAlertInstance(alerts.CreateInstanceRequest{RuleID: enabled.Rule.ID, Fingerprint: "later-fp", Severity: alerts.SeverityHigh})
+	if err != nil {
+		t.Fatalf("seed alert instance: %v", err)
+	}
+	call("/alerts/instances", http.MethodGet, "/alerts/instances", "", http.StatusOK, `"fingerprint":"later-fp"`)
+	call("/alerts/instances/", http.MethodGet, "/alerts/instances/"+instance.ID, "", http.StatusOK, `"fingerprint":"later-fp"`)
+	silence, err := instances.CreateAlertSilence(alerts.CreateSilenceRequest{
+		Matchers: map[string]string{"env": "lab"}, Reason: "later window", StartsAt: time.Now().UTC(), EndsAt: time.Now().UTC().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("seed silence: %v", err)
+	}
+	call("/alerts/silences", http.MethodGet, "/alerts/silences", "", http.StatusOK, `"reason":"later window"`)
+	call("/alerts/silences/", http.MethodGet, "/alerts/silences/"+silence.ID, "", http.StatusOK, `"reason":"later window"`)
+
+	call("/alerts/routes", http.MethodGet, "/alerts/routes", "", http.StatusOK, `"name":"Later route"`)
+	call("/alerts/routes/", http.MethodGet, "/alerts/routes/route-later", "", http.StatusOK, `"name":"Later route"`)
+	call("/notifications/channels", http.MethodGet, "/notifications/channels", "", http.StatusOK, `"name":"Later hook"`)
+	call("/notifications/channels/", http.MethodGet, "/notifications/channels/chan-later", "", http.StatusOK, `"name":"Later hook"`)
+	call("/notifications/history", http.MethodGet, "/notifications/history", "", http.StatusOK, `"id":"rec-later"`)
+
+	incident, err := incidentStore.CreateIncident(incidents.CreateIncidentRequest{Title: "Later incident", Severity: "high"})
+	if err != nil {
+		t.Fatalf("seed incident: %v", err)
+	}
+	call("/incidents", http.MethodGet, "/incidents", "", http.StatusOK, `"title":"Later incident"`)
+	call("/incidents/", http.MethodGet, "/incidents/"+incident.ID, "", http.StatusOK, `"title":"Later incident"`)
 }
