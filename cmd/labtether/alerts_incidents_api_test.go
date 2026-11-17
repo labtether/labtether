@@ -51,7 +51,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 	}`)
 	createRuleReq := httptest.NewRequest(http.MethodPost, "/alerts/rules", bytes.NewReader(createRulePayload))
 	createRuleRec := httptest.NewRecorder()
-	sut.handleAlertRules(createRuleRec, createRuleReq)
+	sut.ensureAlertingDeps().HandleAlertRules(createRuleRec, createRuleReq)
 	if createRuleRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createRuleRec.Code)
 	}
@@ -67,14 +67,14 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/alerts/rules?status=active", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleAlertRules(listRec, listReq)
+	sut.ensureAlertingDeps().HandleAlertRules(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/alerts/rules/"+createRuleResponse.Rule.ID, nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAlertRuleActions(getRec, getReq)
+	sut.ensureAlertingDeps().HandleAlertRuleActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -82,7 +82,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 	updatePayload := []byte(`{"status":"paused","severity":"high","description":"paused for maintenance"}`)
 	updateReq := httptest.NewRequest(http.MethodPatch, "/alerts/rules/"+createRuleResponse.Rule.ID, bytes.NewReader(updatePayload))
 	updateRec := httptest.NewRecorder()
-	sut.handleAlertRuleActions(updateRec, updateReq)
+	sut.ensureAlertingDeps().HandleAlertRuleActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -102,7 +102,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 	testPayload := []byte(`{"at":"2026-02-16T23:45:00Z"}`)
 	testReq := httptest.NewRequest(http.MethodPost, "/alerts/rules/"+createRuleResponse.Rule.ID+"/test", bytes.NewReader(testPayload))
 	testRec := httptest.NewRecorder()
-	sut.handleAlertRuleActions(testRec, testReq)
+	sut.ensureAlertingDeps().HandleAlertRuleActions(testRec, testReq)
 	if testRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", testRec.Code)
 	}
@@ -118,7 +118,7 @@ func TestAlertRuleCreateListGetUpdateAndEvaluation(t *testing.T) {
 
 	evalReq := httptest.NewRequest(http.MethodGet, "/alerts/rules/"+createRuleResponse.Rule.ID+"/evaluations?limit=10", nil)
 	evalRec := httptest.NewRecorder()
-	sut.handleAlertRuleActions(evalRec, evalReq)
+	sut.ensureAlertingDeps().HandleAlertRuleActions(evalRec, evalReq)
 	if evalRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", evalRec.Code)
 	}
@@ -156,11 +156,11 @@ func TestAlertDedupRace(t *testing.T) {
 	})
 
 	// Run evaluations sequentially (simulates the evaluator loop calling
-	// evaluateSingleRule multiple times for the same rule). Each subsequent
+	// EvaluateSingleRule multiple times for the same rule). Each subsequent
 	// evaluation should hit the fingerprint dedup path, not create a new instance.
 	const iterations = 10
 	for i := 0; i < iterations; i++ {
-		sut.evaluateSingleRule(ctx, rule, nil)
+		sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 	}
 
 	// Also run a batch concurrently to exercise thread-safety of the dedup path.
@@ -169,7 +169,7 @@ func TestAlertDedupRace(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		go func() {
 			defer wg.Done()
-			sut.evaluateSingleRule(ctx, rule, nil)
+			sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 		}()
 	}
 	wg.Wait()
@@ -210,7 +210,7 @@ func TestAlertDedupRace(t *testing.T) {
 	// Run one more sequential evaluation after the concurrent batch settles.
 	// The dedup should still hold -- no new instances created.
 	beforeCount := len(instances)
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	instancesAfter, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
@@ -258,7 +258,7 @@ func TestAlertSilenceSuppression(t *testing.T) {
 	}
 
 	// Evaluate the rule -- it should trigger but be suppressed.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	// Verify: the instance should exist but NOT be in firing status.
 	instances, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
@@ -309,7 +309,7 @@ func TestAlertSilenceSuppressionTransitionsToFiringAfterSilenceEnds(t *testing.T
 	}
 
 	// While silenced, rule should create a pending/suppressed instance.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 	firingBefore, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
 		Status: alerts.InstanceStatusFiring,
@@ -326,7 +326,7 @@ func TestAlertSilenceSuppressionTransitionsToFiringAfterSilenceEnds(t *testing.T
 	if err := sut.alertInstanceStore.DeleteAlertSilence(silence.ID); err != nil {
 		t.Fatalf("failed to delete silence: %v", err)
 	}
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	firingAfter, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
@@ -362,7 +362,7 @@ func TestAlertStaleResolution(t *testing.T) {
 	})
 
 	// First evaluation -- should fire.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	firingInstances, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
@@ -380,7 +380,7 @@ func TestAlertStaleResolution(t *testing.T) {
 	seedMetricSamples(t, sut, "stale-node-1", "cpu_used_percent", 50.0)
 
 	// Re-evaluate -- the condition no longer fires, so resolveStaleInstances should run.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	// Verify: the previously-firing instance should now be resolved.
 	resolvedInstances, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{

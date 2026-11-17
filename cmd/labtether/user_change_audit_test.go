@@ -70,7 +70,7 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 	call(s.handleGroupActions, http.MethodPatch, windows+"/"+windowID, `{"name":"Disk swap 2","start_at":"2026-12-01T10:00:00Z","end_at":"2026-12-01T13:00:00Z"}`)
 	call(s.handleGroupActions, http.MethodDelete, windows+"/"+windowID, "")
 
-	ruleID := field(call(s.handleAlertRules, http.MethodPost, "/alerts/rules", `{"name":"Disk nearly full","kind":"metric_threshold","severity":"high","target_scope":"global","condition":{"metric":"disk_used_percent","operator":">=","value":90,"aggregate":"max"}}`), "rule", "id")
+	ruleID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRules(w, r) }, http.MethodPost, "/alerts/rules", `{"name":"Disk nearly full","kind":"metric_threshold","severity":"high","target_scope":"global","condition":{"metric":"disk_used_percent","operator":">=","value":90,"aggregate":"max"}}`), "rule", "id")
 	// One rule, two alerts: the first fired on one device, the second on two.
 	if _, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "db01", Type: "host", Name: "db01", Source: "agent", Status: "online"}); err != nil {
 		t.Fatalf("seed second device: %v", err)
@@ -86,21 +86,21 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 		}
 		alertIDs[i] = inst.ID
 	}
-	call(s.handleAlertInstanceActions, http.MethodPost, "/alerts/instances/"+alertIDs[0]+"/ack", "")
-	call(s.handleAlertInstanceActions, http.MethodPost, "/alerts/instances/"+alertIDs[0]+"/resolve", "")
-	call(s.handleAlertInstanceActions, http.MethodDelete, "/alerts/instances/"+alertIDs[1], "")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertInstanceActions(w, r) }, http.MethodPost, "/alerts/instances/"+alertIDs[0]+"/ack", "")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertInstanceActions(w, r) }, http.MethodPost, "/alerts/instances/"+alertIDs[0]+"/resolve", "")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertInstanceActions(w, r) }, http.MethodDelete, "/alerts/instances/"+alertIDs[1], "")
 
 	ends := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
-	silenceID := field(call(s.handleAlertSilences, http.MethodPost, "/alerts/silences", `{"matchers":{"rule_id":"`+ruleID+`"},"reason":"Disk swap","starts_at":"`+time.Now().UTC().Format(time.RFC3339)+`","ends_at":"`+ends+`"}`), "silence", "id")
-	call(s.handleAlertSilenceActions, http.MethodDelete, "/alerts/silences/"+silenceID, "")
+	silenceID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertSilences(w, r) }, http.MethodPost, "/alerts/silences", `{"matchers":{"rule_id":"`+ruleID+`"},"reason":"Disk swap","starts_at":"`+time.Now().UTC().Format(time.RFC3339)+`","ends_at":"`+ends+`"}`), "silence", "id")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertSilenceActions(w, r) }, http.MethodDelete, "/alerts/silences/"+silenceID, "")
 
-	routeID := field(call(s.handleAlertRoutes, http.MethodPost, "/alerts/routes", `{"name":"critical-phone"}`), "route", "id")
-	call(s.handleAlertRouteActions, http.MethodPatch, "/alerts/routes/"+routeID, `{"name":"critical-pager"}`)
-	call(s.handleAlertRouteActions, http.MethodDelete, "/alerts/routes/"+routeID, "")
+	routeID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRoutes(w, r) }, http.MethodPost, "/alerts/routes", `{"name":"critical-phone"}`), "route", "id")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRouteActions(w, r) }, http.MethodPatch, "/alerts/routes/"+routeID, `{"name":"critical-pager"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleAlertRouteActions(w, r) }, http.MethodDelete, "/alerts/routes/"+routeID, "")
 
-	issueID := field(call(s.handleIncidents, http.MethodPost, "/incidents", `{"title":"NAS offline","severity":"high"}`), "incident", "id")
-	call(s.handleIncidentActions, http.MethodPatch, "/incidents/"+issueID, `{"assignee":"sam","status":"resolved","summary":"swapped drive bay three"}`)
-	call(s.handleIncidentActions, http.MethodDelete, "/incidents/"+issueID, "")
+	issueID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleIncidents(w, r) }, http.MethodPost, "/incidents", `{"title":"NAS offline","severity":"high"}`), "incident", "id")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleIncidentActions(w, r) }, http.MethodPatch, "/incidents/"+issueID, `{"assignee":"sam","status":"resolved","summary":"swapped drive bay three"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureAlertingDeps().HandleIncidentActions(w, r) }, http.MethodDelete, "/incidents/"+issueID, "")
 
 	planID := field(call(s.handleUpdatePlans, http.MethodPost, "/updates/plans", `{"name":"Monthly patches","targets":["nas01"]}`), "plan", "id")
 	call(s.handleUpdatePlanActions, http.MethodDelete, "/updates/plans/"+planID, "")

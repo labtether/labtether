@@ -50,7 +50,7 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 	}`)
 	createRuleReq := httptest.NewRequest(http.MethodPost, "/alerts/rules", bytes.NewReader(createRulePayload))
 	createRuleRec := httptest.NewRecorder()
-	sut.handleAlertRules(createRuleRec, createRuleReq)
+	sut.ensureAlertingDeps().HandleAlertRules(createRuleRec, createRuleReq)
 	if createRuleRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating alert rule, got %d", createRuleRec.Code)
 	}
@@ -73,7 +73,7 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 	}`)
 	createIncidentReq := httptest.NewRequest(http.MethodPost, "/incidents", bytes.NewReader(createIncidentPayload))
 	createIncidentRec := httptest.NewRecorder()
-	sut.handleIncidents(createIncidentRec, createIncidentReq)
+	sut.ensureAlertingDeps().HandleIncidents(createIncidentRec, createIncidentReq)
 	if createIncidentRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createIncidentRec.Code)
 	}
@@ -89,14 +89,14 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/incidents?status=open&group_id="+sitePayload.Group.ID, nil)
 	listRec := httptest.NewRecorder()
-	sut.handleIncidents(listRec, listReq)
+	sut.ensureAlertingDeps().HandleIncidents(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/incidents/"+createIncidentResponse.Incident.ID, nil)
 	getRec := httptest.NewRecorder()
-	sut.handleIncidentActions(getRec, getReq)
+	sut.ensureAlertingDeps().HandleIncidentActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -104,7 +104,7 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 	updatePayload := []byte(`{"status":"investigating","assignee":"oncall"}`)
 	updateReq := httptest.NewRequest(http.MethodPatch, "/incidents/"+createIncidentResponse.Incident.ID, bytes.NewReader(updatePayload))
 	updateRec := httptest.NewRecorder()
-	sut.handleIncidentActions(updateRec, updateReq)
+	sut.ensureAlertingDeps().HandleIncidentActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -121,14 +121,14 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 	linkPayload := []byte(`{"alert_rule_id":"` + rulePayload.Rule.ID + `","link_type":"trigger"}`)
 	linkReq := httptest.NewRequest(http.MethodPost, "/incidents/"+createIncidentResponse.Incident.ID+"/link-alert", bytes.NewReader(linkPayload))
 	linkRec := httptest.NewRecorder()
-	sut.handleIncidentActions(linkRec, linkReq)
+	sut.ensureAlertingDeps().HandleIncidentActions(linkRec, linkReq)
 	if linkRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", linkRec.Code)
 	}
 
 	linksReq := httptest.NewRequest(http.MethodGet, "/incidents/"+createIncidentResponse.Incident.ID+"/alerts?limit=10", nil)
 	linksRec := httptest.NewRecorder()
-	sut.handleIncidentActions(linksRec, linksReq)
+	sut.ensureAlertingDeps().HandleIncidentActions(linksRec, linksReq)
 	if linksRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", linksRec.Code)
 	}
@@ -151,7 +151,7 @@ func TestIncidentInvalidStatusTransitionRejected(t *testing.T) {
 		"severity":"medium"
 	}`)))
 	createIncidentRec := httptest.NewRecorder()
-	sut.handleIncidents(createIncidentRec, createIncidentReq)
+	sut.ensureAlertingDeps().HandleIncidents(createIncidentRec, createIncidentReq)
 	if createIncidentRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createIncidentRec.Code)
 	}
@@ -165,7 +165,7 @@ func TestIncidentInvalidStatusTransitionRejected(t *testing.T) {
 
 	invalidUpdateReq := httptest.NewRequest(http.MethodPatch, "/incidents/"+createIncidentResponse.Incident.ID, bytes.NewReader([]byte(`{"status":"mitigated"}`)))
 	invalidUpdateRec := httptest.NewRecorder()
-	sut.handleIncidentActions(invalidUpdateRec, invalidUpdateReq)
+	sut.ensureAlertingDeps().HandleIncidentActions(invalidUpdateRec, invalidUpdateReq)
 	if invalidUpdateRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", invalidUpdateRec.Code)
 	}
@@ -201,7 +201,7 @@ func TestAlertSuppressedPendingDoesNotAutoCreateIncident(t *testing.T) {
 	}
 
 	// First evaluation creates suppressed pending instance.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 	pendingInstances, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
 		Status: alerts.InstanceStatusPending,
@@ -216,7 +216,7 @@ func TestAlertSuppressedPendingDoesNotAutoCreateIncident(t *testing.T) {
 
 	// Simulate prolonged suppression duration, then re-evaluate.
 	backdateAlertInstanceStartedAt(t, sut, pendingInstances[0].ID, time.Now().UTC().Add(-6*time.Minute))
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	// Suppressed/pending instances must not trigger auto incident creation.
 	autoIncidents, err := sut.incidentStore.ListIncidents(persistence.IncidentFilter{
@@ -253,7 +253,7 @@ func TestAlertAutoIncidentTiming(t *testing.T) {
 	})
 
 	// First evaluation creates the firing instance.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	// Verify instance was created in firing status.
 	instances, err := sut.alertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
@@ -270,7 +270,7 @@ func TestAlertAutoIncidentTiming(t *testing.T) {
 
 	// At this point the instance just started, so it should NOT have created
 	// an incident yet (< 5 min). Re-evaluate to confirm.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	autoIncidents, err := sut.incidentStore.ListIncidents(persistence.IncidentFilter{
 		Source: incidents.SourceAlertAuto,
@@ -289,7 +289,7 @@ func TestAlertAutoIncidentTiming(t *testing.T) {
 	backdateAlertInstanceStartedAt(t, sut, inst.ID, time.Now().UTC().Add(-6*time.Minute))
 
 	// Re-evaluate -- now >5min elapsed so an incident should be auto-created.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	autoIncidents, err = sut.incidentStore.ListIncidents(persistence.IncidentFilter{
 		Source: incidents.SourceAlertAuto,
@@ -306,7 +306,7 @@ func TestAlertAutoIncidentTiming(t *testing.T) {
 	}
 
 	// Re-evaluate again -- should NOT create a duplicate incident.
-	sut.evaluateSingleRule(ctx, rule, nil)
+	sut.ensureAlertingDeps().EvaluateSingleRule(ctx, rule, nil)
 
 	autoIncidents, err = sut.incidentStore.ListIncidents(persistence.IncidentFilter{
 		Source: incidents.SourceAlertAuto,

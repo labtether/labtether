@@ -238,7 +238,7 @@ func (s *apiServer) handleV2NotificationChannels(w http.ResponseWriter, r *http.
 		return
 	}
 	r.URL.Path = "/notifications/channels"
-	apiv2.WrapV1Handler(s.handleNotificationChannels)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleNotificationChannels)(w, r)
 }
 
 func (s *apiServer) handleV2NotificationHistory(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +247,7 @@ func (s *apiServer) handleV2NotificationHistory(w http.ResponseWriter, r *http.R
 		return
 	}
 	r.URL.Path = "/notifications/history"
-	apiv2.WrapV1Handler(s.handleNotificationHistory)(w, r)
+	apiv2.WrapV1Handler(s.ensureAlertingDeps().HandleNotificationHistory)(w, r)
 }
 
 // --- Synthetic Checks ---
