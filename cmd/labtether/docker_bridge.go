@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	dockerpkg "github.com/labtether/labtether/internal/hubapi/dockerpkg"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -36,10 +37,10 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 			return sanitizeUpstreamError(msg)
 		},
 		ParseTerminalSize: func(colsRaw, rowsRaw string) (int, int) {
-			return parseTerminalSize(colsRaw, rowsRaw)
+			return terminalpkg.ParseTerminalSize(colsRaw, rowsRaw)
 		},
 		IsControlMessage: func(payload []byte) bool {
-			return isControlMessage(payload)
+			return terminalpkg.IsControlMessage(payload)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
 			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)

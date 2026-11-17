@@ -57,7 +57,7 @@ func TestCreateSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 
-	sut.handleSessions(rec, req)
+	sut.ensureTerminalDeps().HandleSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
@@ -78,7 +78,7 @@ func TestBlockedCommandIsDenied(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions/"+sessionID+"/commands", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 
-	sut.handleSessionActions(rec, req)
+	sut.ensureTerminalDeps().HandleSessionActions(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec.Code)
@@ -132,7 +132,7 @@ func TestSessionStreamTicketEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions/"+sessionID+"/stream-ticket", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", auth.RoleOwner))
 	rec := httptest.NewRecorder()
-	sut.handleSessionActions(rec, req)
+	sut.ensureTerminalDeps().HandleSessionActions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
@@ -169,7 +169,7 @@ func TestTerminalCommandAuditDoesNotPersistRawCommand(t *testing.T) {
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", auth.RoleOwner))
 	rec := httptest.NewRecorder()
 
-	sut.handleSessionActions(rec, req)
+	sut.ensureTerminalDeps().HandleSessionActions(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want queue-unavailable 503", rec.Code)
 	}
@@ -283,7 +283,7 @@ func TestCreateSessionUsesAuthenticatedActor(t *testing.T) {
 	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "usr-session-01"))
 	rec := httptest.NewRecorder()
 
-	sut.handleSessions(rec, req)
+	sut.ensureTerminalDeps().HandleSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
@@ -308,7 +308,7 @@ func TestCreateCommandUsesAuthenticatedActor(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "usr-command-01"))
 	createRec := httptest.NewRecorder()
-	sut.handleSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandleSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating session, got %d", createRec.Code)
 	}
@@ -335,7 +335,7 @@ func TestCreateCommandUsesAuthenticatedActor(t *testing.T) {
 	req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "usr-command-01"))
 	rec := httptest.NewRecorder()
 
-	sut.handleSessionActions(rec, req)
+	sut.ensureTerminalDeps().HandleSessionActions(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when queue is unavailable, got %d", rec.Code)
 	}
@@ -359,7 +359,7 @@ func TestSessionActionsDenyNonOwnerCrossActorAccess(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader(createPayload))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handleSessions(createRec, createReq)
+	sut.ensureTerminalDeps().HandleSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating session, got %d", createRec.Code)
 	}
@@ -379,7 +379,7 @@ func TestSessionActionsDenyNonOwnerCrossActorAccess(t *testing.T) {
 	getReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions/"+created.Session.ID, nil)
 	getReq = getReq.WithContext(apiv2.ContextWithUserID(getReq.Context(), "actor-b"))
 	getRec := httptest.NewRecorder()
-	sut.handleSessionActions(getRec, getReq)
+	sut.ensureTerminalDeps().HandleSessionActions(getRec, getReq)
 
 	if getRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for cross-actor session access, got %d", getRec.Code)
@@ -394,7 +394,7 @@ func TestHandleSessionsFiltersListForNonOwnerActor(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","mode":"interactive"}`)))
 		req = req.WithContext(apiv2.ContextWithUserID(req.Context(), actor))
 		rec := httptest.NewRecorder()
-		sut.handleSessions(rec, req)
+		sut.ensureTerminalDeps().HandleSessions(rec, req)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("expected 201 creating session for %s, got %d", actor, rec.Code)
 		}
@@ -405,7 +405,7 @@ func TestHandleSessionsFiltersListForNonOwnerActor(t *testing.T) {
 	listReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions", nil)
 	listReq = listReq.WithContext(apiv2.ContextWithUserID(listReq.Context(), "actor-a"))
 	listRec := httptest.NewRecorder()
-	sut.handleSessions(listRec, listReq)
+	sut.ensureTerminalDeps().HandleSessions(listRec, listReq)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 listing sessions, got %d", listRec.Code)
 	}
@@ -432,7 +432,7 @@ func TestCreateSessionWithoutAuditStoreStillSucceeds(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","mode":"interactive"}`)))
 	rec := httptest.NewRecorder()
-	sut.handleSessions(rec, req)
+	sut.ensureTerminalDeps().HandleSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating session without audit store, got %d", rec.Code)
@@ -445,14 +445,14 @@ func TestSessionDeleteRemovesSession(t *testing.T) {
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/sessions/"+sessionID, nil)
 	deleteRec := httptest.NewRecorder()
-	sut.handleSessionActions(deleteRec, deleteReq)
+	sut.ensureTerminalDeps().HandleSessionActions(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 deleting session, got %d", deleteRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions/"+sessionID, nil)
 	getRec := httptest.NewRecorder()
-	sut.handleSessionActions(getRec, getReq)
+	sut.ensureTerminalDeps().HandleSessionActions(getRec, getReq)
 	if getRec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 after deleting session, got %d", getRec.Code)
 	}

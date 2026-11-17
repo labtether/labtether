@@ -30,7 +30,7 @@ func (s *apiServer) cleanupAgentConnectionState(assetID, sessionID string) {
 	s.ensureDesktopDeps().CloseWebRTCBridgesForAsset(assetID)
 	s.ensureDockerDeps().CloseDockerExecBridgesForAsset(assetID)
 	s.ensureDesktopDeps().CloseDesktopBridgesForAsset(assetID)
-	s.closeTerminalBridgesForAsset(assetID)
+	s.ensureTerminalDeps().CloseTerminalBridgesForAsset(assetID)
 	if s.presenceStore != nil {
 		deleted, err := s.presenceStore.DeletePresenceForSession(assetID, sessionID)
 		if err != nil {

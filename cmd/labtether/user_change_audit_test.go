@@ -105,9 +105,9 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 	planID := field(call(s.handleUpdatePlans, http.MethodPost, "/updates/plans", `{"name":"Monthly patches","targets":["nas01"]}`), "plan", "id")
 	call(s.handleUpdatePlanActions, http.MethodDelete, "/updates/plans/"+planID, "")
 
-	bookmarkID := field(call(s.handleBookmarks, http.MethodPost, "/terminal/bookmarks", `{"title":"NAS shell","host":"192.0.2.10","username":"svc-backup"}`), "bookmark", "id")
-	call(s.handleBookmarkActions, http.MethodPut, "/terminal/bookmarks/"+bookmarkID, `{"title":"NAS admin shell"}`)
-	call(s.handleBookmarkActions, http.MethodDelete, "/terminal/bookmarks/"+bookmarkID, "")
+	bookmarkID := field(call(func(w http.ResponseWriter, r *http.Request) { s.ensureTerminalDeps().HandleBookmarks(w, r) }, http.MethodPost, "/terminal/bookmarks", `{"title":"NAS shell","host":"192.0.2.10","username":"svc-backup"}`), "bookmark", "id")
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureTerminalDeps().HandleBookmarkActions(w, r) }, http.MethodPut, "/terminal/bookmarks/"+bookmarkID, `{"title":"NAS admin shell"}`)
+	call(func(w http.ResponseWriter, r *http.Request) { s.ensureTerminalDeps().HandleBookmarkActions(w, r) }, http.MethodDelete, "/terminal/bookmarks/"+bookmarkID, "")
 
 	encoded := checkNamedAuditRows(t, s, map[string]string{
 		"asset.updated nas01":                     "nas-main",

@@ -230,7 +230,7 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	// The agent keeps alerts in memory only: tell it which are firing now.
 	s.replayAlertsToAgentAsync(conn)
 	// Pre-warm terminal capability metadata so first terminal open is instant.
-	s.startAgentTmuxProbeAsync(conn)
+	s.ensureTerminalDeps().StartAgentTmuxProbeAsync(conn)
 
 	// Pong handler resets the read deadline.
 	conn.SetPongHandler(func(_ string) error {

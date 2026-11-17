@@ -13,6 +13,7 @@ import (
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	terminalpkg "github.com/labtether/labtether/internal/hubapi/terminal"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -81,7 +82,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 			return shared.StreamTraceLogValue(traceID)
 		},
 		SanitizeAgentStreamReason: func(raw string) string {
-			return sanitizeAgentStreamReason(raw)
+			return terminalpkg.SanitizeAgentStreamReason(raw)
 		},
 		StartBrowserWSKeepalive: func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func() {
 			return shared.StartBrowserWebSocketKeepalive(wsConn, writeMu, streamLabel)

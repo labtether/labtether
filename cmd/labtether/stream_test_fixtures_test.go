@@ -59,11 +59,11 @@ func streamGenerationReply(s *apiServer, conn *agentmgr.AgentConn, kind, event, 
 	msg := agentmgr.Message{Data: raw}
 	switch kind + ":" + event {
 	case "terminal:started":
-		s.processAgentTerminalStarted(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalStarted(conn, msg)
 	case "terminal:closed":
-		s.processAgentTerminalClosed(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalClosed(conn, msg)
 	case "terminal:data":
-		s.processAgentTerminalData(conn, msg)
+		s.ensureTerminalDeps().ProcessAgentTerminalData(conn, msg)
 	case "desktop:started":
 		s.ensureDesktopDeps().ProcessAgentDesktopStarted(conn, msg)
 	case "desktop:closed":

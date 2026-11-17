@@ -123,7 +123,7 @@ type apiServer struct {
 	pendingAgentCmds              sync.Map // map[jobID]shared.PendingAgentCommand
 	collectorRunState             sync.Map // map[collectorID]*atomic.Bool
 	syntheticCheckRunState        sync.Map // map[checkID]struct{}
-	terminalBridges               sync.Map // map[sessionID]*terminalBridge
+	terminalBridges               sync.Map // map[sessionID]*terminalpkg.TerminalBridge
 	dockerExecBridges             sync.Map // map[sessionID]*dockerpkg.DockerExecBridge
 	desktopBridges                sync.Map // map[sessionID]*desktoppkg.DesktopBridge
 	webrtcBridges                 sync.Map // map[sessionID]*desktoppkg.WebRTCSignalingBridge

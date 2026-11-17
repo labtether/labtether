@@ -38,7 +38,7 @@ func TestPersistentDeleteUsesLatestAttachedStateForTmuxCleanup(t *testing.T) {
 	request = request.WithContext(contextWithPrincipal(request.Context(), "owner", auth.RoleOwner))
 	response := httptest.NewRecorder()
 	done := make(chan struct{})
-	go func() { s.handlePersistentSessionActions(response, request); close(done) }()
+	go func() { s.ensureTerminalDeps().HandlePersistentSessionActions(response, request); close(done) }()
 	select {
 	case <-store.entered:
 	case <-time.After(time.Second):
@@ -84,7 +84,7 @@ func TestPersistentDeleteRejectsAttachWithStaleSnapshot(t *testing.T) {
 	release := func() { once.Do(func() { close(store.resume) }) }
 	defer release()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.handlePersistentSessionActions(w, r.WithContext(contextWithPrincipal(r.Context(), "owner", auth.RoleOwner)))
+		s.ensureTerminalDeps().HandlePersistentSessionActions(w, r.WithContext(contextWithPrincipal(r.Context(), "owner", auth.RoleOwner)))
 	}))
 	defer func() { release(); server.Close() }()
 	url := server.URL + "/terminal/persistent-sessions/" + saved.ID
@@ -196,7 +196,7 @@ func TestPersistentBrowserClaimDoesNotWaitForOldDetachStore(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+saved.ID+"/detach", nil)
 	request = request.WithContext(contextWithPrincipal(request.Context(), "owner", auth.RoleOwner))
 	response := httptest.NewRecorder()
-	s.handlePersistentSessionActions(response, request)
+	s.ensureTerminalDeps().HandlePersistentSessionActions(response, request)
 	var envelope struct {
 		PersistentSession terminal.PersistentSession `json:"persistent_session"`
 	}

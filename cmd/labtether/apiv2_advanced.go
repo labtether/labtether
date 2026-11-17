@@ -52,7 +52,7 @@ func (s *apiServer) handleV2TerminalSessions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = "/terminal/sessions"
-	apiv2.WrapV1Handler(s.handleSessions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleSessions)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,7 @@ func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	r.URL.Path = "/terminal/commands/recent"
-	apiv2.WrapV1Handler(s.handleRecentCommands)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleRecentCommands)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *htt
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/history/", "/terminal/commands/", 1)
-	apiv2.WrapV1Handler(s.handleTerminalCommandActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleCommandActions)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +83,7 @@ func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	r.URL.Path = "/terminal/snippets"
-	apiv2.WrapV1Handler(s.handleTerminalSnippets)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleTerminalSnippets)(w, r)
 }
 
 func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +96,7 @@ func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *htt
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/snippets/", "/terminal/snippets/", 1)
-	apiv2.WrapV1Handler(s.handleTerminalSnippetActions)(w, r)
+	apiv2.WrapV1Handler(s.ensureTerminalDeps().HandleTerminalSnippetActions)(w, r)
 }
 
 // --- Agent Lifecycle ---
