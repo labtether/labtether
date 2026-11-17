@@ -26,7 +26,7 @@ func TestEnroll_IncludesCACertPEM(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -56,7 +56,7 @@ func TestEnroll_OmitsCACertPEMWhenNil(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -99,7 +99,7 @@ func TestEnrollFullFlow_URLSchemes(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -128,7 +128,7 @@ func TestEnrollFullFlow_URLSchemes(t *testing.T) {
 	req2.Host = "localhost:8080"
 	req2.RemoteAddr = "127.0.0.1:12345"
 	rec2 := httptest.NewRecorder()
-	sut.handleEnroll(rec2, req2)
+	sut.ensureAgentsDeps().HandleEnroll(rec2, req2)
 
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec2.Code, rec2.Body.String())
@@ -161,7 +161,7 @@ func TestEnrollFullFlow_UsesExternalURLForHubEndpoints(t *testing.T) {
 	req.Host = "attacker.local:9999"
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -241,7 +241,7 @@ func TestEnrollFullFlow_KeepsRequestOriginWhenTailscaleIsAvailable(t *testing.T)
 	req.Host = "192.0.2.10:8443"
 	req.RemoteAddr = "192.0.2.20:12345"
 	rec := httptest.NewRecorder()
-	sut.handleEnroll(rec, req)
+	sut.ensureAgentsDeps().HandleEnroll(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())

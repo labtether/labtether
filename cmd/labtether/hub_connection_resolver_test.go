@@ -166,7 +166,7 @@ func TestEnrollmentTokensIncludesHubCandidates(t *testing.T) {
 	req.Host = "localhost:8080"
 	rec := httptest.NewRecorder()
 
-	sut.handleEnrollmentTokens(rec, req)
+	sut.ensureAgentsDeps().HandleEnrollmentTokens(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}

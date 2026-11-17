@@ -181,7 +181,7 @@ func TestProcessAgentHeartbeatAutoProvisionsDockerCollector(t *testing.T) {
 		t.Fatalf("marshal heartbeat: %v", err)
 	}
 
-	sut.processAgentHeartbeat(&agentmgr.AgentConn{AssetID: "linux-agent-01"}, agentmgr.Message{
+	sut.ensureAgentsDeps().ProcessAgentHeartbeat(&agentmgr.AgentConn{AssetID: "linux-agent-01"}, agentmgr.Message{
 		Type: agentmgr.MsgHeartbeat,
 		Data: payload,
 	})

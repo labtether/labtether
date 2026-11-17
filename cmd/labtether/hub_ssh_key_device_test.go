@@ -88,7 +88,7 @@ func TestHubSSHKeyStartsOffAndOnlyAnAdminTurnsItOn(t *testing.T) {
 	}
 	installed := marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{Username: "root", Hostname: "node-new"})
 	conn.SetMeta("ssh_source_ip", "192.0.2.10") // a usable SSH address, so only the setting stops it
-	server.processAgentSSHKeyInstalled(conn, installed)
+	server.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, installed)
 	if _, ok, _ := server.credentialStore.GetAssetTerminalConfig("node-new"); ok {
 		t.Fatal("an unsolicited ssh_key.installed created an SSH login config for a device with the key off")
 	}

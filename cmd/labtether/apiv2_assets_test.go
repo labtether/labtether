@@ -200,7 +200,7 @@ func TestV1AndV2AssetUpdatesShareRateLimit(t *testing.T) {
 
 	for index := 0; index < sharedAssetUpdateLimit; index++ {
 		path := "/assets/rate-update"
-		handler := sut.handleAssetActions
+		handler := func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) }
 		if index%2 == 1 {
 			path = "/api/v2/assets/rate-update"
 			handler = sut.handleV2AssetActions

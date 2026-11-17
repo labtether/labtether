@@ -253,7 +253,7 @@ func TestExecuteDockerCollectorPrunesStaleDiscoveredAssets(t *testing.T) {
 			},
 		},
 	} {
-		if _, err := sut.processHeartbeatRequest(req); err != nil {
+		if _, err := sut.ensureResourcesDeps().ProcessHeartbeatRequest(req); err != nil {
 			t.Fatalf("seed heartbeat %s: %v", req.AssetID, err)
 		}
 	}

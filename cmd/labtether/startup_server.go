@@ -23,6 +23,7 @@ import (
 	"github.com/labtether/labtether/internal/fileproto"
 	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/modelmap"
@@ -135,8 +136,8 @@ func newAPIServer(
 		collectorDispatchSem: make(chan struct{}, 8),
 		rateLimiter:          RateLimiter{Windows: make(map[string]rateCounter, 64)},
 		streamTicketStore:    StreamTicketStore{Tickets: make(map[string]streamTicket, 128)},
-		desktopSessionOpts:   make(map[string]desktopSessionOptions, 128),
-		desktopSPICE:         make(map[string]desktopSPICEProxyTarget, 128),
+		desktopSessionOpts:   make(map[string]desktoppkg.DesktopSessionOptions, 128),
+		desktopSPICE:         make(map[string]desktoppkg.DesktopSPICEProxyTarget, 128),
 		agentCache: func() *agentspkg.AgentCache {
 			cache := &agentspkg.AgentCache{
 				RuntimeDir: shared.EnvOrDefault("LABTETHER_AGENT_CACHE_DIR", "/data/agents"),
@@ -149,7 +150,7 @@ func newAPIServer(
 		}(),
 		externalURL:            strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
 		consoleURL:             strings.TrimRight(strings.TrimSpace(shared.EnvOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
-		pendingAgents:          newPendingAgents(),
+		pendingAgents:          agentspkg.NewPendingAgents(),
 		challengeStore:         auth.NewChallengeStore(),
 		installStateStore:      installStateStore,
 		fileProtoPool:          fileproto.NewPool(),

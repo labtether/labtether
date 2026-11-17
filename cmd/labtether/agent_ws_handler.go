@@ -100,7 +100,7 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 					return
 				}
 				defer releaseAdmission()
-				s.handlePendingEnrollment(w, r)
+				s.ensureAgentsDeps().HandlePendingEnrollment(w, r)
 				return
 			}
 			securityruntime.Logf("agentws: rejected connection from %s: no valid token (asset=%s)",
@@ -225,8 +225,8 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	s.syncHubSSHKeyOnConnect(conn)
 
 	// Push current runtime config to the agent.
-	s.sendConfigUpdate(conn)
-	s.sendAgentSettingsApply(conn)
+	s.ensureAgentsDeps().SendConfigUpdate(conn)
+	s.ensureAgentsDeps().SendAgentSettingsApply(conn)
 	// The agent keeps alerts in memory only: tell it which are firing now.
 	s.replayAlertsToAgentAsync(conn)
 	// Pre-warm terminal capability metadata so first terminal open is instant.

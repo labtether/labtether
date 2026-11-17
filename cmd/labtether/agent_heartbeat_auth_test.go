@@ -115,7 +115,7 @@ func TestAgentHeartbeatAuthRejectsOrphanActiveToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer "+raw)
 	rec := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(rec, req)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("orphan active token heartbeat status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -145,7 +145,7 @@ func TestAgentHeartbeatAuthIgnoresStaleClientGroup(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer "+raw)
 	rec := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(rec, req)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("stale-group heartbeat status=%d body=%s, want 202", rec.Code, rec.Body.String())
 	}
@@ -188,7 +188,7 @@ func TestAgentHeartbeatDeleteRaceCannotResurrectAsset(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		sut.withAgentHeartbeatAuth(sut.handleAssetActions)(rec, req)
+		sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(rec, req)
 	}()
 	select {
 	case <-wrapped.entered:
@@ -222,7 +222,7 @@ func TestAgentHeartbeatAuthRequiresHTTPS(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://labtether.test/assets/heartbeat", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer "+raw)
 	rec := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(rec, req)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("plain-HTTP agent heartbeat status=%d body=%s, want 403", rec.Code, rec.Body.String())
 	}
@@ -236,7 +236,7 @@ func TestHeartbeatHonorsAuthenticatedAssetAllowlist(t *testing.T) {
 	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"node-allowed"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("allowlisted credential cross-asset heartbeat status=%d body=%s, want 403", rec.Code, rec.Body.String())
@@ -311,14 +311,14 @@ func TestOwnerHeartbeatSharedCredentialIsDisabledByDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewBufferString(`{"asset_id":"legacy-agent","type":"node","name":"legacy-agent","source":"agent"}`))
 	req.Header.Set("Authorization", "Bearer owner-token")
 	rec := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(rec, req)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("shared owner heartbeat status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	fixtureReq := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewBufferString(`{"asset_id":"operator-fixture","type":"node","name":"operator-fixture","source":"smoke-test"}`))
 	fixtureReq.Header.Set("Authorization", "Bearer owner-token")
 	fixtureRec := httptest.NewRecorder()
-	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(fixtureRec, fixtureReq)
+	sut.withAgentHeartbeatAuth(func(w http.ResponseWriter, r *http.Request) { sut.ensureResourcesDeps().HandleAssetActions(w, r) })(fixtureRec, fixtureReq)
 	if fixtureRec.Code != http.StatusAccepted {
 		t.Fatalf("non-agent operator heartbeat status=%d body=%s", fixtureRec.Code, fixtureRec.Body.String())
 	}

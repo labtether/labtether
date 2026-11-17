@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"errors"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/terminal"
 	"net"
@@ -15,12 +16,12 @@ import (
 
 func TestDesktopSPICEProxyTargetIsConsumedOnce(t *testing.T) {
 	sut := newTestAPIServer(t)
-	sut.setDesktopSPICEProxyTarget("sess-1", desktopSPICEProxyTarget{
+	sut.ensureDesktopDeps().SetDesktopSPICEProxyTarget("sess-1", desktoppkg.DesktopSPICEProxyTarget{
 		Host:    "127.0.0.1",
 		TLSPort: 61000,
 	})
 
-	target, ok := sut.takeDesktopSPICEProxyTarget("sess-1")
+	target, ok := sut.ensureDesktopDeps().TakeDesktopSPICEProxyTarget("sess-1")
 	if !ok {
 		t.Fatal("expected spice proxy target to be available")
 	}
@@ -28,7 +29,7 @@ func TestDesktopSPICEProxyTargetIsConsumedOnce(t *testing.T) {
 		t.Fatalf("unexpected spice target: %+v", target)
 	}
 
-	if _, ok := sut.takeDesktopSPICEProxyTarget("sess-1"); ok {
+	if _, ok := sut.ensureDesktopDeps().TakeDesktopSPICEProxyTarget("sess-1"); ok {
 		t.Fatal("expected spice proxy target to be one-time consumable")
 	}
 }
@@ -38,7 +39,7 @@ func TestHandleDesktopStreamSPICERequiresPreissuedTicketFlow(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-spice/stream?protocol=spice", nil)
 	rec := httptest.NewRecorder()
 
-	sut.handleDesktopStream(rec, req, terminal.Session{
+	sut.ensureDesktopDeps().HandleDesktopStream(rec, req, terminal.Session{
 		ID:     "sess-spice",
 		Target: "desktop-node-01",
 		Mode:   "desktop",
@@ -55,7 +56,7 @@ func TestHandleDesktopStreamSPICERequiresPreissuedTicketFlow(t *testing.T) {
 func TestHandleProxmoxSPICEStreamRequiresGlobalGateForSkipVerify(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "")
 	sut := newTestAPIServer(t)
-	sut.setDesktopSPICEProxyTarget("sess-spice-unverified", desktopSPICEProxyTarget{
+	sut.ensureDesktopDeps().SetDesktopSPICEProxyTarget("sess-spice-unverified", desktoppkg.DesktopSPICEProxyTarget{
 		Host:       "192.0.2.90",
 		TLSPort:    61000,
 		SkipVerify: true,

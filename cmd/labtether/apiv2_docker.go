@@ -17,7 +17,7 @@ func (s *apiServer) handleV2DockerHosts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	r.URL.Path = "/api/v1/docker/hosts"
-	apiv2.WrapV1Handler(s.handleDockerHosts)(w, r)
+	apiv2.WrapV1Handler(s.ensureDockerDeps().HandleDockerHosts)(w, r)
 }
 
 func (s *apiServer) handleV2DockerHostActions(w http.ResponseWriter, r *http.Request) {

@@ -15,7 +15,7 @@ func TestAssetHeartbeatCreatesAsset(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-01","type":"host","name":"Lab Host 01","source":"agent","status":"online","platform":"linux"}`)
 	req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", rec.Code)
@@ -23,7 +23,7 @@ func TestAssetHeartbeatCreatesAsset(t *testing.T) {
 
 	listReq := httptest.NewRequest(http.MethodGet, "/assets", nil)
 	listRec := httptest.NewRecorder()
-	sut.handleAssets(listRec, listReq)
+	sut.ensureResourcesDeps().HandleAssets(listRec, listReq)
 
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listRec.Code)
@@ -52,7 +52,7 @@ func TestAssetHeartbeatNormalizesPlatform(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-platform","type":"host","name":"Lab Host Platform","source":"agent","status":"online","platform":"Ubuntu 24.04 LTS","metadata":{"os_name":"Ubuntu 24.04 LTS"}}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
@@ -60,7 +60,7 @@ func TestAssetHeartbeatNormalizesPlatform(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/lab-host-platform", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
@@ -89,7 +89,7 @@ func TestAssetHeartbeatRejectsUnknownGroup(t *testing.T) {
 	payload := []byte(`{"asset_id":"lab-host-unknown-group","type":"host","name":"Lab Host Unknown Group","source":"agent","group_id":"group_missing","status":"online","platform":"linux"}`)
 	req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
@@ -102,14 +102,14 @@ func TestUpdateAssetNamePersistsAcrossHeartbeats(t *testing.T) {
 	initialHeartbeat := []byte(`{"asset_id":"lab-host-rename-persist","type":"host","name":"Initial Name","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"10.0"}}`)
 	initialReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(initialHeartbeat))
 	initialRec := httptest.NewRecorder()
-	sut.handleAssetActions(initialRec, initialReq)
+	sut.ensureResourcesDeps().HandleAssetActions(initialRec, initialReq)
 	if initialRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", initialRec.Code)
 	}
 
 	renameReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-rename-persist", bytes.NewReader([]byte(`{"name":"Manual Name"}`)))
 	renameRec := httptest.NewRecorder()
-	sut.handleAssetActions(renameRec, renameReq)
+	sut.ensureResourcesDeps().HandleAssetActions(renameRec, renameReq)
 	if renameRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", renameRec.Code)
 	}
@@ -133,14 +133,14 @@ func TestUpdateAssetNamePersistsAcrossHeartbeats(t *testing.T) {
 	secondHeartbeat := []byte(`{"asset_id":"lab-host-rename-persist","type":"host","name":"Heartbeat Name","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"42.0"}}`)
 	secondReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(secondHeartbeat))
 	secondRec := httptest.NewRecorder()
-	sut.handleAssetActions(secondRec, secondReq)
+	sut.ensureResourcesDeps().HandleAssetActions(secondRec, secondReq)
 	if secondRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", secondRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/lab-host-rename-persist", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -173,14 +173,14 @@ func TestManualGroupAssignmentPersistsAcrossHeartbeatsWithoutGroupID(t *testing.
 	initialHeartbeat := []byte(`{"asset_id":"lab-host-group-persist","type":"host","name":"Initial Name","source":"agent","status":"online","platform":"linux"}`)
 	initialReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(initialHeartbeat))
 	initialRec := httptest.NewRecorder()
-	sut.handleAssetActions(initialRec, initialReq)
+	sut.ensureResourcesDeps().HandleAssetActions(initialRec, initialReq)
 	if initialRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", initialRec.Code)
 	}
 
 	updateReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-group-persist", bytes.NewReader([]byte(`{"group_id":"`+groupID+`"}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -188,14 +188,14 @@ func TestManualGroupAssignmentPersistsAcrossHeartbeatsWithoutGroupID(t *testing.
 	secondHeartbeat := []byte(`{"asset_id":"lab-host-group-persist","type":"host","name":"Heartbeat Name","source":"agent","status":"online","platform":"linux","metadata":{"cpu_percent":"42.0"}}`)
 	secondReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(secondHeartbeat))
 	secondRec := httptest.NewRecorder()
-	sut.handleAssetActions(secondRec, secondReq)
+	sut.ensureResourcesDeps().HandleAssetActions(secondRec, secondReq)
 	if secondRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", secondRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/lab-host-group-persist", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}

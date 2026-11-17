@@ -46,10 +46,10 @@ func TestDesktopRoutesReachHandlersThroughRouteTable(t *testing.T) {
 			switch msg.Type {
 			case agentmgr.MsgDesktopDiagnose:
 				raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{RequestID: msg.ID, XvfbRunning: true})
-				sut.processAgentDesktopDiagnosed(from, agentmgr.Message{Type: agentmgr.MsgDesktopDiagnosed, Data: raw})
+				sut.ensureDesktopDeps().ProcessAgentDesktopDiagnosed(from, agentmgr.Message{Type: agentmgr.MsgDesktopDiagnosed, Data: raw})
 			case agentmgr.MsgClipboardGet:
 				raw, _ := json.Marshal(agentmgr.ClipboardDataPayload{RequestID: msg.ID, Format: "text", Text: "from agent"})
-				sut.processAgentClipboardData(from, agentmgr.Message{Type: agentmgr.MsgClipboardData, Data: raw})
+				sut.ensureDesktopDeps().ProcessAgentClipboardData(from, agentmgr.Message{Type: agentmgr.MsgClipboardData, Data: raw})
 			}
 		}
 	}()

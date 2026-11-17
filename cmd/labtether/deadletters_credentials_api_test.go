@@ -233,7 +233,7 @@ func TestCredentialProfilesCreateRotateAndAssetTerminalConfig(t *testing.T) {
 	heartbeatPayload := []byte(`{"asset_id":"ssh-host-1","type":"host","name":"SSH Host 1","source":"agent","status":"online","platform":"linux"}`)
 	heartbeatReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(heartbeatPayload))
 	heartbeatRec := httptest.NewRecorder()
-	sut.handleAssetActions(heartbeatRec, heartbeatReq)
+	sut.ensureResourcesDeps().HandleAssetActions(heartbeatRec, heartbeatReq)
 	if heartbeatRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", heartbeatRec.Code)
 	}
@@ -241,14 +241,14 @@ func TestCredentialProfilesCreateRotateAndAssetTerminalConfig(t *testing.T) {
 	configPayload := []byte(`{"host":"10.0.0.12","port":22,"username":"root","strict_host_key":true,"host_key":"SHA256:fake-fingerprint","credential_profile_id":"` + createResponse.Profile.ID + `"}`)
 	configReq := httptest.NewRequest(http.MethodPut, "/assets/ssh-host-1/terminal/config", bytes.NewReader(configPayload))
 	configRec := httptest.NewRecorder()
-	sut.handleAssetActions(configRec, configReq)
+	sut.ensureResourcesDeps().HandleAssetActions(configRec, configReq)
 	if configRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", configRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/ssh-host-1/terminal/config", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -272,14 +272,14 @@ func TestCredentialProfilesCreateRotateAndAssetTerminalConfig(t *testing.T) {
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/assets/ssh-host-1/terminal/config", nil)
 	deleteRec := httptest.NewRecorder()
-	sut.handleAssetActions(deleteRec, deleteReq)
+	sut.ensureResourcesDeps().HandleAssetActions(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", deleteRec.Code)
 	}
 
 	getAfterDeleteReq := httptest.NewRequest(http.MethodGet, "/assets/ssh-host-1/terminal/config", nil)
 	getAfterDeleteRec := httptest.NewRecorder()
-	sut.handleAssetActions(getAfterDeleteRec, getAfterDeleteReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getAfterDeleteRec, getAfterDeleteReq)
 	if getAfterDeleteRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 after delete, got %d", getAfterDeleteRec.Code)
 	}

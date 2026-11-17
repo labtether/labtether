@@ -97,7 +97,7 @@ func startRuntimeLoops(
 	// Send graceful shutdown to connected agents when the hub exits.
 	go func() {
 		<-ctx.Done()
-		srv.sendShutdownToAgents()
+		srv.ensureAgentsDeps().SendShutdownToAgents()
 	}()
 }
 

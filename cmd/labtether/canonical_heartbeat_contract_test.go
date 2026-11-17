@@ -17,7 +17,7 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBinding(t *testing.T) {
 
 	sut := newTestAPIServer(t)
 	assetID := "linux-node-contract"
-	_, err := sut.processHeartbeatRequest(assets.HeartbeatRequest{
+	_, err := sut.ensureResourcesDeps().ProcessHeartbeatRequest(assets.HeartbeatRequest{
 		AssetID:  assetID,
 		Type:     "host",
 		Name:     "linux-node-contract",
@@ -139,7 +139,7 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBindingByPlatform(t *testin
 
 			sut := newTestAPIServer(t)
 			assetID := "agent-node-contract-" + tc.platform
-			_, err := sut.processHeartbeatRequest(assets.HeartbeatRequest{
+			_, err := sut.ensureResourcesDeps().ProcessHeartbeatRequest(assets.HeartbeatRequest{
 				AssetID:  assetID,
 				Type:     "host",
 				Name:     "agent-node-contract-" + tc.platform,

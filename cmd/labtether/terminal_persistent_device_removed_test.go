@@ -116,7 +116,7 @@ func TestDeleteDeviceRemovesItsSavedSessions(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodDelete, "/assets/nas01", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, req)
+	sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("delete device: got %d: %s", rec.Code, rec.Body.String())
 	}

@@ -123,7 +123,7 @@ func TestRevokedLiveAgentHeartbeatCannotResurrectDecommissionedAsset(t *testing.
 	payload, _ := json.Marshal(agentmgr.HeartbeatData{
 		Type: "node", Name: "node-revoked-heartbeat", Source: "agent", Status: "online", Platform: "linux",
 	})
-	sut.processAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
+	sut.ensureAgentsDeps().ProcessAgentHeartbeat(conn, agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: payload})
 	if _, exists, err := sut.assetStore.GetAsset("node-revoked-heartbeat"); err != nil || exists {
 		t.Fatalf("revoked heartbeat resurrected asset exists=%v err=%v", exists, err)
 	}

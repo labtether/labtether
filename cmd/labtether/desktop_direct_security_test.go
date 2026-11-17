@@ -26,7 +26,7 @@ func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *
 		))
 		req = req.WithContext(contextWithPrincipal(req.Context(), actor, "admin"))
 		rec := httptest.NewRecorder()
-		sut.handleDesktopSessions(rec, req)
+		sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create %s status=%d body=%s", actor, rec.Code, rec.Body.String())
 		}
@@ -38,7 +38,7 @@ func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *
 	}
 	first := create("actor-a", "192.0.2.60", "secret-a", "vnc")
 	second := create("actor-b", "192.0.2.61", "secret-b", "rdp")
-	firstOpts, secondOpts := sut.getDesktopSessionOptions(first.ID), sut.getDesktopSessionOptions(second.ID)
+	firstOpts, secondOpts := sut.ensureDesktopDeps().GetDesktopSessionOptions(first.ID), sut.ensureDesktopDeps().GetDesktopSessionOptions(second.ID)
 	if firstOpts.DirectPassword != "secret-a" || secondOpts.DirectPassword != "secret-b" || firstOpts.DirectHost == secondOpts.DirectHost {
 		t.Fatalf("direct session options crossed boundaries: first=%+v second=%+v", firstOpts, secondOpts)
 	}
@@ -50,7 +50,7 @@ func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *
 	crossActorReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+first.ID, nil)
 	crossActorReq = crossActorReq.WithContext(apiv2.ContextWithUserID(crossActorReq.Context(), "actor-b"))
 	crossActorRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(crossActorRec, crossActorReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(crossActorRec, crossActorReq)
 	if crossActorRec.Code != http.StatusForbidden {
 		t.Fatalf("cross-actor direct session access status=%d body=%s", crossActorRec.Code, crossActorRec.Body.String())
 	}
@@ -63,7 +63,7 @@ func TestDirectVNCRequiresSessionAndGlobalOptIn(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(body))
 		req = req.WithContext(contextWithPrincipal(req.Context(), "actor-vnc-security", "admin"))
 		rec := httptest.NewRecorder()
-		sut.handleDesktopSessions(rec, req)
+		sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 		return rec
 	}
 
@@ -86,7 +86,7 @@ func TestDirectVNCRequiresSessionAndGlobalOptIn(t *testing.T) {
 	if err := json.Unmarshal(allowed.Body.Bytes(), &session); err != nil {
 		t.Fatalf("decode VNC session: %v", err)
 	}
-	if !sut.getDesktopSessionOptions(session.ID).VNCAllowInsecureTransport {
+	if !sut.ensureDesktopDeps().GetDesktopSessionOptions(session.ID).VNCAllowInsecureTransport {
 		t.Fatal("VNC session did not retain its explicit transport opt-in")
 	}
 
@@ -94,7 +94,7 @@ func TestDirectVNCRequiresSessionAndGlobalOptIn(t *testing.T) {
 	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+session.ID+"/stream-ticket", nil)
 	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-vnc-security", "admin"))
 	ticketRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(ticketRec, ticketReq)
 	if ticketRec.Code != http.StatusBadRequest || !strings.Contains(ticketRec.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT") {
 		t.Fatalf("VNC ticket did not recheck global opt-in: status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
 	}
@@ -108,7 +108,7 @@ func TestDirectSPICETicketUsesEphemeralPasswordWithoutURLLeak(t *testing.T) {
 	))
 	createReq = createReq.WithContext(contextWithPrincipal(createReq.Context(), "actor-spice", "admin"))
 	createRec := httptest.NewRecorder()
-	sut.handleDesktopSessions(createRec, createReq)
+	sut.ensureDesktopDeps().HandleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("direct SPICE create status=%d body=%s", createRec.Code, createRec.Body.String())
 	}
@@ -120,7 +120,7 @@ func TestDirectSPICETicketUsesEphemeralPasswordWithoutURLLeak(t *testing.T) {
 	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+created.ID+"/spice-ticket", nil)
 	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-spice", "admin"))
 	ticketRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(ticketRec, ticketReq)
 	if ticketRec.Code != http.StatusCreated {
 		t.Fatalf("direct SPICE ticket status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
 	}
@@ -150,7 +150,7 @@ func TestDirectSPICETicketAllowsPasswordlessEndpoint(t *testing.T) {
 	))
 	createReq = createReq.WithContext(contextWithPrincipal(createReq.Context(), "actor-spice-empty", "admin"))
 	createRec := httptest.NewRecorder()
-	sut.handleDesktopSessions(createRec, createReq)
+	sut.ensureDesktopDeps().HandleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("passwordless direct SPICE create status=%d body=%s", createRec.Code, createRec.Body.String())
 	}
@@ -162,7 +162,7 @@ func TestDirectSPICETicketAllowsPasswordlessEndpoint(t *testing.T) {
 	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+created.ID+"/spice-ticket", nil)
 	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-spice-empty", "admin"))
 	ticketRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(ticketRec, ticketReq)
 	if ticketRec.Code != http.StatusCreated {
 		t.Fatalf("passwordless direct SPICE ticket status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
 	}

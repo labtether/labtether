@@ -59,7 +59,7 @@ func TestHandleAgentReleaseLatest(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentReleaseLatest(rec, req)
+	srv.ensureAgentsDeps().HandleAgentReleaseLatest(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body=%q)", rec.Code, rec.Body.String())
 	}
@@ -103,7 +103,7 @@ func TestHandleAgentReleaseLatestReturnsNotFoundWhenBinaryMissing(t *testing.T) 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
 	rec := httptest.NewRecorder()
 
-	srv.handleAgentReleaseLatest(rec, req)
+	srv.ensureAgentsDeps().HandleAgentReleaseLatest(rec, req)
 
 	// With manifest-driven lookup, the release metadata is served from the manifest
 	// even when the binary file is absent. The release endpoint returns 200 with

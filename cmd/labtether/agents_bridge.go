@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -16,7 +15,6 @@ import (
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/telemetry"
-	"github.com/labtether/labtether/internal/terminal"
 )
 
 const agentHeartbeatTelemetryStoreTimeout = 5 * time.Second
@@ -86,7 +84,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
-			return s.processHeartbeatRequest(req)
+			return s.ensureResourcesDeps().ProcessHeartbeatRequest(req)
 		},
 		ProcessAuthenticatedAgentHeartbeat: func(agentTokenID string, req assets.HeartbeatRequest) (*assets.Asset, error) {
 			if enrollmentTransactions == nil {
@@ -168,60 +166,10 @@ func (s *apiServer) ensureAgentsDeps() *agentspkg.Deps {
 	return s.agentsDeps
 }
 
-// Forwarding methods from apiServer to agents.Deps so that existing
-// cmd/labtether/ callers keep compiling without changes.
-
-func (s *apiServer) processAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentHeartbeat(conn, msg)
-}
-
-func (s *apiServer) processAgentTelemetry(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentTelemetry(conn, msg)
-}
-
-func (s *apiServer) processAgentCommandResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentCommandResult(conn, msg)
-}
-
-func (s *apiServer) processAgentLogStream(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentLogStream(conn, msg)
-}
-
-func (s *apiServer) processAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentLogBatch(conn, msg)
-}
-
-func (s *apiServer) processAgentUpdateProgress(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentUpdateProgress(conn, msg)
-}
-
-func (s *apiServer) processAgentUpdateResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentUpdateResult(conn, msg)
-}
-
-func (s *apiServer) processAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, msg)
-}
-
-func (s *apiServer) processAgentSSHKeyRemoved(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentSSHKeyRemoved(conn, msg)
-}
-
-func (s *apiServer) processAgentConfigApplied(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentConfigApplied(conn, msg)
-}
-
-func (s *apiServer) processAgentSettingsApplied(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentSettingsApplied(conn, msg)
-}
-
-func (s *apiServer) processAgentSettingsState(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentSettingsState(conn, msg)
-}
-
-func (s *apiServer) processAgentDockerEndpointTestResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
-}
+// Routes, the agent router and other cmd code call the agents package
+// through ensureAgentsDeps. The methods below stay because they do more:
+// the two Hub key sends hold cmd's Hub identity lock, and hubSchemes reads
+// cmd's TLS state.
 
 // sendSSHKeyInstall sends the Hub key without checking the device's Hub SSH
 // key setting. Agent connects use syncHubSSHKeyOnConnect, which does.
@@ -237,110 +185,6 @@ func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 	return s.ensureAgentsDeps().SendSSHKeyRemove(conn)
 }
 
-func (s *apiServer) sendConfigUpdate(conn *agentmgr.AgentConn) {
-	s.ensureAgentsDeps().SendConfigUpdate(conn)
-}
-
-func (s *apiServer) sendAgentSettingsApply(conn *agentmgr.AgentConn) {
-	s.ensureAgentsDeps().SendAgentSettingsApply(conn)
-}
-
-func (s *apiServer) executeViaAgent(cmdJob terminal.CommandJob) terminal.CommandResult {
-	return s.ensureAgentsDeps().ExecuteViaAgent(cmdJob)
-}
-
-func (s *apiServer) executeUpdateViaAgent(jobID string, target string, mode string, packages []string, timeout time.Duration, force bool) agentmgr.CommandResultData {
-	return s.ensureAgentsDeps().ExecuteUpdateViaAgent(jobID, target, mode, packages, timeout, force)
-}
-
-func (s *apiServer) deliverPendingAgentResult(conn *agentmgr.AgentConn, data agentmgr.CommandResultData) {
-	s.ensureAgentsDeps().DeliverPendingAgentResult(conn, data)
-}
-
-func (s *apiServer) handlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandlePendingEnrollment(w, r)
-}
-
-func (s *apiServer) handleListPendingAgents(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleListPendingAgents(w, r)
-}
-
-func (s *apiServer) handleApproveAgent(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleApproveAgent(w, r)
-}
-
-func (s *apiServer) handleRejectAgent(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleRejectAgent(w, r)
-}
-
-func (s *apiServer) handleEnroll(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleEnroll(w, r)
-}
-
-func (s *apiServer) handleDiscover(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleDiscover(w, r)
-}
-
-func (s *apiServer) handleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleEnrollmentTokens(w, r)
-}
-
-func (s *apiServer) handleEnrollmentTokenActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleEnrollmentTokenActions(w, r)
-}
-
-func (s *apiServer) handleAgentTokens(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentTokens(w, r)
-}
-
-func (s *apiServer) handleAgentTokenActions(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentTokenActions(w, r)
-}
-
-func (s *apiServer) handleTokenCleanup(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleTokenCleanup(w, r)
-}
-
-func (s *apiServer) handleAgentBinary(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentBinary(w, r)
-}
-
-func (s *apiServer) handleAgentReleaseLatest(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentReleaseLatest(w, r)
-}
-
-func (s *apiServer) handleAgentManifest(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentManifest(w, r)
-}
-
-func (s *apiServer) handleAgentCacheRefresh(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentCacheRefresh(w, r)
-}
-
-func (s *apiServer) handleAgentInstallScript(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentInstallScript(w, r)
-}
-
-func (s *apiServer) handleAgentBootstrapScript(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentBootstrapScript(w, r)
-}
-
-func (s *apiServer) handleAgentSettingsRoutes(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentSettingsRoutes(w, r)
-}
-
-func (s *apiServer) handleConnectedAgents(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleConnectedAgents(w, r)
-}
-
-func (s *apiServer) handleAgentPresence(w http.ResponseWriter, r *http.Request) {
-	s.ensureAgentsDeps().HandleAgentPresence(w, r)
-}
-
-func (s *apiServer) sendShutdownToAgents() {
-	s.ensureAgentsDeps().SendShutdownToAgents()
-}
-
 func (s *apiServer) hubSchemes() (string, string) {
 	if s.tlsState.Enabled {
 		return "https", "wss"
@@ -348,128 +192,8 @@ func (s *apiServer) hubSchemes() (string, string) {
 	return "http", "ws"
 }
 
-func (s *apiServer) resolvePublicHubHost(r *http.Request) string {
-	return s.ensureAgentsDeps().ResolvePublicHubHost(r)
-}
-
-func (s *apiServer) verifyPendingEnrollmentProof(agent *pendingAgent, msg agentmgr.Message) error {
-	return s.ensureAgentsDeps().VerifyPendingEnrollmentProof(agent, msg)
-}
-
-func (s *apiServer) sendPendingEnrollmentChallenge(agent *pendingAgent) error {
-	return s.ensureAgentsDeps().SendPendingEnrollmentChallenge(agent)
-}
-
-func (s *apiServer) pushAgentSettingsApply(assetID string, values map[string]string) {
-	s.ensureAgentsDeps().PushAgentSettingsApply(assetID, values)
-}
-
-func (s *apiServer) collectEffectiveAgentSettingValues(assetID string) (map[string]string, error) {
-	return s.ensureAgentsDeps().CollectEffectiveAgentSettingValues(assetID)
-}
-
-func (s *apiServer) getAgentSettingsRuntimeState(assetID string) (agentspkg.AgentSettingsRuntimeState, bool) {
-	return s.ensureAgentsDeps().GetAgentSettingsRuntimeState(assetID)
-}
-
-func (s *apiServer) setAgentSettingsRuntimeState(assetID string, state agentspkg.AgentSettingsRuntimeState) {
-	s.ensureAgentsDeps().SetAgentSettingsRuntimeState(assetID, state)
-}
-
-func (s *apiServer) buildAgentSettingsPayload(assetID string) (agentspkg.AgentSettingsPayload, error) {
-	return s.ensureAgentsDeps().BuildAgentSettingsPayload(assetID)
-}
-
-func (s *apiServer) handleAgentSettingsHistory(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureAgentsDeps().HandleAgentSettingsHistory(w, r, assetID)
-}
-
-func (s *apiServer) handleAgentSettingsGet(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureAgentsDeps().HandleAgentSettingsGet(w, r, assetID)
-}
-
-func (s *apiServer) handleAgentSettingsPatch(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureAgentsDeps().HandleAgentSettingsPatch(w, r, assetID)
-}
-
-func (s *apiServer) handleAgentSettingsReset(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureAgentsDeps().HandleAgentSettingsReset(w, r, assetID)
-}
-
-// Type aliases for types used in cmd/labtether/ files.
-type pendingAgents = agentspkg.PendingAgents
-type pendingAgent = agentspkg.PendingAgent
-type pendingAgentInfo = agentspkg.PendingAgentInfo
-type agentSettingsRuntimeState = agentspkg.AgentSettingsRuntimeState
-
-func newPendingAgents() *agentspkg.PendingAgents {
-	return agentspkg.NewPendingAgents()
-}
-
-type agentsDeps = agentspkg.Deps
-type agentSettingEntry = agentspkg.AgentSettingEntry
-type agentSettingsPayload = agentspkg.AgentSettingsPayload
-type agentSettingsViewState = agentspkg.AgentSettingsViewState
-
-type pendingAgentCommand = shared.PendingAgentCommand
-
-func configuredAgentTokenTTLHours() int           { return agentspkg.ConfiguredAgentTokenTTLHours() }
-func newAgentTokenExpiry(now time.Time) time.Time { return agentspkg.NewAgentTokenExpiry(now) }
-func normalizeHostnameForAssetID(hostname string) string {
-	return agentspkg.NormalizeHostnameForAssetID(hostname)
-}
-func buildPendingEnrollmentAssetID(hostname string) string {
-	return agentspkg.BuildPendingEnrollmentAssetID(hostname)
-}
-func sanitizePendingIdentityHeader(raw string, maxLen int) string {
-	return agentspkg.SanitizePendingIdentityHeader(raw, maxLen)
-}
-func decodePendingEnrollmentAssetID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	return agentspkg.DecodePendingEnrollmentAssetID(w, r)
-}
-func resolveApprovedAssetID(agent *pendingAgent, pendingAssetID string) string {
+func resolveApprovedAssetID(agent *agentspkg.PendingAgent, pendingAssetID string) string {
 	return agentspkg.ResolveApprovedAssetID(agentspkg.PendingAgentInfo{Hostname: agent.Hostname}, pendingAssetID)
-}
-func sendPendingEnrollmentDecision(agent *pendingAgent, msgType string, data any, closeReason string) error {
-	return agentspkg.SendPendingEnrollmentDecision(agent, msgType, data, closeReason)
-}
-func normalizeAgentSettingValues(values map[string]string, forHubApply bool) (map[string]string, error) {
-	return agentspkg.NormalizeAgentSettingValues(values, forHubApply)
-}
-func parseIntSafe(s string) int { return agentspkg.ParseIntSafe(s) }
-func mergeAgentSettingsReportState(previous, reported agentSettingsRuntimeState) agentSettingsRuntimeState {
-	return agentspkg.MergeAgentSettingsReportState(previous, reported)
-}
-func sameAgentSettingsRevision(left, right string) bool {
-	return agentspkg.SameAgentSettingsRevision(left, right)
-}
-func preservesAgentSettingsApplyStatus(status string) bool {
-	return agentspkg.PreservesAgentSettingsApplyStatus(status)
-}
-func trimUnixEndpointScheme(endpoint string) (string, bool) {
-	return agentspkg.TrimUnixEndpointScheme(endpoint)
-}
-func sanitizeSHA256Hex(raw string) (string, bool) { return agentspkg.SanitizeSHA256Hex(raw) }
-func generateInstallScript(hubURL, wsURL string) string {
-	return agentspkg.GenerateInstallScript(hubURL, wsURL)
-}
-func determineAgentVersionStatus(currentVersion, latestVersion string) string {
-	return agentspkg.DetermineAgentVersionStatus(currentVersion, latestVersion)
-}
-func normalizeAgentReleaseOS(raw string) string   { return agentspkg.NormalizeAgentReleaseOS(raw) }
-func normalizeAgentReleaseArch(raw string) string { return agentspkg.NormalizeAgentReleaseArch(raw) }
-func agentVersionFromBuildInfo(mainVersion string, settings []debug.BuildSetting) string {
-	return agentspkg.AgentVersionFromBuildInfo(mainVersion, settings)
-}
-func agentSettingGlobalDefaultKey(key string) (string, bool) {
-	return agentspkg.AgentSettingGlobalDefaultKey(key)
-}
-func cloneAgentSettingValues(values map[string]string) map[string]string {
-	return agentspkg.CloneAgentSettingValues(values)
-}
-func zeroTimeToRFC3339(t time.Time) string { return agentspkg.ZeroTimeToRFC3339(t) }
-func agentSettingStoreKey(assetID, key string) string {
-	return agentspkg.AgentSettingStoreKey(assetID, key)
 }
 
 // Test-seam: cmd/labtether tests write to agentspkg.PendingEnrollmentAfterFunc directly.

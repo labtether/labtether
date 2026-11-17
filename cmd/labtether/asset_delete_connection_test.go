@@ -49,7 +49,7 @@ func TestDeleteConnectionDeviceRemovesItsDevicesAndUnusedLogin(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	sut.handleAssetActions(rec, httptest.NewRequest(http.MethodDelete, "/assets/truenas-nas01", nil))
+	sut.ensureResourcesDeps().HandleAssetActions(rec, httptest.NewRequest(http.MethodDelete, "/assets/truenas-nas01", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}

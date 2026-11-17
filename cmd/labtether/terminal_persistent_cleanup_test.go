@@ -346,7 +346,7 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 			t.Errorf("marshal command result payload: %v", err)
 			return
 		}
-		sut.processAgentCommandResult(agentConn, agentmgr.Message{
+		sut.ensureAgentsDeps().ProcessAgentCommandResult(agentConn, agentmgr.Message{
 			Type: agentmgr.MsgCommandResult,
 			ID:   req.JobID,
 			Data: raw,

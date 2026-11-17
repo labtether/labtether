@@ -53,7 +53,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -105,7 +105,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 			caseReq.Header.Set("X-Forwarded-For", tc.forwardedFor)
 		}
 		caseRec := httptest.NewRecorder()
-		sut.handleDiscover(caseRec, caseReq)
+		sut.ensureAgentsDeps().HandleDiscover(caseRec, caseReq)
 		var caseResp discoverResponse
 		if err := json.Unmarshal(caseRec.Body.Bytes(), &caseResp); err != nil {
 			t.Fatalf("%s: failed to decode discover response: %v", tc.name, err)
@@ -125,7 +125,7 @@ func TestDiscoverEndpoint_UsesExternalURLForHubEndpoints(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "attacker.local:8080"
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -156,7 +156,7 @@ func TestDiscoverEndpoint_IgnoresHTTPExternalURLWhenTLSEnabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "secure.local:8443"
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -197,7 +197,7 @@ func TestDiscoverEndpoint_PrefersExactRequestOriginOverDiscoveredCandidates(t *t
 	req.Host = "localhost:8080"
 	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -232,7 +232,7 @@ func TestDiscoverEndpoint_UsesTrustedForwardedHTTPOrigin(t *testing.T) {
 	req.Header.Set("X-Forwarded-Host", "console.example:3000")
 	req.Header.Set("X-Forwarded-Proto", "http")
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -272,7 +272,7 @@ func TestDiscoverEndpoint_BuiltInCAForwardedHTTPSUsesOperatorManagedTrust(t *tes
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-For", "192.168.1.30")
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -344,7 +344,7 @@ func TestDiscoverRejectsNonGET(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/discover", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", rec.Code)
@@ -386,7 +386,7 @@ func TestDiscoverEndpoint_TLS(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "localhost:8080"
 	rec := httptest.NewRecorder()
-	sut.handleDiscover(rec, req)
+	sut.ensureAgentsDeps().HandleDiscover(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 )
@@ -26,7 +27,7 @@ func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 		IssueStreamTicket: s.issueStreamTicket,
 
 		SetDesktopSPICEProxyTarget: func(sessionID string, target proxmoxpkg.DesktopSPICEProxyTarget) {
-			s.setDesktopSPICEProxyTarget(sessionID, desktopSPICEProxyTarget{
+			s.ensureDesktopDeps().SetDesktopSPICEProxyTarget(sessionID, desktoppkg.DesktopSPICEProxyTarget{
 				Host:        target.Host,
 				TLSPort:     target.TLSPort,
 				Password:    target.Password,
@@ -38,7 +39,7 @@ func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 			})
 		},
 		TakeDesktopSPICEProxyTarget: func(sessionID string) (proxmoxpkg.DesktopSPICEProxyTarget, bool) {
-			t, ok := s.takeDesktopSPICEProxyTarget(sessionID)
+			t, ok := s.ensureDesktopDeps().TakeDesktopSPICEProxyTarget(sessionID)
 			return proxmoxpkg.DesktopSPICEProxyTarget{
 				Host:        t.Host,
 				TLSPort:     t.TLSPort,

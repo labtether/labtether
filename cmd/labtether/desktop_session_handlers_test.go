@@ -7,6 +7,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/credentials"
+	desktoppkg "github.com/labtether/labtether/internal/hubapi/desktop"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
@@ -20,7 +21,7 @@ func TestHandleDesktopSessionsRejectsUnknownAssetTarget(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"unknown-node"}`))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown desktop target, got %d: %s", rec.Code, rec.Body.String())
@@ -44,7 +45,7 @@ func TestHandleDesktopSessionsAcceptsManagedAssetTarget(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-01"}`))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 for managed asset target, got %d: %s", rec.Code, rec.Body.String())
@@ -73,7 +74,7 @@ func TestHandleDesktopSessionsDesktopCredentialRequiresScopeForAPIKey(t *testing
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"`+assetID+`","protocol":"rdp"}`))
 	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"assets:control"}))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("saved desktop credential scope status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -94,7 +95,7 @@ func TestHandleDesktopSessionsCreatesCanonicalDirectSessionWithoutPersistingCred
 	))
 	req = req.WithContext(contextWithPrincipal(req.Context(), "actor-direct", "admin"))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("direct create status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -108,7 +109,7 @@ func TestHandleDesktopSessionsCreatesCanonicalDirectSessionWithoutPersistingCred
 	if created.Target != "192.0.2.50:3389" || created.ActorID != "actor-direct" {
 		t.Fatalf("unexpected direct session identity: %+v", created)
 	}
-	opts := sut.getDesktopSessionOptions(created.ID)
+	opts := sut.ensureDesktopDeps().GetDesktopSessionOptions(created.ID)
 	if !opts.Direct || opts.DirectHost != "192.0.2.50" || opts.DirectPort != 3389 ||
 		opts.DirectUsername != "qa-user" || opts.DirectPassword != secret {
 		t.Fatalf("direct session options mismatch: %+v", opts)
@@ -122,7 +123,7 @@ func TestHandleDesktopSessionsDirectCredentialsRequireScopeForAPIKey(t *testing.
 	))
 	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"assets:control"}))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("direct credential scope status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -142,7 +143,7 @@ func TestHandleDesktopSessionsRejectsAssetRestrictedDirectTarget(t *testing.T) {
 	))
 	req = req.WithContext(apiv2.ContextWithAllowedAssets(req.Context(), []string{"asset-1"}))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("asset-restricted direct status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -176,7 +177,7 @@ func TestHandleDesktopSessionsRejectsInvalidOptionsBeforeCreatingSession(t *test
 			req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(tc.body))
 			req = req.WithContext(apiv2.ContextWithUserID(req.Context(), "actor-options"))
 			rec := httptest.NewRecorder()
-			sut.handleDesktopSessions(rec, req)
+			sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 			}
@@ -201,7 +202,7 @@ func TestHandleDesktopSessionsAppliesInteractivePolicy(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-policy"}`))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessions(rec, req)
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 when interactive mode is disabled, got %d: %s", rec.Code, rec.Body.String())
@@ -216,7 +217,7 @@ func TestHandleDesktopStreamTicketIssuesAgentVNCPasswordWithoutQueryLeak(t *test
 	sut.agentMgr = agentmgr.NewManager()
 	sut.agentMgr.Register(&agentmgr.AgentConn{AssetID: "desktop-node-01"})
 	sut.resetDesktopDepsForTest() // reset cached deps to pick up new agentMgr
-	sut.setDesktopSessionOptions("sess-vnc-auth", desktopSessionOptions{
+	sut.ensureDesktopDeps().SetDesktopSessionOptions("sess-vnc-auth", desktoppkg.DesktopSessionOptions{
 		Protocol: "vnc",
 		Quality:  "medium",
 	})
@@ -224,7 +225,7 @@ func TestHandleDesktopStreamTicketIssuesAgentVNCPasswordWithoutQueryLeak(t *test
 	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions/sess-vnc-auth/stream-ticket", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "usr-desktop-ticket", "admin"))
 	rec := httptest.NewRecorder()
-	sut.handleDesktopStreamTicket(rec, req, terminal.Session{
+	sut.ensureDesktopDeps().HandleDesktopStreamTicket(rec, req, terminal.Session{
 		ID:     "sess-vnc-auth",
 		Target: "desktop-node-01",
 		Mode:   "desktop",
@@ -255,7 +256,7 @@ func TestHandleDesktopStreamTicketIssuesAgentVNCPasswordWithoutQueryLeak(t *test
 		t.Fatal("audio_stream_path must not include vnc_password")
 	}
 
-	opts := sut.getDesktopSessionOptions("sess-vnc-auth")
+	opts := sut.ensureDesktopDeps().GetDesktopSessionOptions("sess-vnc-auth")
 	if opts.VNCPassword != payload.VNCPassword {
 		t.Fatalf("expected stored VNC password to match response password, got %q != %q", opts.VNCPassword, payload.VNCPassword)
 	}
@@ -276,7 +277,7 @@ func TestHandleDesktopSessionActionsRejectCrossActorAccess(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-authz"}`))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handleDesktopSessions(createRec, createReq)
+	sut.ensureDesktopDeps().HandleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating desktop session, got %d: %s", createRec.Code, createRec.Body.String())
 	}
@@ -294,7 +295,7 @@ func TestHandleDesktopSessionActionsRejectCrossActorAccess(t *testing.T) {
 	getReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+created.ID, nil)
 	getReq = getReq.WithContext(apiv2.ContextWithUserID(getReq.Context(), "actor-b"))
 	getRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(getRec, getReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(getRec, getReq)
 
 	if getRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for cross-actor desktop session access, got %d", getRec.Code)
@@ -307,7 +308,7 @@ func TestHandleDesktopSessionActionsRejectNonDesktopSessionID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+terminalSessionID, nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(rec, req)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for non-desktop session ID, got %d", rec.Code)
@@ -329,7 +330,7 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"desktop-node-cleanup","protocol":"vnc"}`))
 	createReq = createReq.WithContext(apiv2.ContextWithUserID(createReq.Context(), "actor-a"))
 	createRec := httptest.NewRecorder()
-	sut.handleDesktopSessions(createRec, createReq)
+	sut.ensureDesktopDeps().HandleDesktopSessions(createRec, createReq)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 creating desktop session, got %d: %s", createRec.Code, createRec.Body.String())
 	}
@@ -344,18 +345,18 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 		t.Fatal("expected desktop session id")
 	}
 
-	sut.setDesktopSPICEProxyTarget(created.ID, desktopSPICEProxyTarget{
+	sut.ensureDesktopDeps().SetDesktopSPICEProxyTarget(created.ID, desktoppkg.DesktopSPICEProxyTarget{
 		Host:     "spice.local",
 		TLSPort:  61000,
 		Password: "secret",
 	})
-	desktopBridge := &desktopBridge{
+	desktopBridge := &desktoppkg.DesktopBridge{
 		OutputCh:  make(chan []byte, 1),
 		ClosedCh:  make(chan struct{}),
 		SessionID: created.ID,
 		Target:    "desktop-node-cleanup",
 	}
-	webrtcBridge := &webrtcSignalingBridge{
+	webrtcBridge := &desktoppkg.WebRTCSignalingBridge{
 		ExpectedAgentID: "desktop-node-cleanup",
 		ClosedCh:        make(chan struct{}),
 	}
@@ -365,7 +366,7 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/desktop/sessions/"+created.ID, nil)
 	deleteReq = deleteReq.WithContext(apiv2.ContextWithUserID(deleteReq.Context(), "actor-a"))
 	deleteRec := httptest.NewRecorder()
-	sut.handleDesktopSessionActions(deleteRec, deleteReq)
+	sut.ensureDesktopDeps().HandleDesktopSessionActions(deleteRec, deleteReq)
 
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 deleting desktop session, got %d: %s", deleteRec.Code, deleteRec.Body.String())
@@ -375,10 +376,10 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	} else if ok {
 		t.Fatal("expected desktop session to be removed from store")
 	}
-	if opts := sut.getDesktopSessionOptions(created.ID); opts != (desktopSessionOptions{}) {
+	if opts := sut.ensureDesktopDeps().GetDesktopSessionOptions(created.ID); opts != (desktoppkg.DesktopSessionOptions{}) {
 		t.Fatalf("expected desktop session options to be cleared, got %+v", opts)
 	}
-	if _, ok := sut.takeDesktopSPICEProxyTarget(created.ID); ok {
+	if _, ok := sut.ensureDesktopDeps().TakeDesktopSPICEProxyTarget(created.ID); ok {
 		t.Fatal("expected desktop SPICE proxy target to be cleared")
 	}
 	if _, ok := sut.desktopBridges.Load(created.ID); ok {
@@ -401,7 +402,7 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 
 func TestHandleDesktopStreamKeepsSessionOptionsForReconnect(t *testing.T) {
 	sut := newTestAPIServer(t)
-	sut.setDesktopSessionOptions("sess-reconnect", desktopSessionOptions{
+	sut.ensureDesktopDeps().SetDesktopSessionOptions("sess-reconnect", desktoppkg.DesktopSessionOptions{
 		Protocol: "vnc",
 		Quality:  "high",
 		Display:  "Display 2",
@@ -410,7 +411,7 @@ func TestHandleDesktopStreamKeepsSessionOptionsForReconnect(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-reconnect/stream", nil)
 	rec := httptest.NewRecorder()
-	sut.handleDesktopStream(rec, req, terminal.Session{
+	sut.ensureDesktopDeps().HandleDesktopStream(rec, req, terminal.Session{
 		ID:     "sess-reconnect",
 		Target: "desktop-node-01",
 		Mode:   "desktop",
@@ -420,7 +421,7 @@ func TestHandleDesktopStreamKeepsSessionOptionsForReconnect(t *testing.T) {
 		t.Fatalf("expected the no-route answer (409), got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	opts := sut.getDesktopSessionOptions("sess-reconnect")
+	opts := sut.ensureDesktopDeps().GetDesktopSessionOptions("sess-reconnect")
 	if opts.Protocol != "vnc" || opts.Quality != "high" || opts.Display != "Display 2" || !opts.Record {
 		t.Fatalf("expected session options to survive failed stream attempt, got %+v", opts)
 	}

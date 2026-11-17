@@ -32,7 +32,7 @@ func TestAssetResponseIncludesCanonicalFields(t *testing.T) {
 	payload := []byte(`{"asset_id":"docker-ct-agent-01-abc123","type":"docker-container","name":"nginx","source":"docker","status":"online","metadata":{"cpu_percent":"12.5","memory_percent":"41.0","container_id":"abc123"}}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
@@ -40,7 +40,7 @@ func TestAssetResponseIncludesCanonicalFields(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/docker-ct-agent-01-abc123", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
@@ -79,7 +79,7 @@ func TestGetAssetByID(t *testing.T) {
 	payload := []byte(`{"asset_id":"ha-main","type":"home-assistant","name":"HA Main","source":"homeassistant","status":"online","platform":"linux"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 	createRec := httptest.NewRecorder()
-	sut.handleAssetActions(createRec, createReq)
+	sut.ensureResourcesDeps().HandleAssetActions(createRec, createReq)
 
 	if createRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", createRec.Code)
@@ -87,7 +87,7 @@ func TestGetAssetByID(t *testing.T) {
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/ha-main", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
@@ -109,14 +109,14 @@ func TestGroupsCreateListAndAssignAsset(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"lab-host-group","type":"host","name":"Lab Host Group","source":"agent","group_id":"` + groupID + `","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/assets/lab-host-group", nil)
 	getRec := httptest.NewRecorder()
-	sut.handleAssetActions(getRec, getReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getRec.Code)
 	}
@@ -165,7 +165,7 @@ func TestHandleAssetsUsesGroupedStorePathWhenFilteringByGroup(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/assets?group_id="+groupOneID, nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssets(rec, req)
+	sut.ensureResourcesDeps().HandleAssets(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -203,14 +203,14 @@ func TestUpdateAssetNameAndGroup(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"lab-host-update","type":"host","name":"Old Name","source":"agent","group_id":"` + groupOneID + `","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
 
 	updateReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-update", bytes.NewReader([]byte(`{"name":"Renamed Host","group_id":"`+groupTwoID+`","tags":["Prod"," edge ","prod"]}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", updateRec.Code)
 	}
@@ -237,7 +237,7 @@ func TestUpdateAssetNameAndGroup(t *testing.T) {
 
 	clearReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-update", bytes.NewReader([]byte(`{"group_id":""}`)))
 	clearRec := httptest.NewRecorder()
-	sut.handleAssetActions(clearRec, clearReq)
+	sut.ensureResourcesDeps().HandleAssetActions(clearRec, clearReq)
 	if clearRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", clearRec.Code)
 	}
@@ -260,7 +260,7 @@ func TestUpdateAssetNameAndGroup(t *testing.T) {
 
 	clearTagsReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-update", bytes.NewReader([]byte(`{"tags":[]}`)))
 	clearTagsRec := httptest.NewRecorder()
-	sut.handleAssetActions(clearTagsRec, clearTagsReq)
+	sut.ensureResourcesDeps().HandleAssetActions(clearTagsRec, clearTagsReq)
 	if clearTagsRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", clearTagsRec.Code)
 	}
@@ -284,14 +284,14 @@ func TestUpdateAssetRejectsUnknownGroup(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"lab-host-update-unknown-group","type":"host","name":"Host","source":"agent","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
 
 	updateReq := httptest.NewRequest(http.MethodPatch, "/assets/lab-host-update-unknown-group", bytes.NewReader([]byte(`{"group_id":"group_missing"}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", updateRec.Code)
 	}
@@ -305,7 +305,7 @@ func TestDeleteGroupUnlinksAssets(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"lab-host-delete-group","type":"host","name":"Lab Host Delete Group","source":"agent","group_id":"` + groupID + `","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
@@ -326,7 +326,7 @@ func TestDeleteGroupUnlinksAssets(t *testing.T) {
 
 	getAssetReq := httptest.NewRequest(http.MethodGet, "/assets/lab-host-delete-group", nil)
 	getAssetRec := httptest.NewRecorder()
-	sut.handleAssetActions(getAssetRec, getAssetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(getAssetRec, getAssetReq)
 	if getAssetRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", getAssetRec.Code)
 	}
@@ -389,7 +389,7 @@ func TestAssetsAndMetricsFilterByGroup(t *testing.T) {
 	for _, payload := range [][]byte{heartbeatOne, heartbeatTwo} {
 		req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusAccepted {
 			t.Fatalf("expected 202, got %d", rec.Code)
 		}
@@ -397,7 +397,7 @@ func TestAssetsAndMetricsFilterByGroup(t *testing.T) {
 
 	assetsReq := httptest.NewRequest(http.MethodGet, "/assets?group_id="+groupOneID, nil)
 	assetsRec := httptest.NewRecorder()
-	sut.handleAssets(assetsRec, assetsReq)
+	sut.ensureResourcesDeps().HandleAssets(assetsRec, assetsReq)
 	if assetsRec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", assetsRec.Code)
 	}
@@ -438,7 +438,7 @@ func TestAssetsFilterByTag(t *testing.T) {
 	recordHeartbeat := func(payload []byte) {
 		req := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(payload))
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusAccepted {
 			t.Fatalf("expected 202, got %d", rec.Code)
 		}
@@ -450,7 +450,7 @@ func TestAssetsFilterByTag(t *testing.T) {
 	assignTags := func(assetID, payload string) {
 		req := httptest.NewRequest(http.MethodPatch, "/assets/"+assetID, bytes.NewReader([]byte(payload)))
 		rec := httptest.NewRecorder()
-		sut.handleAssetActions(rec, req)
+		sut.ensureResourcesDeps().HandleAssetActions(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200 assigning tags to %s, got %d", assetID, rec.Code)
 		}
@@ -461,7 +461,7 @@ func TestAssetsFilterByTag(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/assets?tag=edge", nil)
 	rec := httptest.NewRecorder()
-	sut.handleAssets(rec, req)
+	sut.ensureResourcesDeps().HandleAssets(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
@@ -485,7 +485,7 @@ func TestAssetsGroupOperationsReturnServiceUnavailableWithoutGroupStore(t *testi
 	heartbeatPayload := []byte(`{"asset_id":"group-store-guard-node","type":"host","name":"Group Store Guard Node","source":"agent","status":"online","platform":"linux"}`)
 	heartbeatReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(heartbeatPayload))
 	heartbeatRec := httptest.NewRecorder()
-	sut.handleAssetActions(heartbeatRec, heartbeatReq)
+	sut.ensureResourcesDeps().HandleAssetActions(heartbeatRec, heartbeatReq)
 	if heartbeatRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", heartbeatRec.Code)
 	}
@@ -494,14 +494,14 @@ func TestAssetsGroupOperationsReturnServiceUnavailableWithoutGroupStore(t *testi
 
 	filterReq := httptest.NewRequest(http.MethodGet, "/assets?group_id=group-1", nil)
 	filterRec := httptest.NewRecorder()
-	sut.handleAssets(filterRec, filterReq)
+	sut.ensureResourcesDeps().HandleAssets(filterRec, filterReq)
 	if filterRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 for group-filtered assets when group store is unavailable, got %d", filterRec.Code)
 	}
 
 	updateReq := httptest.NewRequest(http.MethodPatch, "/assets/group-store-guard-node", bytes.NewReader([]byte(`{"group_id":"group-1"}`)))
 	updateRec := httptest.NewRecorder()
-	sut.handleAssetActions(updateRec, updateReq)
+	sut.ensureResourcesDeps().HandleAssetActions(updateRec, updateReq)
 	if updateRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 for group assignment update when group store is unavailable, got %d", updateRec.Code)
 	}

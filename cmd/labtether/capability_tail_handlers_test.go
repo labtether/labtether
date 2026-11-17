@@ -274,7 +274,7 @@ func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T)
 	})
 	conn := &agentmgr.AgentConn{AssetID: "node-ssh"}
 	conn.SetMeta("ssh_source_ip", "192.0.2.10")
-	sut.processAgentSSHKeyInstalled(conn, msg)
+	sut.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, msg)
 
 	cfg, ok, err := sut.credentialStore.GetAssetTerminalConfig("node-ssh")
 	if err != nil {
@@ -289,7 +289,7 @@ func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T)
 
 	loopback := &agentmgr.AgentConn{AssetID: "node-ssh-loopback"}
 	loopback.SetMeta("ssh_source_ip", "127.0.0.1")
-	sut.processAgentSSHKeyInstalled(loopback, msg)
+	sut.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(loopback, msg)
 	if _, ok, err := sut.credentialStore.GetAssetTerminalConfig("node-ssh-loopback"); err != nil || ok {
 		t.Fatalf("loopback source saved a terminal config: ok=%v err=%v", ok, err)
 	}
@@ -316,7 +316,7 @@ func TestProcessAgentSSHKeyInstalledPreservesExistingTerminalConfig(t *testing.T
 		Username: "labuser",
 		Hostname: "lab-host",
 	})
-	sut.processAgentSSHKeyInstalled(&agentmgr.AgentConn{AssetID: "node-ssh"}, msg)
+	sut.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(&agentmgr.AgentConn{AssetID: "node-ssh"}, msg)
 
 	cfg, ok, err := sut.credentialStore.GetAssetTerminalConfig("node-ssh")
 	if err != nil {

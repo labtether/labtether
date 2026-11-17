@@ -15,13 +15,13 @@ func (s *apiServer) handleV2Assets(w http.ResponseWriter, r *http.Request) {
 			apiv2.WriteScopeForbidden(w, "assets:read")
 			return
 		}
-		s.v2ListAssets(w, r)
+		s.ensureResourcesDeps().V2ListAssets(w, r)
 	case http.MethodPost:
 		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
-		s.v2CreateAsset(w, r)
+		s.ensureResourcesDeps().V2CreateAsset(w, r)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
@@ -63,19 +63,19 @@ func (s *apiServer) handleV2AssetActions(w http.ResponseWriter, r *http.Request)
 			apiv2.WriteScopeForbidden(w, "assets:read")
 			return
 		}
-		s.v2GetAsset(w, r, assetID)
+		s.ensureResourcesDeps().V2GetAsset(w, r, assetID)
 	case http.MethodPut, http.MethodPatch:
 		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
-		s.v2UpdateAsset(w, r, assetID)
+		s.ensureResourcesDeps().V2UpdateAsset(w, r, assetID)
 	case http.MethodDelete:
 		if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "assets:write") {
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
-		s.v2DeleteAsset(w, r, assetID)
+		s.ensureResourcesDeps().V2DeleteAsset(w, r, assetID)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
@@ -124,26 +124,4 @@ func (s *apiServer) routeV2AssetSubPath(w http.ResponseWriter, r *http.Request, 
 	default:
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown sub-path: "+subPath)
 	}
-}
-
-// Thin stubs — behaviour lives in internal/hubapi/resources.
-
-func (s *apiServer) v2ListAssets(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().V2ListAssets(w, r)
-}
-
-func (s *apiServer) v2GetAsset(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().V2GetAsset(w, r, assetID)
-}
-
-func (s *apiServer) v2CreateAsset(w http.ResponseWriter, r *http.Request) {
-	s.ensureResourcesDeps().V2CreateAsset(w, r)
-}
-
-func (s *apiServer) v2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().V2UpdateAsset(w, r, assetID)
-}
-
-func (s *apiServer) v2DeleteAsset(w http.ResponseWriter, r *http.Request, assetID string) {
-	s.ensureResourcesDeps().V2DeleteAsset(w, r, assetID)
 }

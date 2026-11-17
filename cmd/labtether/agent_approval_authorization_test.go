@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/auth"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 )
 
 // Operators could approve pending agents although only admins can mint the
 // enrollment tokens that admit a host. Approval is now admin-only on both APIs.
 func TestPendingAgentApprovalRequiresAdmin(t *testing.T) {
 	sut := newTestAPIServer(t)
-	sut.pendingAgents = newPendingAgents()
+	sut.pendingAgents = agentspkg.NewPendingAgents()
 	handlers := sut.buildHTTPHandlers(nil, nil, nil)
 	operator := createRoleSessionToken(t, sut, "operator-approval", auth.RoleOperator)
 	admin := createRoleSessionToken(t, sut, "admin-approval", auth.RoleAdmin)

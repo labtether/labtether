@@ -107,7 +107,7 @@ func (s *apiServer) handleV2Agents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.URL.Path = "/agents/connected"
-	apiv2.WrapV1Handler(s.handleConnectedAgents)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleConnectedAgents)(w, r)
 }
 
 func (s *apiServer) handleV2AgentActions(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +120,7 @@ func (s *apiServer) handleV2AgentActions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/agents/", "/api/v1/agents/", 1)
-	apiv2.WrapV1Handler(s.handleAgentSettingsRoutes)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleAgentSettingsRoutes)(w, r)
 }
 
 func (s *apiServer) handleV2AgentsPending(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +128,7 @@ func (s *apiServer) handleV2AgentsPending(w http.ResponseWriter, r *http.Request
 		apiv2.WriteScopeForbidden(w, "agents:read")
 		return
 	}
-	apiv2.WrapV1Handler(s.handleListPendingAgents)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleListPendingAgents)(w, r)
 }
 
 func (s *apiServer) handleV2AgentsPendingApprove(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +136,7 @@ func (s *apiServer) handleV2AgentsPendingApprove(w http.ResponseWriter, r *http.
 		apiv2.WriteScopeForbidden(w, "agents:write")
 		return
 	}
-	apiv2.WrapV1Handler(s.handleApproveAgent)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleApproveAgent)(w, r)
 }
 
 func (s *apiServer) handleV2AgentsPendingReject(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +144,7 @@ func (s *apiServer) handleV2AgentsPendingReject(w http.ResponseWriter, r *http.R
 		apiv2.WriteScopeForbidden(w, "agents:write")
 		return
 	}
-	apiv2.WrapV1Handler(s.handleRejectAgent)(w, r)
+	apiv2.WrapV1Handler(s.ensureAgentsDeps().HandleRejectAgent)(w, r)
 }
 
 // --- Web Services ---

@@ -15,10 +15,10 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureAgentsDeps().ProcessAgentHeartbeatInLifecycle(conn, msg)
 	}
 	router[agentmgr.MsgTelemetry] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentTelemetry(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentTelemetry(conn, msg)
 	}
 	router[agentmgr.MsgCommandResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentCommandResult(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentCommandResult(conn, msg)
 	}
 	router[agentmgr.MsgPowerResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentPowerResult(conn, msg)
@@ -27,19 +27,19 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.processAgentPong(conn, msg)
 	}
 	router[agentmgr.MsgLogStream] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentLogStream(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentLogStream(conn, msg)
 	}
 	router[agentmgr.MsgLogBatch] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentLogBatch(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentLogBatch(conn, msg)
 	}
 	router[agentmgr.MsgJournalEntries] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureResourcesDeps().ProcessAgentJournalEntries(conn, msg)
 	}
 	router[agentmgr.MsgUpdateProgress] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentUpdateProgress(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentUpdateProgress(conn, msg)
 	}
 	router[agentmgr.MsgUpdateResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentUpdateResult(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentUpdateResult(conn, msg)
 	}
 	router[agentmgr.MsgTerminalProbed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentTerminalProbed(conn, msg)
@@ -54,43 +54,43 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.processAgentTerminalClosed(conn, msg)
 	}
 	router[agentmgr.MsgSSHKeyInstalled] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentSSHKeyInstalled(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, msg)
 	}
 	router[agentmgr.MsgSSHKeyRemoved] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentSSHKeyRemoved(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentSSHKeyRemoved(conn, msg)
 	}
 	router[agentmgr.MsgDesktopStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopStarted(conn, msg)
 	}
 	router[agentmgr.MsgDesktopData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopData(conn, msg)
 	}
 	router[agentmgr.MsgDesktopClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopClosed(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopClosed(conn, msg)
 	}
 	router[agentmgr.MsgDesktopDisplays] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopDisplays(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopDisplays(conn, msg)
 	}
 	router[agentmgr.MsgDesktopAudioData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopAudioData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopAudioData(conn, msg)
 	}
 	router[agentmgr.MsgDesktopAudioState] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopAudioState(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopAudioState(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCCapabilities] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCCapabilities(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCCapabilities(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCStarted(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStarted(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCAnswer] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCAnswer(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCAnswer(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCICE] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCICE(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCICE(conn, msg)
 	}
 	router[agentmgr.MsgWebRTCStopped] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentWebRTCStopped(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentWebRTCStopped(conn, msg)
 	}
 	router[agentmgr.MsgWoLResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.ensureResourcesDeps().ProcessAgentWoLResult(conn, msg)
@@ -141,58 +141,58 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 		s.ensureResourcesDeps().ProcessAgentUsersListed(conn, msg)
 	}
 	router[agentmgr.MsgConfigApplied] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentConfigApplied(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentConfigApplied(conn, msg)
 	}
 	router[agentmgr.MsgAgentSettingsApplied] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentSettingsApplied(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentSettingsApplied(conn, msg)
 	}
 	router[agentmgr.MsgAgentSettingsState] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentSettingsState(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentSettingsState(conn, msg)
 	}
 	router[agentmgr.MsgDockerEndpointTestResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerEndpointTestResult(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
 	}
 	router[agentmgr.MsgDockerDiscovery] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerDiscovery(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerDiscovery(conn, msg)
 	}
 	router[agentmgr.MsgDockerDiscoveryDelta] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerDiscoveryDelta(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerDiscoveryDelta(conn, msg)
 	}
 	router[agentmgr.MsgDockerStats] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerStats(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerStats(conn, msg)
 	}
 	router[agentmgr.MsgDockerEvents] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerEvents(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerEvents(conn, msg)
 	}
 	router[agentmgr.MsgDockerActionResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerActionResult(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerActionResult(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecStarted] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecStartedMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecStartedMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecDataMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecDataMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerExecClosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerExecClosedMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerExecClosedMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerLogsStream] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerLogsStreamMessage(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerLogsStreamMessage(conn, msg)
 	}
 	router[agentmgr.MsgDockerComposeResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDockerComposeResult(conn, msg)
+		s.ensureDockerDeps().ProcessAgentDockerComposeResult(conn, msg)
 	}
 	router[agentmgr.MsgWebServiceReport] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentWebServiceReport(conn, msg)
 	}
 	router[agentmgr.MsgClipboardData] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentClipboardData(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentClipboardData(conn, msg)
 	}
 	router[agentmgr.MsgClipboardSetAck] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentClipboardSetAck(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentClipboardSetAck(conn, msg)
 	}
 	router[agentmgr.MsgDesktopDiagnosed] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentDesktopDiagnosed(conn, msg)
+		s.ensureDesktopDeps().ProcessAgentDesktopDiagnosed(conn, msg)
 	}
 
 	return router

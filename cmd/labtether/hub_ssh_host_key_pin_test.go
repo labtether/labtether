@@ -26,7 +26,7 @@ func TestInstallReplyHostKeysPinTheSSHFallback(t *testing.T) {
 	authorized := testutil.AuthorizedHostKey
 	conn := &agentmgr.AgentConn{AssetID: "node-pin"}
 	conn.SetMeta("ssh_source_ip", "192.0.2.10")
-	server.processAgentSSHKeyInstalled(conn, marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{
+	server.ensureAgentsDeps().ProcessAgentSSHKeyInstalled(conn, marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{
 		Username: "labuser",
 		HostKeys: []string{authorized(deviceECDSA), "not a key", authorized(deviceEd25519)},
 	}))

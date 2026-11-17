@@ -34,7 +34,7 @@ func TestIncidentCreateListGetUpdateAndLinkAlert(t *testing.T) {
 	assetPayload := []byte(`{"asset_id":"incident-node-1","type":"host","name":"Incident Node 1","source":"agent","group_id":"` + sitePayload.Group.ID + `","status":"online","platform":"linux"}`)
 	assetReq := httptest.NewRequest(http.MethodPost, "/assets/heartbeat", bytes.NewReader(assetPayload))
 	assetRec := httptest.NewRecorder()
-	sut.handleAssetActions(assetRec, assetReq)
+	sut.ensureResourcesDeps().HandleAssetActions(assetRec, assetReq)
 	if assetRec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", assetRec.Code)
 	}
